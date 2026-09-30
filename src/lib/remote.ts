@@ -58,8 +58,23 @@ export async function addRemoteComment(checkId: string, itemId: string | null, b
   if (error) throw error
 }
 
+export async function deleteRemoteComment(commentId: string) {
+  const { error } = await client().rpc('delete_comment', { p_comment_id: commentId })
+  if (error) throw error
+}
+
+export async function removeRemoteParticipant(checkId: string, participantId: string) {
+  const { error } = await client().rpc('remove_participant', { p_check_id: checkId, p_participant_id: participantId })
+  if (error) throw error
+}
+
 export async function setRemoteCustomShares(unitId: string, allocations: Record<string, number>) {
   const { error } = await client().rpc('set_unit_custom_shares', { p_item_unit: unitId, p_allocations: allocations })
+  if (error) throw error
+}
+
+export async function resetRemoteCustomShares(unitId: string) {
+  const { error } = await client().rpc('reset_unit_custom_shares', { p_item_unit: unitId })
   if (error) throw error
 }
 
@@ -76,6 +91,11 @@ export async function confirmRemotePayment(checkId: string, participantId: strin
 export async function deleteRemoteCheck(checkId: string) {
   const { error } = await client().rpc('delete_check', { p_check_id: checkId })
   if (error) throw error
+}
+
+/** True when the check is gone or the current user is no longer one of its participants (RLS hides the row). */
+export function isRemoteCheckGone(error: unknown) {
+  return typeof error === 'object' && error !== null && (error as { code?: string }).code === 'PGRST116'
 }
 
 export type RemoteBill = Bill & { dbId: string; publicId: string; unitIds: Record<string, string[]> }
@@ -137,6 +157,12 @@ export async function updateRemoteActivity(activity: string) {
   await activePresenceChannel.track({ name: activePresenceName, activity, since: new Date().toISOString() })
 }
 
+// Filtered Postgres Changes do not deliver DELETE events, so deletions are announced over the check channel.
+export async function announceRemoteChange() {
+  if (!activePresenceChannel) return
+  await activePresenceChannel.send({ type: 'broadcast', event: 'changed', payload: {} })
+}
+
 export function subscribeToRemoteCheck(dbId: string, publicId: string, onChange: () => void, onPresence?: (users: { name: string; activity: string }[]) => void, self?: { name: string; activity: string }) {
   const db = client()
   let reloadTimer: ReturnType<typeof setTimeout> | undefined
@@ -145,6 +171,7 @@ export function subscribeToRemoteCheck(dbId: string, publicId: string, onChange:
   for (const table of ['checks', 'participants', 'items', 'item_units', 'item_shares', 'payments', 'comments']) {
     channel.on('postgres_changes', { event: '*', schema: 'public', table, filter: table === 'checks' ? `id=eq.${dbId}` : ['items','participants','payments','comments'].includes(table) ? `check_id=eq.${dbId}` : undefined }, refresh)
   }
+  channel.on('broadcast', { event: 'changed' }, refresh)
   if (onPresence) channel.on('presence', { event: 'sync' }, () => {
     const users = Object.values(channel.presenceState()).flat() as unknown as { name: string; activity: string }[]
     onPresence(users)

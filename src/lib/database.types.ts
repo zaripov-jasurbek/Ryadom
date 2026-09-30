@@ -19,11 +19,14 @@ export interface Database {
       delete_item: { Args: { p_check_id: string; p_item_id: string }; Returns: undefined }
       toggle_unit_share: { Args: { p_item_unit: string; p_enabled: boolean }; Returns: undefined }
       set_unit_custom_shares: { Args: { p_item_unit: string; p_allocations: Json }; Returns: undefined }
+      reset_unit_custom_shares: { Args: { p_item_unit: string }; Returns: undefined }
       submit_payment: { Args: { p_check_id: string; p_amount: number; p_proof_url: string | null }; Returns: undefined }
       confirm_payment: { Args: { p_check_id: string; p_participant_id: string }; Returns: undefined }
       add_comment: { Args: { p_check_id: string; p_item_id: string | null; p_body: string }; Returns: string }
       archive_check: { Args: { p_check_id: string }; Returns: undefined }
       delete_check: { Args: { p_check_id: string }; Returns: undefined }
+      remove_participant: { Args: { p_check_id: string; p_participant_id: string }; Returns: undefined }
+      delete_comment: { Args: { p_comment_id: string }; Returns: undefined }
     }
     Enums: { payment_status: 'unpaid' | 'partially_paid' | 'proof_submitted' | 'paid'; share_mode: 'equal' | 'by_quantity' | 'custom' }
     CompositeTypes: Record<string, never>
