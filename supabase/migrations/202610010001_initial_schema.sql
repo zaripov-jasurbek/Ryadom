@@ -348,6 +348,39 @@ begin
   if tg_op='DELETE' then return old; else return new; end if;
 end $$;
 
+-- Match the client calculation when the owner confirms a submitted payment.
+create or replace function public.participant_due_totals(target_check uuid)
+returns table(participant_id uuid, due bigint)
+language sql stable security definer set search_path = '' as $$
+  with subtotals as (
+    select p.id as participant_id, p.sort_order, c.service_percent,
+      coalesce(sum(s.amount), 0)::bigint as subtotal
+    from public.participants p
+    cross join public.checks c
+    left join public.item_shares s on s.participant_id = p.id
+    left join public.item_units u on u.id = s.item_unit_id
+    left join public.items i on i.id = u.item_id and i.check_id = p.check_id
+    where p.check_id = target_check and c.id = target_check
+    group by p.id, p.sort_order, c.service_percent
+  ), amounts as (
+    select s.*,
+      round(sum(s.subtotal) over () * s.service_percent / 100)::bigint as service_total,
+      sum(s.subtotal) over () as total_subtotal
+    from subtotals s
+  ), portions as (
+    select a.*,
+      case when total_subtotal = 0 then 0 else floor(service_total::numeric * subtotal / total_subtotal)::bigint end as service_base,
+      case when total_subtotal = 0 then 0 else (service_total::numeric * subtotal / total_subtotal) - floor(service_total::numeric * subtotal / total_subtotal) end as fraction
+    from amounts a
+  ), ranked as (
+    select p.*, service_total - sum(service_base) over () as remainder,
+      row_number() over (order by fraction desc, sort_order, participant_id) as rank
+    from portions p
+  )
+  select participant_id, subtotal + service_base + case when rank <= remainder then 1 else 0 end
+  from ranked;
+$$;
+
 create or replace function public.guard_payment_changes()
 returns trigger language plpgsql security definer set search_path = '' as $$
 declare owner_id uuid; participant_uid uuid;
