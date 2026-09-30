@@ -38,14 +38,13 @@ export async function joinRemoteCheck(publicId: string, name: string, sessionTok
   return data as { id: string; public_id: string; participant_id: string }
 }
 
-export async function addRemoteParticipant(checkId: string, name: string) {
-  const { data, error } = await client().rpc('add_participant', { p_check_id: checkId, p_name: name })
-  if (error) throw error
-  return data as { id: string; session_token: string }
-}
-
 export async function addRemoteItem(checkId: string, name: string, quantity: number, price: number, participantId: string) {
   const { error } = await client().rpc('add_item', { p_check_id: checkId, p_name: name, p_quantity: quantity, p_unit_price: price, p_creator_participant: participantId })
+  if (error) throw error
+}
+
+export async function deleteRemoteItem(checkId: string, itemId: string) {
+  const { error } = await client().rpc('delete_item', { p_check_id: checkId, p_item_id: itemId })
   if (error) throw error
 }
 

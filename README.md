@@ -9,18 +9,18 @@ npm install
 npm run dev
 ```
 
-Без Supabase приложение открывает локальный режим для знакомства с интерфейсом; его данные доступны только в этом браузере. Для общего чека создайте Supabase project, включите Anonymous Sign-ins в Authentication, примените миграцию `supabase/migrations/202610010001_initial_schema.sql`, затем укажите `VITE_SUPABASE_URL` и `VITE_SUPABASE_ANON_KEY` в `.env` (пример — `.env.example`). Клиент использует только publishable/anon key; `service_role` key добавлять нельзя.
+Без Supabase приложение открывает локальный режим для знакомства с интерфейсом; его данные доступны только в этом браузере. Для общего чека создайте Supabase project, включите Anonymous Sign-ins в Authentication, примените миграции из `supabase/migrations`, затем укажите `VITE_SUPABASE_URL` и `VITE_SUPABASE_ANON_KEY` в `.env` (пример — `.env.example`). Клиент использует только publishable/anon key; `service_role` key добавлять нельзя.
 
-Миграция создаёт нормализованные таблицы, RLS-политики и ограниченные RPC-функции. Участники привязываются к анонимной Supabase-сессии; персональные приглашения используют случайный токен, хранящийся в базе только в виде хеша. Неподтверждённые участники не могут занять зарезервированное имя без персональной ссылки.
+Миграции создают нормализованные таблицы, RLS-политики и ограниченные RPC-функции. Гости открывают общую ссылку на чек и присоединяются под своим именем без отдельного приглашения.
 
 ## Реализовано
 
-- Создание чека, добавление участников и позиций, общая ссылка и QR-код.
+- Создание чека, добавление позиций и общая ссылка: гости сами присоединяются и вводят имя.
 - Независимое распределение каждого экземпляра позиции; равное и произвольное распределение целыми UZS.
 - Service fee с детерминированным распределением остатка округления.
 - Presence и Postgres Changes через Supabase Realtime.
 - Платежи, ссылка-подтверждение и ручное подтверждение владельцем.
-- Общие и привязанные к позиции комментарии.
+- Общая лента комментариев к чеку с автором и временем.
 - Копирование сводки, сохранение изображения, печать в PDF и удаление закрытого чека.
 - GitHub Pages workflow с SPA fallback `404.html`.
 
@@ -38,4 +38,4 @@ Unit tests проверяют округление по сумам, индиви
 
 Workflow `.github/workflows/deploy.yml` публикует `main` или `master` через GitHub Actions. В настройках репозитория откройте **Settings → Pages** и выберите **GitHub Actions** в качестве источника публикации. В **Settings → Secrets and variables → Actions → Variables** добавьте `VITE_SUPABASE_URL` и `VITE_SUPABASE_ANON_KEY` (Supabase project URL и publishable/anon key). Эти значения публичны в браузерном приложении; `service_role` key сюда добавлять нельзя.
 
-Для Supabase создайте проект, включите **Authentication → Sign In / Providers → Anonymous Sign-Ins**, затем примените все файлы `supabase/migrations` по порядку через SQL Editor или Supabase CLI. В частности, вторая миграция добавляет недостающий доступ к RPC произвольного распределения позиций. В **Authentication → URL Configuration** добавьте URL опубликованного GitHub Pages сайта в **Site URL** и **Redirect URLs**. После настройки variables запустите workflow вручную через **Actions → Deploy to GitHub Pages → Run workflow** либо отправьте коммит в `main`/`master`.
+Для Supabase создайте проект и включите **Authentication → Sign In / Providers → Anonymous Sign-Ins**. Workflow `.github/workflows/supabase-migrations.yml` применяет новые миграции при изменениях в `supabase/migrations` на `main`/`master`; его также можно запустить вручную. Для подключения добавьте в **Settings → Secrets and variables → Actions** секреты `SUPABASE_ACCESS_TOKEN` (Supabase personal access token) и `SUPABASE_DB_PASSWORD` (пароль базы данных), а в **Variables** — `SUPABASE_PROJECT_REF` (ID проекта из URL панели Supabase). Если схему уже применяли вручную через SQL Editor, сначала один раз синхронизируйте историю миграций через `supabase migration repair --status applied 202610010001`; иначе CI может попытаться повторно создать таблицы. Затем примените миграции `202610010002` и `202610010003` через workflow. В **Authentication → URL Configuration** добавьте URL опубликованного GitHub Pages сайта в **Site URL** и **Redirect URLs**. Для публикации сайта настройте переменные `VITE_SUPABASE_URL` и `VITE_SUPABASE_ANON_KEY`, затем запустите workflow Deploy to GitHub Pages.

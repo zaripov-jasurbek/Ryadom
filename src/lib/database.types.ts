@@ -15,8 +15,8 @@ export interface Database {
       create_check: { Args: { p_title: string; p_service_percent: number; p_owner_name: string; p_owner_token: string }; Returns: Json }
       join_check: { Args: { p_public_id: string; p_name: string; p_session_token: string }; Returns: Json }
       claim_check_owner: { Args: { p_public_id: string; p_owner_token: string }; Returns: string }
-      add_participant: { Args: { p_check_id: string; p_name: string }; Returns: Json }
       add_item: { Args: { p_check_id: string; p_name: string; p_quantity: number; p_unit_price: number; p_creator_participant: string }; Returns: string }
+      delete_item: { Args: { p_check_id: string; p_item_id: string }; Returns: undefined }
       toggle_unit_share: { Args: { p_item_unit: string; p_enabled: boolean }; Returns: undefined }
       set_unit_custom_shares: { Args: { p_item_unit: string; p_allocations: Json }; Returns: undefined }
       submit_payment: { Args: { p_check_id: string; p_amount: number; p_proof_url: string | null }; Returns: undefined }
