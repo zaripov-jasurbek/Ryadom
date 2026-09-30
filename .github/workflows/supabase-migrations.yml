@@ -23,6 +23,8 @@ jobs:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
       SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+      # Первая миграция создаёт схему и не идемпотентна; остальные безопасно выполнять повторно.
+      BASELINE_VERSION: '202610010001'
     steps:
       - uses: actions/checkout@v4
       - uses: supabase/setup-cli@v3
@@ -35,5 +37,32 @@ jobs:
           test -n "$SUPABASE_PROJECT_REF" || { echo "Missing SUPABASE_PROJECT_REF variable"; exit 1; }
       - name: Link Supabase project
         run: supabase link --project-ref "$SUPABASE_PROJECT_REF"
+      - name: Baseline manually applied schema
+        # Если схему уже создали через SQL Editor, а в истории миграций её нет,
+        # помечаем начальную миграцию как применённую, чтобы db push не создавал таблицы повторно.
+        run: |
+          query() {
+            jq -n --arg q "$1" '{query: $q}' \
+              | curl -sS --fail-with-body -X POST \
+                  "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/database/query" \
+                  -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+                  -H "Content-Type: application/json" \
+                  --data-binary @-
+          }
+          state=$(query "select to_regclass('public.checks') is not null as has_schema, to_regclass('supabase_migrations.schema_migrations') is not null as has_history")
+          echo "Remote state: $state"
+          has_schema=$(jq -r '.[0].has_schema' <<<"$state")
+          has_history=$(jq -r '.[0].has_history' <<<"$state")
+          baselined=false
+          if [ "$has_history" = "true" ]; then
+            recorded=$(query "select count(*)::int as n from supabase_migrations.schema_migrations where version = '$BASELINE_VERSION'")
+            [ "$(jq -r '.[0].n' <<<"$recorded")" != "0" ] && baselined=true
+          fi
+          if [ "$has_schema" = "true" ] && [ "$baselined" = "false" ]; then
+            echo "Schema exists but $BASELINE_VERSION is not recorded; marking it as applied."
+            supabase migration repair --status applied "$BASELINE_VERSION"
+          fi
+      - name: Show migration status
+        run: supabase migration list
       - name: Apply pending migrations
-        run: supabase db push --yes
+        run: supabase db push --include-all --yes
