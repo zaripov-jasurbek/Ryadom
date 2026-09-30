@@ -36,4 +36,6 @@ Unit tests проверяют округление по сумам, индиви
 
 ## GitHub Pages
 
-Workflow `.github/workflows/deploy.yml` публикует `main` через GitHub Actions. В настройках репозитория включите Pages с источником GitHub Actions. Для production-запуска Supabase добавьте Actions variables `VITE_SUPABASE_URL` и `VITE_SUPABASE_ANON_KEY`. Без настроенного удалённого GitHub-репозитория workflow не сможет запуститься.
+Workflow `.github/workflows/deploy.yml` публикует `main` или `master` через GitHub Actions. В настройках репозитория откройте **Settings → Pages** и выберите **GitHub Actions** в качестве источника публикации. В **Settings → Secrets and variables → Actions → Variables** добавьте `VITE_SUPABASE_URL` и `VITE_SUPABASE_ANON_KEY` (Supabase project URL и publishable/anon key). Эти значения публичны в браузерном приложении; `service_role` key сюда добавлять нельзя.
+
+Для Supabase создайте проект, включите **Authentication → Sign In / Providers → Anonymous Sign-Ins**, затем примените все файлы `supabase/migrations` по порядку через SQL Editor или Supabase CLI. В частности, вторая миграция добавляет недостающий доступ к RPC произвольного распределения позиций. В **Authentication → URL Configuration** добавьте URL опубликованного GitHub Pages сайта в **Site URL** и **Redirect URLs**. После настройки variables запустите workflow вручную через **Actions → Deploy to GitHub Pages → Run workflow** либо отправьте коммит в `main`/`master`.
