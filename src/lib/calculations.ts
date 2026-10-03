@@ -1,9 +1,19 @@
 export type PaymentStatus = 'unpaid' | 'partially_paid' | 'proof_submitted' | 'paid'
-export type Participant = { id: string; name: string; token?: string; paid: number; proofUrl?: string; status: 'unpaid' | 'partially_paid' | 'proof_submitted' | 'paid' }
-export type BillItem = { id: string; name: string; quantity: number; unitPrice: number; unitSelections: Record<string, string[]>; unitIds?: string[]; unitModes?: Record<string, 'equal' | 'by_quantity' | 'custom'>; unitCustomAmounts?: Record<string, Record<string, number>> }
+export type ShareMode = 'equal' | 'by_quantity' | 'custom'
+export type Participant = { id: string; name: string; paid: number; proofUrl?: string; status: PaymentStatus }
+export type BillItem = {
+  id: string; name: string; quantity: number; unitPrice: number
+  /** Unit index → ids of the participants sharing that unit. */
+  unitSelections: Record<string, string[]>
+  unitIds?: string[]
+  unitModes?: Record<string, ShareMode>
+  unitCustomAmounts?: Record<string, Record<string, number>>
+  /** Amounts the server recorded per unit and participant; when present they win over a local equal split. */
+  unitAmounts?: Record<string, Record<string, number>>
+}
 export type CommentMessage = { id: string; itemId?: string; participantId: string; body: string; createdAt: string }
-export type Bill = { id: string; dbId?: string; title: string; servicePercent: number; participants: Participant[]; items: BillItem[]; createdAt: string; ownerToken: string; comments?: CommentMessage[]; archived?: boolean }
-export type ParticipantTotal = { id: string; name: string; subtotal: number; service: number; due: number; paid: number; remaining: number; status: Participant['status'] }
+export type Bill = { id: string; dbId?: string; title: string; servicePercent: number; participants: Participant[]; items: BillItem[]; createdAt: string; ownerToken: string; comments?: CommentMessage[] }
+export type ParticipantTotal = { id: string; name: string; subtotal: number; service: number; due: number; paid: number; remaining: number; status: PaymentStatus }
 
 export function splitInteger(total: number, weights: number[]): number[] {
   if (!Number.isSafeInteger(total) || total < 0 || weights.some(w => !Number.isFinite(w) || w < 0)) throw new Error('Amounts must be non-negative whole UZS values')
@@ -17,20 +27,29 @@ export function splitInteger(total: number, weights: number[]): number[] {
   return result
 }
 
+/** The amounts a unit is split into, or undefined while nobody has claimed it. */
+export function unitAmounts(item: BillItem, unit: number, participants: Participant[]): Record<string, number> | undefined {
+  const key = String(unit)
+  const recorded = item.unitAmounts?.[key] ?? (item.unitModes?.[key] === 'custom' ? item.unitCustomAmounts?.[key] : undefined)
+  if (recorded) return Object.fromEntries(participants.map(p => [p.id, Math.max(0, Math.floor(recorded[p.id] ?? 0))]))
+  const consumers = new Set(item.unitSelections[key] ?? [])
+  if (!consumers.size) return undefined
+  const shares = splitInteger(item.unitPrice, participants.map(p => consumers.has(p.id) ? 1 : 0))
+  return Object.fromEntries(participants.map((p, index) => [p.id, shares[index]]))
+}
+
 export function itemShares(item: BillItem, participants: Participant[]): Record<string, number> {
   const shares = Object.fromEntries(participants.map(p => [p.id, 0])) as Record<string, number>
   for (let unit = 0; unit < item.quantity; unit++) {
-    const unitKey = String(unit)
-    const consumers = item.unitSelections[unitKey] ?? []
-    const custom = item.unitModes?.[unitKey] === 'custom' ? item.unitCustomAmounts?.[unitKey] : undefined
-    const unitShares = custom ? participants.map(p => Math.max(0, Math.floor(custom[p.id] ?? 0))) : splitInteger(item.unitPrice, participants.map(p => consumers.includes(p.id) ? 1 : 0))
-    participants.forEach((person, index) => { shares[person.id] += unitShares[index] })
+    const amounts = unitAmounts(item, unit, participants)
+    if (amounts) for (const p of participants) shares[p.id] += amounts[p.id]
   }
   return shares
 }
 
 export function calculateTotals(bill: Pick<Bill, 'participants' | 'items' | 'servicePercent'>): ParticipantTotal[] {
-  const subtotals = bill.participants.map(p => bill.items.reduce((sum, item) => sum + (itemShares(item, bill.participants)[p.id] ?? 0), 0))
+  const perItem = bill.items.map(item => itemShares(item, bill.participants))
+  const subtotals = bill.participants.map(p => perItem.reduce((sum, shares) => sum + shares[p.id], 0))
   const serviceTotal = Math.round(subtotals.reduce((a, b) => a + b, 0) * bill.servicePercent / 100)
   const services = splitInteger(serviceTotal, subtotals)
   return bill.participants.map((p, i) => {
@@ -40,8 +59,16 @@ export function calculateTotals(bill: Pick<Bill, 'participants' | 'items' | 'ser
   })
 }
 
-export function assignedSubtotal(bill: Pick<Bill, 'items' | 'participants'>): number {
-  return bill.items.reduce((sum, item) => sum + Array.from({ length: item.quantity }, (_, unit) => { const key=String(unit); return item.unitModes?.[key] === 'custom' ? item.unitPrice : (item.unitSelections[key]?.length ? item.unitPrice : 0) }).reduce((a,b)=>a+b,0), 0)
+export function isUnitAssigned(item: BillItem, unit: number): boolean {
+  const key = String(unit)
+  return item.unitModes?.[key] === 'custom' || Boolean(item.unitSelections[key]?.length)
 }
-export function formatUzs(amount: number): string { return `${new Intl.NumberFormat('uz-UZ').format(amount)} UZS` }
 
+export function assignedSubtotal(bill: Pick<Bill, 'items'>): number {
+  let sum = 0
+  for (const item of bill.items) for (let unit = 0; unit < item.quantity; unit++) if (isUnitAssigned(item, unit)) sum += item.unitPrice
+  return sum
+}
+
+const uzs = new Intl.NumberFormat('uz-UZ')
+export function formatUzs(amount: number): string { return `${uzs.format(amount)} UZS` }

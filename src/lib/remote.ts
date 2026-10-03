@@ -1,187 +1,125 @@
 import { supabase } from './supabase'
 import type { RealtimeChannel } from '@supabase/supabase-js'
-import type { Bill, CommentMessage, Participant, PaymentStatus } from './calculations'
+import type { Bill, BillItem, CommentMessage, Participant, PaymentStatus, ShareMode } from './calculations'
+import type { Database } from './database.types'
 
 function client() {
   if (!supabase) throw new Error('Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.')
   return supabase
 }
 
-export async function ensureAnonymousSession() {
-  const db = client()
-  const { data: sessionData, error: sessionError } = await db.auth.getSession()
-  if (sessionError) throw sessionError
-  if (sessionData.session) return sessionData.session.user.id
-  const { data, error } = await db.auth.signInAnonymously()
-  if (error) throw error
-  if (!data.user) throw new Error('Unable to create an anonymous session')
-  return data.user.id
+// Concurrent callers share one sign-in instead of each creating an anonymous user.
+let sessionPromise: Promise<string> | null = null
+export function ensureAnonymousSession() {
+  sessionPromise ??= (async () => {
+    const db = client()
+    const { data: sessionData, error: sessionError } = await db.auth.getSession()
+    if (sessionError) throw sessionError
+    if (sessionData.session) return sessionData.session.user.id
+    const { data, error } = await db.auth.signInAnonymously()
+    if (error) throw error
+    if (!data.user) throw new Error('Unable to create an anonymous session')
+    return data.user.id
+  })().catch(error => { sessionPromise = null; throw error })
+  return sessionPromise
 }
 
-export async function createRemoteCheck(title: string, servicePercent: number, ownerName: string, ownerToken: string) {
+type Rpc = Database['public']['Functions']
+async function call<K extends keyof Rpc>(fn: K, args: Rpc[K]['Args']): Promise<unknown> {
   await ensureAnonymousSession()
-  const { data, error } = await client().rpc('create_check', { p_title: title, p_service_percent: servicePercent, p_owner_name: ownerName, p_owner_token: ownerToken })
+  const { data, error } = await client().rpc(fn, args)
   if (error) throw error
-  return data as { id: string; public_id: string; participant_id: string }
+  return data
 }
 
-export async function claimRemoteCheckOwner(publicId: string, ownerToken: string) {
-  await ensureAnonymousSession()
-  const { error } = await client().rpc('claim_check_owner', { p_public_id: publicId, p_owner_token: ownerToken })
-  if (error) throw error
-}
+type Created = { id: string; public_id: string; participant_id: string }
 
-export async function joinRemoteCheck(publicId: string, name: string, sessionToken: string) {
-  await ensureAnonymousSession()
-  const { data, error } = await client().rpc('join_check', { p_public_id: publicId, p_name: name, p_session_token: sessionToken })
-  if (error) throw error
-  return data as { id: string; public_id: string; participant_id: string }
-}
+export const createRemoteCheck = (title: string, servicePercent: number, ownerName: string, ownerToken: string) =>
+  call('create_check', { p_title: title, p_service_percent: servicePercent, p_owner_name: ownerName, p_owner_token: ownerToken }) as Promise<Created>
+export const claimRemoteCheckOwner = (publicId: string, ownerToken: string) => call('claim_check_owner', { p_public_id: publicId, p_owner_token: ownerToken })
+export const joinRemoteCheck = (publicId: string, name: string, sessionToken: string) => call('join_check', { p_public_id: publicId, p_name: name, p_session_token: sessionToken }) as Promise<Created>
+export const addRemoteItem = (checkId: string, name: string, quantity: number, price: number) => call('add_item', { p_check_id: checkId, p_name: name, p_quantity: quantity, p_unit_price: price })
+export const deleteRemoteItem = (checkId: string, itemId: string) => call('delete_item', { p_check_id: checkId, p_item_id: itemId })
+export const toggleRemoteUnit = (unitId: string, enabled: boolean) => call('toggle_unit_share', { p_item_unit: unitId, p_enabled: enabled })
+export const addRemoteComment = (checkId: string, itemId: string | null, body: string) => call('add_comment', { p_check_id: checkId, p_item_id: itemId, p_body: body })
+export const deleteRemoteComment = (commentId: string) => call('delete_comment', { p_comment_id: commentId })
+export const removeRemoteParticipant = (checkId: string, participantId: string) => call('remove_participant', { p_check_id: checkId, p_participant_id: participantId })
+export const setRemoteCustomShares = (unitId: string, allocations: Record<string, number>) => call('set_unit_custom_shares', { p_item_unit: unitId, p_allocations: allocations })
+export const resetRemoteCustomShares = (unitId: string) => call('reset_unit_custom_shares', { p_item_unit: unitId })
+export const submitRemotePayment = (checkId: string, amount: number, proofUrl: string | null) => call('submit_payment', { p_check_id: checkId, p_amount: amount, p_proof_url: proofUrl })
+export const confirmRemotePayment = (checkId: string, participantId: string) => call('confirm_payment', { p_check_id: checkId, p_participant_id: participantId })
+export const deleteRemoteCheck = (checkId: string) => call('delete_check', { p_check_id: checkId })
 
-export async function addRemoteItem(checkId: string, name: string, quantity: number, price: number, participantId: string) {
-  const { error } = await client().rpc('add_item', { p_check_id: checkId, p_name: name, p_quantity: quantity, p_unit_price: price, p_creator_participant: participantId })
-  if (error) throw error
-}
-
-export async function deleteRemoteItem(checkId: string, itemId: string) {
-  const { error } = await client().rpc('delete_item', { p_check_id: checkId, p_item_id: itemId })
-  if (error) throw error
-}
-
-export async function toggleRemoteUnit(unitId: string, enabled: boolean) {
-  const { error } = await client().rpc('toggle_unit_share', { p_item_unit: unitId, p_enabled: enabled })
-  if (error) throw error
-}
-
-export async function addRemoteComment(checkId: string, itemId: string | null, body: string) {
-  const { error } = await client().rpc('add_comment', { p_check_id: checkId, p_item_id: itemId, p_body: body })
-  if (error) throw error
-}
-
-export async function deleteRemoteComment(commentId: string) {
-  const { error } = await client().rpc('delete_comment', { p_comment_id: commentId })
-  if (error) throw error
-}
-
-export async function removeRemoteParticipant(checkId: string, participantId: string) {
-  const { error } = await client().rpc('remove_participant', { p_check_id: checkId, p_participant_id: participantId })
-  if (error) throw error
-}
-
-export async function setRemoteCustomShares(unitId: string, allocations: Record<string, number>) {
-  const { error } = await client().rpc('set_unit_custom_shares', { p_item_unit: unitId, p_allocations: allocations })
-  if (error) throw error
-}
-
-export async function resetRemoteCustomShares(unitId: string) {
-  const { error } = await client().rpc('reset_unit_custom_shares', { p_item_unit: unitId })
-  if (error) throw error
-}
-
-export async function submitRemotePayment(checkId: string, amount: number, proofUrl: string | null) {
-  const { error } = await client().rpc('submit_payment', { p_check_id: checkId, p_amount: amount, p_proof_url: proofUrl })
-  if (error) throw error
-}
-
-export async function confirmRemotePayment(checkId: string, participantId: string) {
-  const { error } = await client().rpc('confirm_payment', { p_check_id: checkId, p_participant_id: participantId })
-  if (error) throw error
-}
-
-export async function deleteRemoteCheck(checkId: string) {
-  const { error } = await client().rpc('delete_check', { p_check_id: checkId })
-  if (error) throw error
-}
-
-/** True when the check is gone or the current user is no longer one of its participants (RLS hides the row). */
+/** True when the check is gone or the current user is no longer one of its participants. */
 export function isRemoteCheckGone(error: unknown) {
-  return typeof error === 'object' && error !== null && (error as { code?: string }).code === 'PGRST116'
+  const code = typeof error === 'object' && error !== null ? (error as { code?: string }).code : undefined
+  return code === 'P0002' || code === 'PGRST116'
 }
 
-export type RemoteBill = Bill & { dbId: string; publicId: string; unitIds: Record<string, string[]> }
+type Snapshot = {
+  id: string; public_id: string; title: string; service_percent: number; created_at: string; me: string; is_owner: boolean
+  participants: { id: string; name: string; paid: number; proof_url: string | null; status: PaymentStatus }[]
+  items: { id: string; name: string; quantity: number; unit_price: number; units: { id: string; shares: { participant_id: string; amount: number; mode: ShareMode }[] }[] }[]
+  comments: { id: string; item_id: string | null; participant_id: string; body: string; created_at: string }[]
+}
+
+export type RemoteBill = Bill & { dbId: string; me: string; isOwner: boolean }
+
 export async function loadRemoteCheck(publicId: string): Promise<RemoteBill> {
-  const db = client()
-  const { data: row, error: checkError } = await db.from('checks').select('id,public_id,title,service_percent,created_at').eq('public_id', publicId).single()
-  if (checkError) throw checkError
-  const [peopleResult, itemsResult, paymentsResult, commentsResult] = await Promise.all([
-    db.from('participants').select('id,name,sort_order').eq('check_id', row.id).order('sort_order'),
-    db.from('items').select('id,name,quantity,unit_price').eq('check_id', row.id).order('created_at'),
-    db.from('payments').select('participant_id,amount_paid,proof_url,status').eq('check_id', row.id),
-    db.from('comments').select('id,item_id,participant_id,body,created_at').eq('check_id', row.id).order('created_at'),
-  ])
-  if (peopleResult.error) throw peopleResult.error
-  if (itemsResult.error) throw itemsResult.error
-  if (paymentsResult.error) throw paymentsResult.error
-  if (commentsResult.error) throw commentsResult.error
-  const itemIds=itemsResult.data.map(item => item.id)
-  const unitsResult=itemIds.length ? await db.from('item_units').select('id,item_id,unit_index').in('item_id',itemIds) : null
-  if (unitsResult?.error) throw unitsResult.error
-  const units=unitsResult?.data ?? []
-  const sharesResult=units.length ? await db.from('item_shares').select('item_unit_id,participant_id,amount,mode').in('item_unit_id',units.map(unit=>unit.id)) : null
-  if (sharesResult?.error) throw sharesResult.error
-  const shares=sharesResult?.data ?? []
-  const paymentByPerson = new Map(paymentsResult.data.map(payment => [payment.participant_id, payment]))
-  const participants: Participant[] = peopleResult.data.map(person => {
-    const payment = paymentByPerson.get(person.id)
-    return { id: person.id, name: person.name, paid: Number(payment?.amount_paid ?? 0), proofUrl: payment?.proof_url ?? undefined, status: (payment?.status ?? 'unpaid') as PaymentStatus }
+  const row = await call('get_check', { p_public_id: publicId }) as Snapshot
+  const participants: Participant[] = row.participants.map(person => ({ id: person.id, name: person.name, paid: Number(person.paid), proofUrl: person.proof_url ?? undefined, status: person.status }))
+  const items: BillItem[] = row.items.map(item => {
+    const next: BillItem = { id: item.id, name: item.name, quantity: item.quantity, unitPrice: Number(item.unit_price), unitIds: item.units.map(unit => unit.id), unitSelections: {}, unitModes: {}, unitCustomAmounts: {}, unitAmounts: {} }
+    item.units.forEach((unit, index) => {
+      if (!unit.shares.length) return
+      const key = String(index)
+      next.unitSelections[key] = unit.shares.map(share => share.participant_id)
+      next.unitAmounts![key] = Object.fromEntries(unit.shares.map(share => [share.participant_id, Number(share.amount)]))
+      if (unit.shares.some(share => share.mode === 'custom')) {
+        next.unitModes![key] = 'custom'
+        next.unitCustomAmounts![key] = next.unitAmounts![key]
+      }
+    })
+    return next
   })
-  const unitIds: Record<string, string[]> = {}
-  const unitById = new Map<string, { item_id: string; unit_index: number }>()
-  for (const unit of units) {
-    unitById.set(unit.id, unit)
-    ;(unitIds[unit.item_id] ??= [])[unit.unit_index - 1] = unit.id
-  }
-  const selectionsByItem = new Map<string, Record<string, string[]>>()
-  const customByItem = new Map<string, Record<string, Record<string, number>>>()
-  const modeByItem = new Map<string, Record<string, 'equal' | 'by_quantity' | 'custom'>>()
-  for (const share of shares) {
-    const unit = unitById.get(share.item_unit_id)
-    if (!unit) continue
-    const selection = selectionsByItem.get(unit.item_id) ?? {}
-    const unitKey = String(unit.unit_index - 1)
-    selection[unitKey] ??= []
-    selection[unitKey].push(share.participant_id)
-    selectionsByItem.set(unit.item_id, selection)
-    const modes = modeByItem.get(unit.item_id) ?? {}; modes[unitKey] = share.mode; modeByItem.set(unit.item_id, modes)
-    if (share.mode === 'custom') { const custom = customByItem.get(unit.item_id) ?? {}; custom[unitKey] ??= {}; custom[unitKey][share.participant_id] = Number(share.amount); customByItem.set(unit.item_id, custom) }
-  }
-  const items = itemsResult.data.map(item => ({ id: item.id, name: item.name, quantity: item.quantity, unitPrice: Number(item.unit_price), unitSelections: selectionsByItem.get(item.id) ?? {}, unitIds: unitIds[item.id] ?? [], unitModes: modeByItem.get(item.id) ?? {}, unitCustomAmounts: customByItem.get(item.id) ?? {} }))
-  const comments: CommentMessage[] = commentsResult.data.map(comment => ({ id: comment.id, itemId: comment.item_id ?? undefined, participantId: comment.participant_id, body: comment.body, createdAt: comment.created_at }))
-  return { id: row.public_id, publicId: row.public_id, dbId: row.id, title: row.title, servicePercent: Number(row.service_percent), participants, items, comments, createdAt: row.created_at, ownerToken: '', unitIds }
+  const comments: CommentMessage[] = row.comments.map(comment => ({ id: comment.id, itemId: comment.item_id ?? undefined, participantId: comment.participant_id, body: comment.body, createdAt: comment.created_at }))
+  return { id: row.public_id, dbId: row.id, title: row.title, servicePercent: Number(row.service_percent), participants, items, comments, createdAt: row.created_at, ownerToken: '', me: row.me, isOwner: row.is_owner }
 }
 
-let activePresenceChannel: RealtimeChannel | null = null
-let activePresenceName = 'Гость'
-export async function updateRemoteActivity(activity: string) {
-  if (!activePresenceChannel) return
-  await activePresenceChannel.track({ name: activePresenceName, activity, since: new Date().toISOString() })
-}
+export type PresenceUser = { participantId: string | null; name: string; activity: string }
+export type RemoteSubscription = { close: () => void; setPresence: (user: PresenceUser) => void }
 
-// Filtered Postgres Changes do not deliver DELETE events, so deletions are announced over the check channel.
-export async function announceRemoteChange() {
-  if (!activePresenceChannel) return
-  await activePresenceChannel.send({ type: 'broadcast', event: 'changed', payload: {} })
-}
-
-export function subscribeToRemoteCheck(dbId: string, publicId: string, onChange: () => void, onPresence?: (users: { name: string; activity: string }[]) => void, self?: { name: string; activity: string }) {
+/**
+ * Listens on the check's private channel: the database broadcasts "changed" once per transaction,
+ * and presence shows who is looking at the check. Changes made by this device are skipped,
+ * because the action that made them reloads the check itself.
+ */
+export function subscribeToRemoteCheck(publicId: string, userId: string, onChange: () => void, onPresence: (users: PresenceUser[]) => void, self: PresenceUser): RemoteSubscription {
   const db = client()
   let reloadTimer: ReturnType<typeof setTimeout> | undefined
-  const channel = db.channel(`check:${publicId}`, { config: { private: true, presence: { key: self?.name ?? 'guest' } } })
-  const refresh = () => { clearTimeout(reloadTimer); reloadTimer = setTimeout(onChange, 180) }
-  for (const table of ['checks', 'participants', 'items', 'item_units', 'item_shares', 'payments', 'comments']) {
-    channel.on('postgres_changes', { event: '*', schema: 'public', table, filter: table === 'checks' ? `id=eq.${dbId}` : ['items','participants','payments','comments'].includes(table) ? `check_id=eq.${dbId}` : undefined }, refresh)
-  }
-  channel.on('broadcast', { event: 'changed' }, refresh)
-  if (onPresence) channel.on('presence', { event: 'sync' }, () => {
-    const users = Object.values(channel.presenceState()).flat() as unknown as { name: string; activity: string }[]
-    onPresence(users)
+  let current = self, joined = false, joinedBefore = false
+  const channel: RealtimeChannel = db.channel(`check:${publicId}`, { config: { private: true, presence: { key: userId } } })
+  channel.on('broadcast', { event: 'changed' }, ({ payload }) => {
+    if ((payload as { by?: string } | undefined)?.by === userId) return
+    clearTimeout(reloadTimer); reloadTimer = setTimeout(onChange, 150)
   })
-  activePresenceChannel=channel
-  activePresenceName=self?.name ?? 'Гость'
-  channel.subscribe(async status => {
-    if (status === 'SUBSCRIBED' && self) {
-      await channel.track({ name: self.name, activity: self.activity, since: new Date().toISOString() })
+  channel.on('presence', { event: 'sync' }, () => {
+    const byPerson = new Map<string, PresenceUser>()
+    for (const [key, metas] of Object.entries(channel.presenceState<PresenceUser>())) {
+      const latest = metas.at(-1)
+      if (latest) byPerson.set(latest.participantId ?? key, { participantId: latest.participantId, name: latest.name, activity: latest.activity })
     }
+    onPresence([...byPerson.values()])
   })
-  return () => { clearTimeout(reloadTimer); if (activePresenceChannel===channel) { activePresenceChannel=null; activePresenceName='Гость' }; void db.removeChannel(channel) }
+  const track = () => void channel.track({ ...current, since: new Date().toISOString() })
+  channel.subscribe(status => {
+    if (status !== 'SUBSCRIBED') { joined = false; return }
+    // After a reconnect, reload in case broadcasts were missed while offline.
+    if (joinedBefore) onChange()
+    joined = joinedBefore = true; track()
+  })
+  return {
+    close: () => { clearTimeout(reloadTimer); void db.removeChannel(channel) },
+    setPresence: user => { current = user; if (joined) track() },
+  }
 }

@@ -25,4 +25,16 @@ describe('bill calculations', () => {
     assert.equal(assignedSubtotal(bill), 100)
     assert.equal(calculateTotals(bill).reduce((n, p) => n + p.due, 0), 100)
   })
+  it('uses the amounts recorded by the server instead of re-splitting', () => {
+    // The server gave the remainder to the second participant; the client must not move it.
+    const item: BillItem = { id: 'tea', name: 'Tea', quantity: 1, unitPrice: 10_001, unitSelections: { '0': ['0', '1'] }, unitAmounts: { '0': { '0': 5_000, '1': 5_001 } } }
+    assert.deepEqual(itemShares(item, people.slice(0, 2)), { '0': 5_000, '1': 5_001 })
+  })
+  it('handles many participants and items without losing a sum', () => {
+    const crowd = Array.from({ length: 40 }, (_, i) => ({ id: `p${i}`, name: `P${i}`, paid: 0, status: 'unpaid' as const }))
+    const items: BillItem[] = Array.from({ length: 60 }, (_, i) => ({ id: `i${i}`, name: 'Dish', quantity: 3, unitPrice: 10_007 + i, unitSelections: { '0': crowd.slice(0, i % 40 + 1).map(p => p.id), '1': [crowd[i % 40].id], '2': crowd.map(p => p.id) } }))
+    const bill: Bill = { id: 'big', title: 'Banquet', servicePercent: 12, participants: crowd, items, createdAt: '', ownerToken: '' }
+    const food = items.reduce((n, item) => n + item.unitPrice * item.quantity, 0)
+    assert.equal(calculateTotals(bill).reduce((n, p) => n + p.due, 0), food + Math.round(food * 0.12))
+  })
 })
