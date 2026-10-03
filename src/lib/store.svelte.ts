@@ -3,7 +3,7 @@ import { errorMessage } from './errors'
 import * as local from './local'
 import { addRemoteComment, addRemoteItem, claimRemoteCheckOwner, confirmRemotePayment, createRemoteCheck, deleteRemoteCheck, deleteRemoteComment, deleteRemoteItem, ensureAnonymousSession, isRemoteCheckGone, joinRemoteCheck, loadRemoteCheck, removeRemoteParticipant, resetRemoteCustomShares, setRemoteCustomShares, submitRemotePayment, subscribeToRemoteCheck, toggleRemoteUnit, type PresenceUser, type RemoteBill, type RemoteSubscription } from './remote'
 import { checkPath, homePath, ownerPath, readOwnerToken, routeCheckId } from './routes'
-import { isSupabaseConfigured } from './supabase'
+import { isSupabaseConfigured, preloadSupabase } from './supabase'
 
 export type Mode = 'home' | 'create' | 'join' | 'check'
 const billsKey = 'billsplit:v1'
@@ -48,6 +48,7 @@ class AppStore {
 
   private remote: RemoteSubscription | null = null
   private refreshSeq = 0
+  private reclaimed = new Set<string>()
   private toastTimer: ReturnType<typeof setTimeout> | undefined
 
   personIndex = (id: string) => this.participantIndex.get(id) ?? 0
@@ -89,7 +90,7 @@ class AppStore {
     if (found) {
       if (!this.token) this.token = found.ownerToken
       this.show(found, Boolean(this.token && this.token === found.ownerToken))
-    } else if (isSupabaseConfigured) { this.disconnect(); this.bill = null; this.joinPublicId = id; this.mode = 'join' }
+    } else if (isSupabaseConfigured) { this.disconnect(); this.bill = null; this.joinPublicId = id; this.mode = 'join'; preloadSupabase() }
     else { this.mode = 'home'; this.notify('Эта ссылка создана на другом устройстве. Подключите Supabase для общего доступа.') }
   }
 
@@ -101,7 +102,7 @@ class AppStore {
   }
 
   goHome() { this.disconnect(); this.closeOverlays(); this.mode = 'home'; history.pushState({}, '', homePath()) }
-  beginCreate() { this.mode = 'create' }
+  beginCreate() { this.mode = 'create'; preloadSupabase() }
 
   openCheck(id: string) {
     const found = this.bills.find(entry => entry.id === id)
@@ -165,9 +166,25 @@ class AppStore {
       if (!stale()) this.applyRemote(result)
     } catch (error) {
       if (stale()) return
-      if (isRemoteCheckGone(error)) this.forget('Чек удалён или вас убрали из участников')
-      else console.error('Remote refresh failed', error)
+      if (!isRemoteCheckGone(error)) { console.error('Remote refresh failed', error); return }
+      if (await this.reclaimOwnership(id)) return
+      if (!stale()) this.forget('Чек удалён или вас убрали из участников')
     }
+  }
+
+  /**
+   * A lost Supabase session (expired or cleared) looks exactly like being removed from the check.
+   * Before forgetting the check — and its owner secret with it — the secret re-attaches this device.
+   * Tried once per check per visit, so a check that is really gone cannot loop.
+   */
+  private async reclaimOwnership(id: string) {
+    const token = this.bills.find(entry => entry.id === id)?.ownerToken || this.token
+    if (!token || this.reclaimed.has(id)) return false
+    this.reclaimed.add(id)
+    try { await claimRemoteCheckOwner(id, token) } catch { return false }
+    // The realtime channel was refused for the unknown session, so subscribe again; connect() reloads the check.
+    if (this.bill?.id === id) await this.connect(this.bill)
+    return true
   }
 
   // ---- create and join ----

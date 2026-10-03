@@ -1,18 +1,17 @@
-import { supabase } from './supabase'
-import type { RealtimeChannel } from '@supabase/supabase-js'
+import { loadSupabase } from './supabase'
+import type { RealtimeChannel, SupabaseClient } from '@supabase/supabase-js'
 import type { Bill, BillItem, CommentMessage, Participant, PaymentStatus, ShareMode } from './calculations'
 import type { Database } from './database.types'
 
-function client() {
-  if (!supabase) throw new Error('Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.')
-  return supabase
-}
+// Realtime is only used after a sign-in, which loads the client; keeping it here lets
+// subscribeToRemoteCheck stay synchronous, so the caller closes the old channel right before opening the new one.
+let realtimeClient: SupabaseClient<Database> | null = null
 
 // Concurrent callers share one sign-in instead of each creating an anonymous user.
 let sessionPromise: Promise<string> | null = null
 export function ensureAnonymousSession() {
   sessionPromise ??= (async () => {
-    const db = client()
+    const db = realtimeClient = await loadSupabase()
     const { data: sessionData, error: sessionError } = await db.auth.getSession()
     if (sessionError) throw sessionError
     if (sessionData.session) return sessionData.session.user.id
@@ -27,7 +26,7 @@ export function ensureAnonymousSession() {
 type Rpc = Database['public']['Functions']
 async function call<K extends keyof Rpc>(fn: K, args: Rpc[K]['Args']): Promise<unknown> {
   await ensureAnonymousSession()
-  const { data, error } = await client().rpc(fn, args)
+  const { data, error } = await (await loadSupabase()).rpc(fn, args)
   if (error) throw error
   return data
 }
@@ -95,7 +94,8 @@ export type RemoteSubscription = { close: () => void; setPresence: (user: Presen
  * because the action that made them reloads the check itself.
  */
 export function subscribeToRemoteCheck(publicId: string, userId: string, onChange: () => void, onPresence: (users: PresenceUser[]) => void, self: PresenceUser): RemoteSubscription {
-  const db = client()
+  const db = realtimeClient
+  if (!db) throw new Error('Sign in with ensureAnonymousSession() before subscribing')
   let reloadTimer: ReturnType<typeof setTimeout> | undefined
   let current = self, joined = false, joinedBefore = false
   const channel: RealtimeChannel = db.channel(`check:${publicId}`, { config: { private: true, presence: { key: userId } } })
