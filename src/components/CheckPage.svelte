@@ -36,7 +36,10 @@
   <div class="panel share-banner">
     <div class="share-symbol" aria-hidden="true">🔗</div>
     <div class="share-text"><b>{bill.dbId ? 'Пригласите остальных за стол' : 'Демо-режим'}</b><span>{bill.dbId ? 'Отправьте ссылку — гости сами присоединятся по имени.' : 'Чек хранится только в этом браузере.'}</span></div>
-    <button class="soft-button" onclick={copyLink}>Скопировать ссылку</button>
+    <div class="share-actions">
+      <button class="soft-button" onclick={() => app.qrOpen = true}><span aria-hidden="true">▦</span> QR-код</button>
+      <button class="soft-button" onclick={copyLink}>Скопировать ссылку</button>
+    </div>
   </div>
 
   <section class="people-strip" aria-label="Участники">
@@ -60,7 +63,12 @@
       <div class="empty-illustration" aria-hidden="true">🍽️</div>
       <h2>Стол пока пустой</h2>
       <p>{app.isOwner ? 'Добавьте позиции из чека — друзья сами отметят, что заказывали.' : 'Создатель чека ещё не добавил позиции.'}</p>
-      {#if app.isOwner}<button class="primary-button" onclick={() => app.addItemOpen = true}>＋ Добавить первую позицию</button>{/if}
+      {#if app.isOwner}
+        <div class="empty-actions">
+          <button class="primary-button" onclick={() => app.scanOpen = true}>📷 Сканировать чек</button>
+          <button class="soft-button" onclick={() => app.addItemOpen = true}>＋ Добавить вручную</button>
+        </div>
+      {/if}
     </section>
   {:else}
     <div class="segmented" role="tablist">
@@ -76,7 +84,12 @@
       <div class="items-section" role="tabpanel" id="panel-order" aria-labelledby="tab-order">
         <div class="section-row">
           <div><h2>Что вы заказали?</h2><p class="muted">Нажмите «Это моё» — сумма посчитается сама</p></div>
-          {#if app.isOwner}<button class="soft-button" onclick={() => app.addItemOpen = true}>＋ Позиция</button>{/if}
+          {#if app.isOwner}
+            <div class="item-tools">
+              <button class="soft-button" aria-label="Сканировать чек" title="Сканировать чек" onclick={() => app.scanOpen = true}>📷<span class="tool-label"> Скан</span></button>
+              <button class="soft-button" onclick={() => app.addItemOpen = true}>＋ Позиция</button>
+            </div>
+          {/if}
         </div>
         <div class="item-list">
           {#each bill.items as item (item.id)}<ItemCard {item} />{/each}

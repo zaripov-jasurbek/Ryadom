@@ -34,6 +34,8 @@ class AppStore {
   pendingUnits = $state<Record<string, true>>({})
   // Overlays live here so Escape can close whichever one is open.
   addItemOpen = $state(false)
+  scanOpen = $state(false)
+  qrOpen = $state(false)
   paymentFor = $state<string | null>(null)
   editingUnit = $state('')
 
@@ -75,7 +77,7 @@ class AppStore {
     this.notify(errorMessage(error, fallback))
   }
 
-  closeOverlays() { this.addItemOpen = false; this.paymentFor = null; this.editingUnit = '' }
+  closeOverlays() { this.addItemOpen = false; this.scanOpen = false; this.qrOpen = false; this.paymentFor = null; this.editingUnit = '' }
 
   // ---- navigation ----
 
@@ -252,6 +254,27 @@ class AppStore {
 
   addItem(name: string, quantity: number, unitPrice: number) {
     return this.mutate('Не удалось добавить позицию', dbId => addRemoteItem(dbId, name, quantity, unitPrice), bill => local.addItem(bill, name, quantity, unitPrice))
+  }
+
+  /**
+   * Adds scanned items in receipt order. Returns how many were added, so after a failure
+   * the caller can keep the rest for another try.
+   */
+  async addItems(items: { name: string; quantity: number; unitPrice: number }[]) {
+    const bill = this.bill
+    if (!bill || !items.length) return 0
+    if (!bill.dbId) {
+      this.bill = items.reduce((next, entry) => local.addItem(next, entry.name, entry.quantity, entry.unitPrice), bill)
+      this.save()
+      return items.length
+    }
+    this.busy = true
+    let added = 0
+    try {
+      for (const entry of items) { await addRemoteItem(bill.dbId, entry.name, entry.quantity, entry.unitPrice); added++ }
+    } catch (error) { this.fail(error, `Добавлено ${added} из ${items.length} позиций`) }
+    finally { await this.refresh(); this.busy = false }
+    return added
   }
 
   removeItem(item: BillItem) {
