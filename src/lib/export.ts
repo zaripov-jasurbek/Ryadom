@@ -1,4 +1,5 @@
 import { formatUzs, type ParticipantTotal } from './calculations.ts'
+import { shareOr } from './share.ts'
 
 /** The creator paid the restaurant, so their line says so instead of what is left to pay. */
 const paymentLine = (person: ParticipantTotal, ownerId?: string) =>
@@ -20,8 +21,20 @@ function download(blob: Blob, fileName: string) {
   setTimeout(() => URL.revokeObjectURL(link.href), 30_000)
 }
 
-export function downloadText(title: string, text: string) {
-  download(new Blob([text], { type: 'text/plain;charset=utf-8' }), `${safeFileName(title)}.txt`)
+/** On a phone the summary goes to the share sheet (a chat, Notes); on a computer it downloads as a .txt file. */
+export function saveText(title: string, text: string) {
+  void shareOr({ title, text }, () => download(new Blob([text], { type: 'text/plain;charset=utf-8' }), `${safeFileName(title)}.txt`))
+}
+
+/**
+ * The PNG is built synchronously: Safari opens the share sheet only right after the tap,
+ * and waiting for canvas.toBlob() can use that moment up.
+ */
+function pngBlob(canvas: HTMLCanvasElement) {
+  const bytes = atob(canvas.toDataURL('image/png').split(',')[1])
+  const buffer = new Uint8Array(bytes.length)
+  for (let i = 0; i < bytes.length; i++) buffer[i] = bytes.charCodeAt(i)
+  return new Blob([buffer], { type: 'image/png' })
 }
 
 function fitText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number) {
@@ -31,7 +44,8 @@ function fitText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number) 
   return `${text.slice(0, end)}…`
 }
 
-export function downloadImage(title: string, total: number, totals: ParticipantTotal[], ownerId?: string) {
+/** On a phone the picture goes to the share sheet ("Сохранить изображение", a chat); on a computer it downloads. */
+export function saveImage(title: string, total: number, totals: ParticipantTotal[], ownerId?: string) {
   const width = 1000, height = 340 + totals.length * 78
   const scale = Math.min(3, Math.max(2, window.devicePixelRatio || 1))
   const canvas = document.createElement('canvas')
@@ -51,5 +65,6 @@ export function downloadImage(title: string, total: number, totals: ParticipantT
     ctx.fillStyle = '#ffffff'; ctx.textAlign = 'right'; ctx.fillText(due, 902, y); ctx.textAlign = 'left'
     ctx.fillStyle = '#bfc7b1'; ctx.font = '15px Arial'; ctx.fillText(paymentLine(person, ownerId), 96, y + 26)
   })
-  canvas.toBlob(blob => { if (blob) download(blob, `${safeFileName(title)}.png`) }, 'image/png')
+  const blob = pngBlob(canvas), name = `${safeFileName(title)}.png`
+  void shareOr({ title, files: [new File([blob], name, { type: 'image/png' })] }, () => download(blob, name))
 }

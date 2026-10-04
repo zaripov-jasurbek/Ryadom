@@ -5,6 +5,7 @@ import { addRemoteComment, addRemoteItem, updateRemoteCheck, updateRemoteItem, s
 import { checkPath, homePath, readOwnerToken, routeCheckId } from './routes'
 import { isSupabaseConfigured, preloadSupabase } from './supabase'
 import { expiresAt } from './limits'
+import { shareOr } from './share'
 
 export type Mode = 'home' | 'create' | 'join' | 'check'
 export type ConfirmRequest = { title: string; body?: string; action: string; danger?: boolean; resolve: (answer: boolean) => void }
@@ -39,6 +40,8 @@ class AppStore {
   isOwner = $state(false)
   onlineUsers = $state<PresenceUser[]>([])
   busy = $state(false)
+  /** False while the device has no network: taps would fail, so the page says so up front. */
+  online = $state(typeof navigator === 'undefined' || navigator.onLine)
   toast = $state('')
   activeTab = $state<'order' | 'summary'>('order')
   pendingUnits = $state<Record<string, true>>({})
@@ -87,10 +90,23 @@ class AppStore {
     const onPop = () => this.restoreRoute()
     // Another tab saved or removed a check.
     const onStorage = (event: StorageEvent) => { if (event.key === billsKey) this.bills = parseBills(event.newValue) ?? [] }
+    // Changes made while offline or while iOS kept the tab frozen in the background were never broadcast to
+    // this page, so the check reloads when the network comes back and when the page is shown again.
+    const onOnline = () => { this.online = true; void this.refresh() }
+    const onOffline = () => { this.online = false }
+    const onVisible = () => { if (document.visibilityState === 'visible') void this.refresh() }
     this.restoreRoute()
     window.addEventListener('popstate', onPop)
     window.addEventListener('storage', onStorage)
-    return () => { window.removeEventListener('popstate', onPop); window.removeEventListener('storage', onStorage); this.disconnect() }
+    window.addEventListener('online', onOnline)
+    window.addEventListener('offline', onOffline)
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      window.removeEventListener('popstate', onPop); window.removeEventListener('storage', onStorage)
+      window.removeEventListener('online', onOnline); window.removeEventListener('offline', onOffline)
+      document.removeEventListener('visibilitychange', onVisible)
+      this.disconnect()
+    }
   }
 
   notify(message: string) {
@@ -417,6 +433,14 @@ class AppStore {
       try { await deleteRemoteCheck(bill.dbId) } catch (error) { this.fail(error, 'Не удалось удалить чек'); return }
     }
     this.forget('Чек удалён')
+  }
+
+  /** The invitation for the chat: a phone opens its share sheet, a computer copies the link. */
+  invite() {
+    const bill = this.bill
+    if (!bill) return
+    const url = this.publicLink()
+    void shareOr({ title: bill.title, text: 'Открой чек и отметь своё', url }, () => void this.copy(url, 'Ссылка скопирована — отправьте её в чат'))
   }
 
   async copy(text: string, success: string) {

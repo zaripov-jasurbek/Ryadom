@@ -28,6 +28,7 @@
 
 <div class="app-shell">
   <Header />
+  {#if !app.online}<div class="offline-banner" role="status">Нет интернета — изменения не сохранятся, пока связь не вернётся</div>{/if}
 
   {#if app.mode === 'home'}
     <HomePage />

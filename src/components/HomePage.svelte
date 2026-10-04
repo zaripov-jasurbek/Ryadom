@@ -1,7 +1,8 @@
 <script lang="ts">
   import { billStanding, formatUzs, type Bill, type BillStanding } from '../lib/calculations'
   import { plural } from '../lib/format'
-  import { install, promptInstall } from '../lib/pwa.svelte'
+  import { install, installHint, promptInstall } from '../lib/pwa.svelte'
+  import InstallHintModal from './InstallHintModal.svelte'
   import { app, grandTotal } from '../lib/store.svelte'
 
   const standingText = (standing: BillStanding, owner: boolean) => {
@@ -15,6 +16,10 @@
       case 'empty': return 'Позиций пока нет'
     }
   }
+
+  // Chrome and Edge install on a tap; Safari (iPhone, iPad, Mac) can only be shown the steps.
+  let hintOpen = $state(false)
+  function installApp() { if (install.prompt) void promptInstall(); else hintOpen = true }
 
   async function forget(saved: Bill) {
     const body = saved.ownerToken
@@ -57,7 +62,7 @@
       <p>Создайте чек, поделитесь ссылкой — и пусть каждый отметит своё. Остальное мы посчитаем.</p>
       <div class="hero-actions">
         <button class="primary-button" onclick={() => app.beginCreate()}>Создать новый чек <span aria-hidden="true">↗</span></button>
-        {#if install.prompt}<button class="soft-button" onclick={() => void promptInstall()}><span aria-hidden="true">📲</span> Установить приложение</button>{/if}
+        {#if install.prompt || installHint}<button class="soft-button" onclick={installApp}><span aria-hidden="true">📲</span> Установить приложение</button>{/if}
       </div>
       <div class="hero-note"><span class="note-avatars" aria-hidden="true"><b>J</b><b>A</b><b>B</b></span>Понятно каждому за пару секунд</div>
     </div>
@@ -93,3 +98,5 @@
     <button class="primary-button" onclick={() => app.beginCreate()}>Создать чек <span aria-hidden="true">↗</span></button>
   </section>
 </main>
+
+{#if hintOpen}<InstallHintModal onclose={() => hintOpen = false} />{/if}

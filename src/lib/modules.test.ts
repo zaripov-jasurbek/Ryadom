@@ -6,6 +6,7 @@ import { readOwnerToken, routeCheckId } from './routes.ts'
 import { errorMessage } from './errors.ts'
 import { safeFileName, summaryText } from './export.ts'
 import { formatPaymentDetails, paymentCopyValue } from './format.ts'
+import { installHintFor } from './platform.ts'
 
 const people = ['Jasur', 'Aziz', 'Bekzod'].map((name, i) => ({ id: `${i}`, name, paid: 0, status: 'unpaid' as const }))
 const emptyBill = (): Bill => ({ id: 'b', title: 'Ужин', servicePercent: 0, participants: people, items: [], createdAt: '', ownerToken: 't' })
@@ -173,6 +174,34 @@ describe('error messages', () => {
   it('never shows a guest the names of the services behind the app', () => {
     for (const message of ['Supabase is not configured. Add VITE_SUPABASE_URL', 'Anonymous sign-ins are disabled'])
       assert.doesNotMatch(errorMessage(new Error(message), 'x'), /supabase|анонимн/i)
+  })
+})
+
+describe('install hint', () => {
+  const ua = {
+    iphone: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1',
+    iphoneChrome: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/129.0 Mobile/15E148 Safari/604.1',
+    ipad: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15',
+    macSafari: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15',
+    oldMacSafari: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Safari/605.1.15',
+    macChrome: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Safari/537.36',
+    windowsEdge: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Safari/537.36 Edg/129.0',
+    android: 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Mobile Safari/537.36',
+  }
+  it('shows the share-menu steps on iPhone and iPad, in Safari and in other iOS browsers', () => {
+    assert.equal(installHintFor(ua.iphone, 5, false), 'ios')
+    assert.equal(installHintFor(ua.iphoneChrome, 5, false), 'ios')
+    assert.equal(installHintFor(ua.ipad, 5, false), 'ios')
+  })
+  it('shows "Add to Dock" in Safari 17+ on a Mac only', () => {
+    assert.equal(installHintFor(ua.macSafari, 0, false), 'mac')
+    assert.equal(installHintFor(ua.oldMacSafari, 0, false), null)
+    assert.equal(installHintFor(ua.macChrome, 0, false), null)
+  })
+  it('leaves Windows and Android to their own install prompt, and hides once installed', () => {
+    assert.equal(installHintFor(ua.windowsEdge, 0, false), null)
+    assert.equal(installHintFor(ua.android, 5, false), null)
+    assert.equal(installHintFor(ua.iphone, 5, true), null)
   })
 })
 

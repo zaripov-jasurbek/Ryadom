@@ -1,6 +1,6 @@
 <script lang="ts">
   import { formatUzs, personItems, type ParticipantTotal } from '../lib/calculations'
-  import { downloadImage, downloadText, summaryText } from '../lib/export'
+  import { saveImage, saveText, summaryText } from '../lib/export'
   import { expiryDate, initial, plural, statusLabels } from '../lib/format'
   import { expiresAt } from '../lib/limits'
   import { app } from '../lib/store.svelte'
@@ -113,9 +113,9 @@
     </div>
     <div class="chip-row">
       <button class="chip" onclick={() => app.copy(text(), 'Итог скопирован')}>Копировать</button>
-      <button class="chip" onclick={() => downloadImage(bill.title, app.billTotal, app.totals, app.ownerId)}>Картинка</button>
+      <button class="chip" onclick={() => saveImage(bill.title, app.billTotal, app.totals, app.ownerId)}>Картинка</button>
       <button class="chip" onclick={() => window.print()}>PDF</button>
-      <button class="chip" onclick={() => downloadText(bill.title, text())}>Текст</button>
+      <button class="chip" onclick={() => saveText(bill.title, text())}>Текст</button>
     </div>
   </div>
 </div>

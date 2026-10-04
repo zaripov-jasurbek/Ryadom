@@ -31,9 +31,6 @@
   // Long receipts get filters; a filter picked from the warning stays visible on a short one too.
   const showFilters = $derived(bill.items.length > 3 || app.itemFilter !== 'all')
 
-  function copyLink() {
-    void app.copy(app.publicLink(), bill.dbId ? 'Ссылка скопирована — гости могут открыть чек' : 'Ссылка скопирована, но этот чек открывается только на этом устройстве')
-  }
   async function removeParticipant(person: Participant) {
     if (await app.confirm({ title: `Убрать ${person.name} из чека?`, body: 'Отметки, оплата и комментарии участника будут удалены.', action: 'Убрать', danger: true })) void app.removeParticipant(person)
   }
@@ -64,7 +61,12 @@
       {:else}
         <span class="expiry-pill">Только на этом устройстве</span>
       {/if}
-      {#if bill.dbId && !inviteFirst}<button class="soft-button invite-button" onclick={() => app.qrOpen = true}><span aria-hidden="true">▦</span> Пригласить</button>{/if}
+      {#if bill.dbId && !inviteFirst}
+        <div class="invite-actions">
+          <button class="soft-button" onclick={() => app.invite()}>Пригласить</button>
+          <button class="icon-button" aria-label="Показать QR-код" title="QR-код для тех, кто рядом" onclick={() => app.qrOpen = true}>▦</button>
+        </div>
+      {/if}
     </div>
   </header>
 
@@ -73,8 +75,8 @@
       <div class="share-symbol" aria-hidden="true">🔗</div>
       <div class="share-text"><b>Пригласите остальных за стол</b><span>Отправьте ссылку или покажите QR-код — гости сами присоединятся по имени.</span></div>
       <div class="share-actions">
+        <button class="soft-button" onclick={() => app.invite()}>Отправить ссылку</button>
         <button class="soft-button" onclick={() => app.qrOpen = true}><span aria-hidden="true">▦</span> QR-код</button>
-        <button class="soft-button" onclick={copyLink}>Скопировать ссылку</button>
       </div>
     </div>
   {/if}
