@@ -1,6 +1,6 @@
 export type PaymentStatus = 'unpaid' | 'partially_paid' | 'proof_submitted' | 'paid'
 export type ShareMode = 'equal' | 'by_quantity' | 'custom'
-export type Participant = { id: string; name: string; paid: number; proofUrl?: string; status: PaymentStatus }
+export type Participant = { id: string; name: string; paid: number; status: PaymentStatus }
 export type BillItem = {
   id: string; name: string; quantity: number; unitPrice: number
   /** Unit index → ids of the participants sharing that unit. */

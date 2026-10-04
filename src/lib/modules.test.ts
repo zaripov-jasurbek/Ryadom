@@ -55,7 +55,7 @@ describe('demo mode changes', () => {
   it('reopens a payment only when the participant now owes more', () => {
     let bill = local.addItem(emptyBill(), 'Чай', 1, 10_000, 'tea')
     bill = local.toggleUnit(bill, 'tea', 0, '1')
-    bill = local.submitPayment(bill, '1', 10_000, 'https://pay.example', 10_000)
+    bill = local.submitPayment(bill, '1', 10_000, 10_000)
     bill = local.confirmPayment(bill, '1', 10_000)
     assert.equal(bill.participants[1].status, 'paid')
     bill = local.addItem(bill, 'Кофе', 1, 5_000, 'coffee')
@@ -63,7 +63,6 @@ describe('demo mode changes', () => {
     assert.equal(bill.participants[1].status, 'paid', 'someone else’s coffee does not change what Aziz owes')
     bill = local.toggleUnit(bill, 'coffee', 0, '1')
     assert.equal(bill.participants[1].status, 'partially_paid')
-    assert.equal(bill.participants[1].proofUrl, undefined)
   })
 
   it('edits an item: a new price re-splits custom units equally, a smaller quantity drops the last units', () => {
@@ -83,15 +82,15 @@ describe('demo mode changes', () => {
   it('edits the check and reopens payments a higher service no longer covers', () => {
     let bill = local.addItem(emptyBill(), 'Чай', 1, 10_000, 'tea')
     bill = local.toggleUnit(bill, 'tea', 0, '1')
-    bill = local.submitPayment(bill, '1', 10_000, null, 10_000)
-    assert.equal(bill.participants[1].status, 'proof_submitted', 'the full amount waits for confirmation without a link')
+    bill = local.submitPayment(bill, '1', 10_000, 10_000)
+    assert.equal(bill.participants[1].status, 'proof_submitted', 'the full amount waits for confirmation')
     bill = local.confirmPayment(bill, '1', 10_000)
     bill = local.updateCheck(bill, 'Обед', 10, ' 8600123456789012 ')
     assert.equal(bill.title, 'Обед')
     assert.equal(bill.paymentDetails, '8600123456789012')
     assert.equal(local.updateCheck(bill, 'Обед', 10, '  ').paymentDetails, undefined)
     assert.equal(bill.participants[1].status, 'partially_paid')
-    assert.equal(local.submitPayment(bill, '1', 5_000, null, 11_000).participants[1].status, 'partially_paid')
+    assert.equal(local.submitPayment(bill, '1', 5_000, 11_000).participants[1].status, 'partially_paid')
   })
 
   it('splits an item equally among everyone, replacing marks and custom splits', () => {
@@ -103,17 +102,15 @@ describe('demo mode changes', () => {
     assert.deepEqual(bill.items[0].unitModes, {})
   })
 
-  it('lets the creator mark a payment and take it back', () => {
+  it('lets the creator take a confirmation back', () => {
     let bill = local.addItem(emptyBill(), 'Чай', 1, 10_000, 'tea')
     bill = local.toggleUnit(bill, 'tea', 0, '1')
-    bill = local.submitPayment(bill, '1', 4_000, 'https://pay.example', 10_000)
-    bill = local.markPayment(bill, '1', true, 10_000)
-    assert.equal(bill.participants[1].status, 'paid')
+    bill = local.submitPayment(bill, '1', 10_000, 10_000)
+    bill = local.confirmPayment(bill, '1', 10_000)
     assert.equal(calculateTotals(bill)[1].remaining, 0)
-    bill = local.markPayment(bill, '1', false, 10_000)
-    assert.equal(bill.participants[1].status, 'unpaid')
-    assert.equal(bill.participants[1].paid, 0)
-    assert.equal(bill.participants[1].proofUrl, undefined)
+    bill = local.unconfirmPayment(bill, '1')
+    assert.equal(bill.participants[1].status, 'proof_submitted')
+    assert.equal(bill.participants[1].paid, 10_000)
   })
 
   it('removes item comments together with the item', () => {
@@ -147,7 +144,7 @@ describe('check summaries', () => {
     assert.deepEqual(billStanding(bill, '0', true), { kind: 'owed', amount: 10_000 })
     assert.deepEqual(billStanding(bill, '1', false), { kind: 'owes', amount: 10_000 })
     assert.deepEqual(billStanding(bill, '2', false), { kind: 'nothing-marked' })
-    bill = local.submitPayment(bill, '1', 10_000, null, 10_000)
+    bill = local.submitPayment(bill, '1', 10_000, 10_000)
     assert.deepEqual(billStanding(bill, '0', true), { kind: 'pending' })
     assert.deepEqual(billStanding(bill, '1', false), { kind: 'pending' })
     bill = local.confirmPayment(bill, '1', 10_000)

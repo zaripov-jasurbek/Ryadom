@@ -41,7 +41,7 @@ export const addRemoteItem = (checkId: string, name: string, quantity: number, p
 export const updateRemoteItem = (checkId: string, itemId: string, name: string, quantity: number, price: number) => call('update_item', { p_check_id: checkId, p_item_id: itemId, p_name: name, p_quantity: quantity, p_unit_price: price })
 export const updateRemoteCheck = (checkId: string, title: string, servicePercent: number, paymentDetails: string) => call('update_check', { p_check_id: checkId, p_title: title, p_service_percent: servicePercent, p_payment_details: paymentDetails })
 export const shareRemoteItemEqually = (checkId: string, itemId: string) => call('share_item_equally', { p_check_id: checkId, p_item_id: itemId })
-export const markRemotePayment = (checkId: string, participantId: string, paid: boolean) => call('mark_payment', { p_check_id: checkId, p_participant_id: participantId, p_paid: paid })
+export const unconfirmRemotePayment = (checkId: string, participantId: string) => call('unconfirm_payment', { p_check_id: checkId, p_participant_id: participantId })
 export const deleteRemoteItem = (checkId: string, itemId: string) => call('delete_item', { p_check_id: checkId, p_item_id: itemId })
 export const toggleRemoteUnit = (unitId: string, enabled: boolean) => call('toggle_unit_share', { p_item_unit: unitId, p_enabled: enabled })
 export const addRemoteComment = (checkId: string, itemId: string | null, body: string) => call('add_comment', { p_check_id: checkId, p_item_id: itemId, p_body: body })
@@ -49,7 +49,7 @@ export const deleteRemoteComment = (commentId: string) => call('delete_comment',
 export const removeRemoteParticipant = (checkId: string, participantId: string) => call('remove_participant', { p_check_id: checkId, p_participant_id: participantId })
 export const setRemoteCustomShares = (unitId: string, allocations: Record<string, number>) => call('set_unit_custom_shares', { p_item_unit: unitId, p_allocations: allocations })
 export const resetRemoteCustomShares = (unitId: string) => call('reset_unit_custom_shares', { p_item_unit: unitId })
-export const submitRemotePayment = (checkId: string, amount: number, proofUrl: string | null) => call('submit_payment', { p_check_id: checkId, p_amount: amount, p_proof_url: proofUrl })
+export const submitRemotePayment = (checkId: string, amount: number) => call('submit_payment', { p_check_id: checkId, p_amount: amount })
 export const confirmRemotePayment = (checkId: string, participantId: string) => call('confirm_payment', { p_check_id: checkId, p_participant_id: participantId })
 export const deleteRemoteCheck = (checkId: string) => call('delete_check', { p_check_id: checkId })
 
@@ -61,7 +61,7 @@ export function isRemoteCheckGone(error: unknown) {
 
 type Snapshot = {
   id: string; public_id: string; title: string; service_percent: number; payment_details: string | null; created_at: string; me: string; owner_id: string | null; is_owner: boolean
-  participants: { id: string; name: string; paid: number; proof_url: string | null; status: PaymentStatus }[]
+  participants: { id: string; name: string; paid: number; status: PaymentStatus }[]
   items: { id: string; name: string; quantity: number; unit_price: number; units: { id: string; shares: { participant_id: string; amount: number; mode: ShareMode }[] }[] }[]
   comments: { id: string; item_id: string | null; participant_id: string; body: string; created_at: string }[]
 }
@@ -70,7 +70,7 @@ export type RemoteBill = Bill & { dbId: string; me: string; isOwner: boolean }
 
 export async function loadRemoteCheck(publicId: string): Promise<RemoteBill> {
   const row = await call('get_check', { p_public_id: publicId }) as Snapshot
-  const participants: Participant[] = row.participants.map(person => ({ id: person.id, name: person.name, paid: Number(person.paid), proofUrl: person.proof_url ?? undefined, status: person.status }))
+  const participants: Participant[] = row.participants.map(person => ({ id: person.id, name: person.name, paid: Number(person.paid), status: person.status }))
   const items: BillItem[] = row.items.map(item => {
     const next: BillItem = { id: item.id, name: item.name, quantity: item.quantity, unitPrice: Number(item.unit_price), unitIds: item.units.map(unit => unit.id), unitSelections: {}, unitModes: {}, unitCustomAmounts: {}, unitAmounts: {} }
     item.units.forEach((unit, index) => {

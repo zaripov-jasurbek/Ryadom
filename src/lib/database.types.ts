@@ -13,12 +13,12 @@ export interface Database {
       update_item: { Args: { p_check_id: string; p_item_id: string; p_name: string; p_quantity: number; p_unit_price: number }; Returns: undefined }
       update_check: { Args: { p_check_id: string; p_title: string; p_service_percent: number; p_payment_details: string }; Returns: undefined }
       share_item_equally: { Args: { p_check_id: string; p_item_id: string }; Returns: undefined }
-      mark_payment: { Args: { p_check_id: string; p_participant_id: string; p_paid: boolean }; Returns: undefined }
+      unconfirm_payment: { Args: { p_check_id: string; p_participant_id: string }; Returns: undefined }
       delete_item: { Args: { p_check_id: string; p_item_id: string }; Returns: undefined }
       toggle_unit_share: { Args: { p_item_unit: string; p_enabled: boolean }; Returns: undefined }
       set_unit_custom_shares: { Args: { p_item_unit: string; p_allocations: Json }; Returns: undefined }
       reset_unit_custom_shares: { Args: { p_item_unit: string }; Returns: undefined }
-      submit_payment: { Args: { p_check_id: string; p_amount: number; p_proof_url: string | null }; Returns: undefined }
+      submit_payment: { Args: { p_check_id: string; p_amount: number }; Returns: undefined }
       confirm_payment: { Args: { p_check_id: string; p_participant_id: string }; Returns: undefined }
       add_comment: { Args: { p_check_id: string; p_item_id: string | null; p_body: string }; Returns: string }
       delete_comment: { Args: { p_comment_id: string }; Returns: undefined }

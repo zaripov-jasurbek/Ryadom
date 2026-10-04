@@ -10,7 +10,6 @@ const messages: [RegExp, string][] = [
   [/No submitted proof/, 'Участник ещё не отметил оплату'],
   [/Owner may only confirm/, 'Подтвердить можно только полную оплату'],
   [/Nothing to pay yet/, 'Участник ещё ничего не отметил'],
-  [/Payment proof URL is required/, 'Добавьте ссылку на подтверждение'],
   [/Invalid payment data/, 'Проверьте сумму и ссылку на подтверждение'],
   [/cannot be removed/, 'Создателя чека нельзя убрать'],
   [/Participant not found/, 'Участник уже удалён'],

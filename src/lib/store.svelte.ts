@@ -1,7 +1,7 @@
 import { assignedSubtotal, calculateTotals, ownerIdOf, type Bill, type BillItem, type CommentMessage, type Participant } from './calculations'
 import { errorMessage } from './errors'
 import * as local from './local'
-import { addRemoteComment, addRemoteItem, updateRemoteCheck, updateRemoteItem, shareRemoteItemEqually, markRemotePayment, claimRemoteCheckOwner, confirmRemotePayment, createRemoteCheck, deleteRemoteCheck, deleteRemoteComment, deleteRemoteItem, ensureAnonymousSession, isRemoteCheckGone, joinRemoteCheck, loadRemoteCheck, removeRemoteParticipant, resetRemoteCustomShares, setRemoteCustomShares, submitRemotePayment, subscribeToRemoteCheck, toggleRemoteUnit, type PresenceUser, type RemoteBill, type RemoteSubscription } from './remote'
+import { addRemoteComment, addRemoteItem, updateRemoteCheck, updateRemoteItem, shareRemoteItemEqually, claimRemoteCheckOwner, confirmRemotePayment, createRemoteCheck, deleteRemoteCheck, deleteRemoteComment, deleteRemoteItem, ensureAnonymousSession, isRemoteCheckGone, joinRemoteCheck, loadRemoteCheck, removeRemoteParticipant, resetRemoteCustomShares, setRemoteCustomShares, submitRemotePayment, subscribeToRemoteCheck, toggleRemoteUnit, unconfirmRemotePayment, type PresenceUser, type RemoteBill, type RemoteSubscription } from './remote'
 import { checkPath, homePath, ownerPath, readOwnerToken, routeCheckId } from './routes'
 import { isSupabaseConfigured, preloadSupabase } from './supabase'
 
@@ -308,9 +308,8 @@ class AppStore {
     return this.mutate('Не удалось разделить позицию', dbId => shareRemoteItemEqually(dbId, item.id), bill => local.shareItemEqually(bill, item.id), `«${item.name}» делится на всех`)
   }
 
-  markPayment(personId: string, paid: boolean) {
-    const due = this.dueOf(personId)
-    return this.mutate('Не удалось обновить оплату', dbId => markRemotePayment(dbId, personId, paid), bill => local.markPayment(bill, personId, paid, due), paid ? 'Оплата отмечена' : 'Отметка об оплате снята')
+  unconfirm(personId: string) {
+    return this.mutate('Не удалось отменить подтверждение', dbId => unconfirmRemotePayment(dbId, personId), bill => local.unconfirmPayment(bill, personId), 'Подтверждение отменено')
   }
 
   removeItem(item: BillItem) {
@@ -343,9 +342,9 @@ class AppStore {
     return this.mutate('Не удалось сбросить доли', () => resetRemoteCustomShares(item.unitIds?.[unit] ?? ''), bill => local.resetCustomShares(bill, item.id, unit))
   }
 
-  submitPayment(personId: string, amount: number, proofUrl: string | null) {
+  submitPayment(personId: string, amount: number) {
     const due = this.dueOf(personId)
-    return this.mutate('Не удалось отправить оплату', dbId => submitRemotePayment(dbId, amount, proofUrl), bill => local.submitPayment(bill, personId, amount, proofUrl, due), 'Оплата отправлена')
+    return this.mutate('Не удалось отправить оплату', dbId => submitRemotePayment(dbId, amount), bill => local.submitPayment(bill, personId, amount, due), 'Оплата отправлена')
   }
 
   approve(personId: string) {

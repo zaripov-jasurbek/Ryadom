@@ -7,7 +7,7 @@ const changeItem = (bill: Bill, itemId: string, change: (item: BillItem) => Bill
 /** Mirrors reconcile_check_payments: reopens confirmed or submitted payments that no longer cover the participant's total. */
 export function reconcilePayments(bill: Bill): Bill {
   const due = new Map(calculateTotals(bill).map(total => [total.id, total.due]))
-  return { ...bill, participants: bill.participants.map(person => (person.status === 'paid' || person.status === 'proof_submitted') && person.paid < (due.get(person.id) ?? 0) ? { ...person, status: person.paid > 0 ? 'partially_paid' : 'unpaid', proofUrl: undefined } : person) }
+  return { ...bill, participants: bill.participants.map(person => (person.status === 'paid' || person.status === 'proof_submitted') && person.paid < (due.get(person.id) ?? 0) ? { ...person, status: person.paid > 0 ? 'partially_paid' : 'unpaid' } : person) }
 }
 
 /** Adds or removes one participant from a unit's equal split; also used for optimistic remote updates. */
@@ -78,15 +78,15 @@ export function resetCustomShares(bill: Bill, itemId: string, unit: number): Bil
   return reconcilePayments(changeItem(bill, itemId, item => withoutCustomSplit(item, String(unit))))
 }
 
-/** Mirrors submit_payment: the full amount, or any amount with a link, waits for the creator's confirmation. */
-export function submitPayment(bill: Bill, personId: string, amount: number, proofUrl: string | null, due: number): Bill {
+/** Mirrors submit_payment: the full amount waits for the creator's confirmation, less is a partial payment. */
+export function submitPayment(bill: Bill, personId: string, amount: number, due: number): Bill {
   const paid = Math.min(due, Math.max(0, Math.floor(amount)))
-  return { ...bill, participants: bill.participants.map(person => person.id !== personId ? person : { ...person, paid, proofUrl: proofUrl ?? undefined, status: proofUrl || (paid > 0 && paid >= due) ? 'proof_submitted' : paid > 0 ? 'partially_paid' : 'unpaid' }) }
+  return { ...bill, participants: bill.participants.map(person => person.id !== personId ? person : { ...person, paid, status: paid > 0 && paid >= due ? 'proof_submitted' : paid > 0 ? 'partially_paid' : 'unpaid' }) }
 }
 
-/** Mirrors mark_payment: the creator records the whole total as paid, or starts the payment over. */
-export function markPayment(bill: Bill, personId: string, paid: boolean, due: number): Bill {
-  return { ...bill, participants: bill.participants.map(person => person.id !== personId ? person : paid ? { ...person, paid: due, status: 'paid' } : { ...person, paid: 0, status: 'unpaid', proofUrl: undefined }) }
+/** Mirrors unconfirm_payment: a confirmed payment goes back to waiting for the creator. */
+export function unconfirmPayment(bill: Bill, personId: string): Bill {
+  return { ...bill, participants: bill.participants.map(person => person.id === personId && person.status === 'paid' ? { ...person, status: 'proof_submitted' } : person) }
 }
 
 export function confirmPayment(bill: Bill, personId: string, due: number): Bill {

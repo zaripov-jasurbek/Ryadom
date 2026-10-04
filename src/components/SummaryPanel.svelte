@@ -10,11 +10,8 @@
   const ownerName = $derived(app.ownerId ? app.personName(app.ownerId) : '')
   const text = () => summaryText(bill.title, app.billTotal, app.totals, app.ownerId)
 
-  function markPaid(person: ParticipantTotal) {
-    if (window.confirm(`${person.name}: отметить ${formatUzs(person.due)} как оплаченные?`)) void app.markPayment(person.id, true)
-  }
-  function unmarkPaid(person: ParticipantTotal) {
-    if (window.confirm(`Снять отметку об оплате у ${person.name}?`)) void app.markPayment(person.id, false)
+  function unconfirm(person: ParticipantTotal) {
+    if (window.confirm(`Отменить подтверждение оплаты у ${person.name}?`)) void app.unconfirm(person.id)
   }
 </script>
 
@@ -23,7 +20,6 @@
     <div class="summary-title"><div><span class="eyebrow">Кто сколько должен</span><h2>Итоги</h2></div><div class="summary-grand"><small>Общий счёт</small><b>{formatUzs(app.billTotal)}</b></div></div>
     {#each app.totals as person (person.id)}
       {@const lines = personItems(bill, person.id)}
-      {@const proofUrl = bill.participants[app.personIndex(person.id)]?.proofUrl}
       {@const payer = person.id === app.ownerId}
       <div class="summary-person" class:is-me={app.selectedPerson === person.id}>
         <span class="person-avatar tone-{app.personIndex(person.id) % 5}">{initial(person.name)}</span>
@@ -46,17 +42,12 @@
             </ul>
           </details>
         {/if}
-        {#if app.isOwner && !payer && person.due > 0}
+        {#if app.isOwner && !payer && person.due > 0 && (person.status === 'paid' || person.status === 'proof_submitted')}
           <div class="summary-actions">
             {#if person.status === 'paid'}
-              <button class="ghost-button" disabled={app.busy} onclick={() => unmarkPaid(person)}>Снять отметку</button>
+              <button class="ghost-button" disabled={app.busy} onclick={() => unconfirm(person)}>Отменить подтверждение</button>
             {:else}
-              {#if proofUrl}<a class="ghost-button" href={proofUrl} target="_blank" rel="noreferrer noopener">Открыть подтверждение ↗</a>{/if}
-              {#if person.status === 'proof_submitted' && person.paid >= person.due}
-                <button class="accent-button" disabled={app.busy} onclick={() => void app.approve(person.id)}>Подтвердить оплату</button>
-              {:else}
-                <button class="soft-button" disabled={app.busy} title="Например, отдал наличными или перевод уже пришёл" onclick={() => markPaid(person)}>Отметить оплаченным</button>
-              {/if}
+              <button class="accent-button" disabled={app.busy} onclick={() => void app.approve(person.id)}>Подтвердить оплату</button>
             {/if}
           </div>
         {/if}
@@ -75,7 +66,7 @@
     <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(paidPercent)}><i style={`width:${paidPercent}%`}></i></div>
   </div>
 
-  {#if app.currentParticipant && app.currentParticipant.id !== app.ownerId}
+  {#if app.currentParticipant && app.currentParticipant.id !== app.ownerId && app.currentParticipant.status !== 'paid'}
     <button class="primary-button wide" onclick={() => app.paymentFor = app.currentParticipant!.id}>{app.currentParticipant.status === 'unpaid' ? 'Отметить оплату' : 'Изменить оплату'} <span aria-hidden="true">↗</span></button>
   {/if}
 
