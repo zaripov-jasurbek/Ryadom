@@ -3,7 +3,7 @@
   import { homePath } from '../lib/routes'
   import { setTheme, theme, themes } from '../lib/theme.svelte'
 
-  const live = $derived(Boolean(app.bill?.dbId && app.mode === 'check'))
+  const live = $derived(Boolean(app.bill && app.mode === 'check'))
 </script>
 
 <header class="topbar">

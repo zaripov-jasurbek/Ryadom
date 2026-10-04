@@ -14,7 +14,7 @@
 
   async function submit() {
     if (app.busy) return
-    if (await app.submitPayment(personId, amount)) app.paymentFor = null
+    if (await app.submitPayment(amount)) app.paymentFor = null
   }
 </script>
 

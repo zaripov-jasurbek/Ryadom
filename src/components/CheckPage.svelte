@@ -27,7 +27,7 @@
   // Payments the creator still has to look at, shown on the summary tab.
   const toConfirm = $derived(app.isOwner ? app.totals.filter(person => person.id !== app.ownerId && person.status === 'proof_submitted').length : 0)
   // The creator alone at the table has one thing to do next: invite people. Later a small button is enough.
-  const inviteFirst = $derived(Boolean(bill.dbId && app.isOwner && bill.participants.length === 1))
+  const inviteFirst = $derived(app.isOwner && bill.participants.length === 1)
   // Long receipts get filters; a filter picked from the warning stays visible on a short one too.
   const showFilters = $derived(bill.items.length > 3 || app.itemFilter !== 'all')
 
@@ -56,12 +56,8 @@
     </div>
     <p class="muted">{[app.billTotal ? formatUzs(app.billTotal) : '', bill.servicePercent ? `обслуживание ${bill.servicePercent}%` : '', `создан ${createdDate.format(new Date(bill.createdAt))}`].filter(Boolean).join(' · ')}</p>
     <div class="check-meta">
-      {#if bill.dbId}
-        <span class="expiry-pill" class:soon={expiresSoon} title={`Общие чеки хранятся ${plural(checkLifetimeDays, 'день', 'дня', 'дней')}. Итог можно сохранить картинкой или PDF в «Итогах и оплате».`}>⏳ Удалится {expiryDate.format(expires)}</span>
-      {:else}
-        <span class="expiry-pill">Только на этом устройстве</span>
-      {/if}
-      {#if bill.dbId && !inviteFirst}
+      <span class="expiry-pill" class:soon={expiresSoon} title={`Чеки хранятся ${plural(checkLifetimeDays, 'день', 'дня', 'дней')}. Итог можно сохранить картинкой или PDF в «Итогах и оплате».`}>⏳ Удалится {expiryDate.format(expires)}</span>
+      {#if !inviteFirst}
         <div class="invite-actions">
           <button class="soft-button" onclick={() => app.invite()}>Пригласить</button>
           <button class="icon-button" aria-label="Показать QR-код" title="QR-код для тех, кто рядом" onclick={() => app.qrOpen = true}>▦</button>
@@ -82,24 +78,17 @@
   {/if}
 
   <section class="people-strip" aria-label="Участники">
-    <div class="section-row small"><span class="eyebrow">За столом · {bill.participants.length}</span>{#if bill.dbId}<span class="online-count"><i></i>{app.onlineUsers.length || 1} онлайн</span>{/if}</div>
+    <div class="section-row small"><span class="eyebrow">За столом · {bill.participants.length}</span><span class="online-count"><i></i>{app.onlineUsers.length || 1} онлайн</span></div>
     <div class="people-row">
       {#each bill.participants as person, i (person.id)}
         <span class="person-entry">
-          {#if bill.dbId}
-            <!-- In a shared check everyone is who they joined as; the names are just who is at the table. -->
-            <span class="person-chip" class:active={app.selectedPerson === person.id}><span class="person-avatar tone-{i % 5}">{initial(person.name)}</span>{person.name}{app.selectedPerson === person.id ? ' · вы' : ''}</span>
-          {:else}
-            <button class="person-chip" class:active={app.selectedPerson === person.id} aria-pressed={app.selectedPerson === person.id} onclick={() => app.choosePerson(person.id)}>
-              <span class="person-avatar tone-{i % 5}">{initial(person.name)}</span>{person.name}{app.selectedPerson === person.id ? ' · вы' : ''}
-            </button>
-          {/if}
+          <!-- Everyone is who they joined as; the names just show who is at the table. -->
+          <span class="person-chip" class:active={app.selectedPerson === person.id}><span class="person-avatar tone-{i % 5}">{initial(person.name)}</span>{person.name}{app.selectedPerson === person.id ? ' · вы' : ''}</span>
           {#if app.isOwner && i > 0}<button class="remove-person" aria-label={`Убрать ${person.name} из чека`} title="Убрать из чека" onclick={() => removeParticipant(person)}>×</button>{/if}
         </span>
       {/each}
     </div>
     {#if app.onlineUsers.length > 1}<div class="presence-feed">{#each app.onlineUsers.slice(0, 4) as user, i (user.participantId ?? i)}<span><i></i>{user.name} · {user.activity}</span>{/each}</div>{/if}
-    {#if !bill.dbId && !app.selectedPerson}<p class="hint">Нажмите на своё имя, чтобы отмечать блюда.</p>{/if}
   </section>
 
   {#if !bill.items.length}

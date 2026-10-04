@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { assignedSubtotal, calculateTotals, formatUzs, itemShares, serviceFee, splitInteger, type Bill, type BillItem } from './calculations.ts'
+import { assignedSubtotal, calculateTotals, formatUzs, itemShares, serviceFee, splitInteger, withSelection, type Bill, type BillItem } from './calculations.ts'
 const people = ['Jasur', 'Aziz', 'Bekzod', 'Sardor'].map((name, i) => ({ id: `${i}`, name, paid: 0, status: 'unpaid' as const }))
 describe('bill calculations', () => {
   it('splits indivisible sums deterministically and conserves the full item price', () => assert.deepEqual(splitInteger(20_000, [1, 1, 1]), [6_667, 6_667, 6_666]))
@@ -25,20 +25,28 @@ describe('bill calculations', () => {
     assert.equal(Object.values(itemShares(item, people)).reduce((a, b) => a + b, 0), 40_000)
   })
   it('allocates service fee proportionally and totals correctly', () => {
-    const bill: Bill = { id: 'x', title: 'Dinner', servicePercent: 10, participants: people.slice(0, 3), createdAt: '', ownerToken: '', items: [{ id: 'x', name: 'Food', quantity: 1, unitPrice: 100, unitSelections: { '0': ['0', '1', '2'] } }] }
+    const bill: Bill = { id: 'x', dbId: 'db', title: 'Dinner', servicePercent: 10, participants: people.slice(0, 3), createdAt: '', ownerToken: '', items: [{ id: 'x', name: 'Food', quantity: 1, unitPrice: 100, unitSelections: { '0': ['0', '1', '2'] } }] }
     const totals = calculateTotals(bill)
     assert.equal(totals.reduce((n, p) => n + p.service, 0), 10)
     assert.equal(totals.reduce((n, p) => n + p.due, 0), 110)
   })
   it('applies custom whole-sum allocations exactly', () => {
-    const bill: Bill = { id: 'custom', title: 'Cake', servicePercent: 0, participants: people.slice(0, 3), createdAt: '', ownerToken: '', items: [{ id: 'cake', name: 'Cake', quantity: 1, unitPrice: 120_000, unitSelections: { '0': ['0','1','2'] }, unitModes: { '0': 'custom' }, unitCustomAmounts: { '0': { '0': 60_000, '1': 30_000, '2': 30_000 } } }] }
+    const bill: Bill = { id: 'custom', dbId: 'db', title: 'Cake', servicePercent: 0, participants: people.slice(0, 3), createdAt: '', ownerToken: '', items: [{ id: 'cake', name: 'Cake', quantity: 1, unitPrice: 120_000, unitSelections: { '0': ['0','1','2'] }, unitModes: { '0': 'custom' }, unitCustomAmounts: { '0': { '0': 60_000, '1': 30_000, '2': 30_000 } } }] }
     assert.deepEqual(itemShares(bill.items[0], bill.participants), { '0': 60_000, '1': 30_000, '2': 30_000 })
     assert.equal(assignedSubtotal(bill), 120_000)
   })
   it('tracks unassigned units without charging a participant for them', () => {
-    const bill: Bill = { id: 'y', title: 'Lunch', servicePercent: 0, participants: people.slice(0, 2), createdAt: '', ownerToken: '', items: [{ id: 'a', name: 'Pizza', quantity: 2, unitPrice: 100, unitSelections: { '0': ['0'] } }] }
+    const bill: Bill = { id: 'y', dbId: 'db', title: 'Lunch', servicePercent: 0, participants: people.slice(0, 2), createdAt: '', ownerToken: '', items: [{ id: 'a', name: 'Pizza', quantity: 2, unitPrice: 100, unitSelections: { '0': ['0'] } }] }
     assert.equal(assignedSubtotal(bill), 100)
     assert.equal(calculateTotals(bill).reduce((n, p) => n + p.due, 0), 100)
+  })
+  it('shows a tap at once and leaves the amounts of that serving to the server', () => {
+    const item: BillItem = { id: 'tea', name: 'Tea', quantity: 2, unitPrice: 10_000, unitSelections: { '0': ['0'], '1': ['1'] }, unitAmounts: { '0': { '0': 10_000 }, '1': { '1': 10_000 } } }
+    const tapped = withSelection(item, 0, '1', true)
+    assert.deepEqual(tapped.unitSelections, { '0': ['0', '1'], '1': ['1'] })
+    assert.deepEqual(tapped.unitAmounts, { '1': { '1': 10_000 } })
+    assert.deepEqual(itemShares(tapped, people.slice(0, 2)), { '0': 5_000, '1': 15_000 })
+    assert.deepEqual(withSelection(tapped, 0, '0', false).unitSelections['0'], ['1'])
   })
   it('uses the amounts recorded by the server instead of re-splitting', () => {
     // The server gave the remainder to the second participant; the client must not move it.
@@ -48,7 +56,7 @@ describe('bill calculations', () => {
   it('handles many participants and items without losing a sum', () => {
     const crowd = Array.from({ length: 40 }, (_, i) => ({ id: `p${i}`, name: `P${i}`, paid: 0, status: 'unpaid' as const }))
     const items: BillItem[] = Array.from({ length: 60 }, (_, i) => ({ id: `i${i}`, name: 'Dish', quantity: 3, unitPrice: 10_007 + i, unitSelections: { '0': crowd.slice(0, i % 40 + 1).map(p => p.id), '1': [crowd[i % 40].id], '2': crowd.map(p => p.id) } }))
-    const bill: Bill = { id: 'big', title: 'Banquet', servicePercent: 12, participants: crowd, items, createdAt: '', ownerToken: '' }
+    const bill: Bill = { id: 'big', dbId: 'db', title: 'Banquet', servicePercent: 12, participants: crowd, items, createdAt: '', ownerToken: '' }
     const food = items.reduce((n, item) => n + item.unitPrice * item.quantity, 0)
     assert.equal(calculateTotals(bill).reduce((n, p) => n + p.due, 0), food + Math.round(food * 0.12))
   })

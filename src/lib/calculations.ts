@@ -13,7 +13,7 @@ export type BillItem = {
 }
 export type CommentMessage = { id: string; itemId?: string; participantId: string; body: string; createdAt: string }
 export type Bill = {
-  id: string; dbId?: string; title: string; servicePercent: number; participants: Participant[]; items: BillItem[]; createdAt: string; ownerToken: string; comments?: CommentMessage[]
+  id: string; dbId: string; title: string; servicePercent: number; participants: Participant[]; items: BillItem[]; createdAt: string; ownerToken: string; comments?: CommentMessage[]
   /** Card or phone number the creator wants transfers to; shown to every member. */
   paymentDetails?: string
   /** The creator's participant id; older saved checks lack it, and the creator is always listed first. */
@@ -77,6 +77,15 @@ export function calculateTotals(bill: Pick<Bill, 'participants' | 'items' | 'ser
     const paid = Math.min(due, Math.max(0, p.paid))
     return { id: p.id, name: p.name, subtotal: subtotals[i], service: services[i], due, paid, remaining: due - paid, status: p.status }
   })
+}
+
+/** A tap shown before the server answers: the person joins or leaves the serving's equal split. */
+export function withSelection(item: BillItem, unit: number, personId: string, enabled: boolean): BillItem {
+  const key = String(unit), current = item.unitSelections[key] ?? []
+  const unitAmounts = { ...item.unitAmounts }
+  delete unitAmounts[key]
+  const next = enabled ? (current.includes(personId) ? current : [...current, personId]) : current.filter(id => id !== personId)
+  return { ...item, unitAmounts, unitSelections: { ...item.unitSelections, [key]: next } }
 }
 
 export function isUnitAssigned(item: BillItem, unit: number): boolean {

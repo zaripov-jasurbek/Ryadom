@@ -95,7 +95,7 @@ type Snapshot = {
   comments: { id: string; item_id: string | null; participant_id: string; body: string; created_at: string }[]
 }
 
-export type RemoteBill = Bill & { dbId: string; me: string; isOwner: boolean }
+export type RemoteBill = Bill & { me: string; isOwner: boolean }
 
 export async function loadRemoteCheck(publicId: string): Promise<RemoteBill> {
   const row = await call('get_check', { p_public_id: publicId }) as Snapshot

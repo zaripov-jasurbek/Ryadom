@@ -109,7 +109,7 @@
   <div class="panel export-card" class:all-paid={app.allConfirmed}>
     <div class="export-text">
       {#if app.allConfirmed}<span class="done-mark" aria-hidden="true">✓</span>{/if}
-      <div><b>{app.allConfirmed ? 'Все оплаты подтверждены' : 'Поделиться итогом'}</b><small class="muted">{app.allConfirmed ? 'Можно сохранить итог встречи.' : 'Отправьте сводку в чат друзьям.'}{bill.dbId ? ` Чек удалится ${expiryDate.format(expiresAt(bill.createdAt))} — нужен итог надолго, сохраните картинку или PDF.` : ''}</small></div>
+      <div><b>{app.allConfirmed ? 'Все оплаты подтверждены' : 'Поделиться итогом'}</b><small class="muted">{app.allConfirmed ? 'Можно сохранить итог встречи.' : 'Отправьте сводку в чат друзьям.'} Чек удалится {expiryDate.format(expiresAt(bill.createdAt))} — нужен итог надолго, сохраните картинку или PDF.</small></div>
     </div>
     <div class="chip-row">
       <button class="chip" onclick={() => app.copy(text(), 'Итог скопирован')}>Копировать</button>

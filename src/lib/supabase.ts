@@ -4,7 +4,7 @@ import type { Database } from './database.types'
 const url = import.meta.env.VITE_SUPABASE_URL as string | undefined
 const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
 
-export const isSupabaseConfigured = Boolean(url && anonKey)
+const isSupabaseConfigured = Boolean(url && anonKey)
 
 // supabase-js is most of the bundle, so it loads on first use instead of with the home page.
 let clientPromise: Promise<SupabaseClient<Database>> | null = null
