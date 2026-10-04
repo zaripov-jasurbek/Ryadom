@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { CommentMessage } from '../lib/calculations'
-  import { commentDate, initial } from '../lib/format'
+  import { commentTime, initial } from '../lib/format'
   import { limits } from '../lib/limits'
   import { app } from '../lib/store.svelte'
 
@@ -27,7 +27,7 @@
       <article class:own={comment.participantId === app.selectedPerson}>
         <span class="person-avatar tone-{app.personIndex(comment.participantId) % 5}">{initial(name)}</span>
         <div class="comment-body">
-          <div class="comment-meta"><b>{name}</b><time datetime={comment.createdAt}>{commentDate.format(new Date(comment.createdAt))}</time></div>
+          <div class="comment-meta"><b>{name}</b><time datetime={comment.createdAt}>{commentTime(comment.createdAt)}</time></div>
           <p>{comment.body}</p>
         </div>
         {#if app.selectedPerson && comment.participantId === app.selectedPerson}<button class="icon-button small danger" aria-label="Удалить комментарий" title="Удалить комментарий" onclick={() => remove(comment)}>×</button>{/if}
@@ -37,7 +37,7 @@
     {/each}
   </div>
   <form class="comment-form" onsubmit={(e) => { e.preventDefault(); void send() }}>
-    <textarea bind:value={text} maxlength="1000" rows="1" aria-label="Комментарий" placeholder={full ? `В чеке уже ${limits.comments} комментариев` : app.selectedPerson ? 'Напишите сообщение… (Enter — отправить)' : 'Выберите себя, чтобы писать'} disabled={!canWrite} onkeydown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); void send() } }}></textarea>
+    <textarea bind:value={text} maxlength="1000" rows="1" aria-label="Комментарий" placeholder={full ? `В чеке уже ${limits.comments} комментариев` : app.selectedPerson ? 'Написать сообщение…' : 'Выберите себя, чтобы писать'} disabled={!canWrite} onkeydown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); void send() } }}></textarea>
     <button class="accent-button" disabled={!text.trim() || !canWrite} aria-label="Отправить">↑</button>
   </form>
 </section>

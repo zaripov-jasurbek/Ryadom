@@ -10,6 +10,19 @@
   const paidPercent = $derived(app.billTotal ? Math.min(100, app.paidAll / app.billTotal * 100) : 0)
   const ownerName = $derived(app.ownerId ? app.personName(app.ownerId) : '')
   const text = () => summaryText(bill.title, app.billTotal, app.totals, app.ownerId)
+  // What this person came to the summary for: their own amount and how to pay it, before everyone else's.
+  const mine = $derived(app.isOwner ? undefined : app.currentTotal)
+  const myNote = $derived.by(() => {
+    if (!mine) return ''
+    if (!mine.due) return 'Вы пока ничего не отметили — выберите свои блюда во вкладке «Позиции».'
+    if (mine.status === 'paid') return 'Создатель чека подтвердил оплату. Вы рассчитались.'
+    if (mine.status === 'proof_submitted') return `Вы отметили всю сумму — ждём подтверждения${ownerName ? ` от ${ownerName}` : ''}.`
+    if (mine.paid > 0) return `Отдали ${formatUzs(mine.paid)} · осталось ${formatUzs(mine.remaining)}.`
+    return `Переведите${ownerName ? ` ${ownerName}` : ' создателю'} или отдайте наличными, затем отметьте оплату.`
+  })
+  const others = $derived(app.totals.filter(person => person.id !== app.ownerId))
+  const owed = $derived(others.reduce((sum, person) => sum + person.remaining, 0))
+  const toConfirm = $derived(others.filter(person => person.status === 'proof_submitted').length)
 
   async function unconfirm(person: ParticipantTotal) {
     if (await app.confirm({ title: `Отменить подтверждение у ${person.name}?`, body: 'Оплата снова будет ждать вашей проверки.', action: 'Отменить подтверждение' })) void app.unconfirm(person.id)
@@ -17,6 +30,29 @@
 </script>
 
 <div class="summary-section" role="tabpanel" id="panel-summary" aria-labelledby="tab-summary">
+  {#if mine}
+    <div class="panel my-pay-card" class:settled={mine.status === 'paid'}>
+      <div class="my-pay-head">
+        <div><span class="eyebrow">Ваша часть</span><b class="my-pay-amount">{formatUzs(mine.due)}</b></div>
+        {#if mine.due}<span class="status-badge status-{mine.status}">{statusLabels[mine.status]}</span>{/if}
+      </div>
+      <p class="my-pay-note">{myNote}</p>
+      {#if bill.paymentDetails && mine.remaining > 0}<PaymentDetails details={bill.paymentDetails} owner={ownerName} />{/if}
+      {#if mine.due && mine.status !== 'paid'}
+        <button class="primary-button" onclick={() => app.paymentFor = mine.id}>{mine.status === 'unpaid' ? 'Отметить оплату' : 'Изменить сумму'} <span aria-hidden="true">↗</span></button>
+      {/if}
+    </div>
+  {:else if app.isOwner}
+    <div class="panel my-pay-card" class:settled={app.allConfirmed}>
+      <div class="my-pay-head">
+        <div><span class="eyebrow">{owed ? 'Вам должны' : 'Оплаты'}</span><b class="my-pay-amount">{owed ? formatUzs(owed) : app.allConfirmed ? '✓ Все рассчитались' : 'Пока никто не должен'}</b></div>
+        {#if toConfirm}<span class="status-badge status-proof_submitted">{plural(toConfirm, 'ждёт', 'ждут', 'ждут')} проверки</span>{/if}
+      </div>
+      <div class="progress-track" role="progressbar" aria-label="Уже оплачено" aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(paidPercent)}><i style={`width:${paidPercent}%`}></i></div>
+      <p class="my-pay-note">Оплачено {formatUzs(app.paidAll)} из {formatUzs(app.billTotal)}{toConfirm ? ' · подтвердите оплаты в списке ниже' : ''}</p>
+    </div>
+  {/if}
+
   <div class="panel summary-card">
     <div class="summary-title"><div><span class="eyebrow">Кто сколько должен</span><h2>Итоги</h2></div><div class="summary-grand"><small>Общий счёт</small><b>{formatUzs(app.billTotal)}</b></div></div>
     {#each app.totals as person (person.id)}
@@ -35,7 +71,7 @@
           {#if !payer && person.paid > 0 && person.remaining > 0}<small>осталось {formatUzs(person.remaining)}</small>{/if}
         </div>
         {#if lines.length}
-          <details class="person-items" open={app.selectedPerson === person.id}>
+          <details class="person-items" open={!app.isOwner && app.selectedPerson === person.id}>
             <summary>Из чего сумма · {plural(lines.length, 'позиция', 'позиции', 'позиций')}</summary>
             <ul>
               {#each lines as line (line.id)}<li><span>{line.name}{line.units > 1 ? ` × ${line.units}` : ''}{line.shared ? ' · доля' : ''}</span><b>{formatUzs(line.amount)}</b></li>{/each}
@@ -56,19 +92,17 @@
     {/each}
   </div>
 
-  {#if bill.paymentDetails}
-    <div class="panel pay-card"><PaymentDetails details={bill.paymentDetails} owner={app.isOwner ? '' : ownerName} /></div>
+  {#if app.isOwner && bill.paymentDetails}
+    <div class="panel pay-card"><PaymentDetails details={bill.paymentDetails} /></div>
   {:else if app.isOwner}
     <button class="notice info" onclick={() => app.checkEditOpen = true}><span aria-hidden="true">💳</span><div><b>Куда гостям переводить?</b><small>Добавьте номер карты или телефона — гости скопируют его в одно касание.</small></div><span class="notice-action">Добавить →</span></button>
   {/if}
 
-  <div class="panel progress-card">
-    <div class="section-row small"><span class="eyebrow">Уже оплачено</span><b>{formatUzs(app.paidAll)} <small class="muted">из {formatUzs(app.billTotal)}</small></b></div>
-    <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(paidPercent)}><i style={`width:${paidPercent}%`}></i></div>
-  </div>
-
-  {#if app.currentParticipant && app.currentParticipant.id !== app.ownerId && app.currentParticipant.status !== 'paid'}
-    <button class="primary-button wide" onclick={() => app.paymentFor = app.currentParticipant!.id}>{app.currentParticipant.status === 'unpaid' ? 'Отметить оплату' : 'Изменить оплату'} <span aria-hidden="true">↗</span></button>
+  {#if !app.isOwner}
+    <div class="panel progress-card">
+      <div class="progress-head"><span class="eyebrow">Весь стол оплатил</span><b>{formatUzs(app.paidAll)} <small class="muted">из {formatUzs(app.billTotal)}</small></b></div>
+      <div class="progress-track" role="progressbar" aria-label="Весь стол оплатил" aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(paidPercent)}><i style={`width:${paidPercent}%`}></i></div>
+    </div>
   {/if}
 
   <div class="panel export-card" class:all-paid={app.allConfirmed}>

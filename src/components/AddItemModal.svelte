@@ -29,13 +29,20 @@
     return list
   })
 
+  // A new item keeps the sheet open for the next one: a receipt typed by hand is several items in a row.
+  let added = $state<string[]>([])
+  let nameInput: HTMLInputElement | undefined = $state()
+
   function close() { if (editing) app.editingItem = null; else app.addItemOpen = false }
 
   async function submit() {
     if (!valid || app.busy) return
     if (!changed) { close(); return }
-    const saved = editing ? await app.updateItem(editing, name.trim(), qty, unitPrice) : await app.addItem(name.trim(), qty, unitPrice)
-    if (saved) close()
+    if (editing) { if (await app.updateItem(editing, name.trim(), qty, unitPrice)) close(); return }
+    if (!await app.addItem(name.trim(), qty, unitPrice)) return
+    added = [...added, name.trim()]
+    name = ''; quantity = 1; price = null
+    nameInput?.focus()
   }
 </script>
 
@@ -43,7 +50,7 @@
   <div class="eyebrow">{editing ? 'Изменить позицию' : 'Новая позиция'}</div>
   <h2 id="add-item-title">{editing ? 'Исправим позицию' : 'Что было на столе?'}</h2>
   <!-- svelte-ignore a11y_autofocus -->
-  <label class="field">Название<input bind:value={name} placeholder="Например, Пицца пепперони" maxlength={limits.itemNameLength} autofocus /></label>
+  <label class="field">Название<input bind:this={nameInput} bind:value={name} placeholder="Например, Пицца пепперони" maxlength={limits.itemNameLength} autofocus /></label>
   <div class="modal-fields">
     <label class="field">Количество
       <span class="stepper">
@@ -56,5 +63,9 @@
   </div>
   <div class="modal-total">Сумма позиции <b>{formatUzs(Math.max(0, qty * unitPrice))}</b></div>
   {#each warnings as warning (warning)}<p class="modal-warning">{warning}</p>{/each}
-  <button class="primary-button wide" disabled={app.busy || !valid}>{#if editing}Сохранить <span aria-hidden="true">✓</span>{:else}Добавить позицию <span aria-hidden="true">＋</span>{/if}</button>
+  {#if added.length}
+    <p class="added-note" role="status">✓ Добавлено: {added.slice(-3).join(', ')}{added.length > 3 ? ` и ещё ${added.length - 3}` : ''}</p>
+  {/if}
+  <button class="primary-button wide" disabled={app.busy || !valid}>{#if editing}Сохранить <span aria-hidden="true">✓</span>{:else}{added.length ? 'Добавить ещё' : 'Добавить позицию'} <span aria-hidden="true">＋</span>{/if}</button>
+  {#if added.length}<button type="button" class="soft-button wide" onclick={close}>Готово</button>{/if}
 </Modal>

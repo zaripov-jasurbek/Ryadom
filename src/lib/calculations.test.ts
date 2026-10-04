@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { assignedSubtotal, calculateTotals, itemShares, serviceFee, splitInteger, type Bill, type BillItem } from './calculations.ts'
+import { assignedSubtotal, calculateTotals, formatUzs, itemShares, serviceFee, splitInteger, type Bill, type BillItem } from './calculations.ts'
 const people = ['Jasur', 'Aziz', 'Bekzod', 'Sardor'].map((name, i) => ({ id: `${i}`, name, paid: 0, status: 'unpaid' as const }))
 describe('bill calculations', () => {
   it('splits indivisible sums deterministically and conserves the full item price', () => assert.deepEqual(splitInteger(20_000, [1, 1, 1]), [6_667, 6_667, 6_666]))
@@ -8,6 +8,10 @@ describe('bill calculations', () => {
     // 4034.6 and 15283.6 tie at .6; floats used to give the extra sum to the third person instead of the second.
     assert.deepEqual(splitInteger(30_300, [109_834, 40_334, 152_832]), [10_984, 4_033, 15_283])
     assert.deepEqual(splitInteger(109, [142, 126, 338, 246, 238]), [14, 13, 34, 24, 24])
+  })
+  it('formats amounts the way receipts in Uzbekistan read', () => {
+    assert.equal(formatUzs(60_134), '60 134 сум')
+    assert.equal(formatUzs(0), '0 сум')
   })
   it('rounds the service fee half up from the exact amount', () => {
     assert.equal(serviceFee(10_050, 10), 1_005)

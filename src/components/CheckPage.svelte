@@ -14,6 +14,15 @@
   const expires = $derived(expiresAt(bill.createdAt))
   // The last day gets the warning color.
   const expiresSoon = $derived(expires.getTime() - Date.now() < 86_400_000)
+  // After a partial payment the bar says what is left; once confirmed, that the person is done.
+  const sticky = $derived.by(() => {
+    const me = app.currentTotal
+    if (!me) return null
+    if (me.id === app.ownerId || !me.due) return { label: 'Ваша часть', value: formatUzs(me.due) }
+    if (me.status === 'paid') return { label: 'Оплата', value: '✓ Рассчитались' }
+    if (me.paid > 0 && me.remaining > 0) return { label: 'Осталось отдать', value: formatUzs(me.remaining) }
+    return { label: 'Ваша часть', value: formatUzs(me.due) }
+  })
   // Payments the creator still has to look at, shown on the summary tab.
   const toConfirm = $derived(app.isOwner ? app.totals.filter(person => person.id !== app.ownerId && person.status === 'proof_submitted').length : 0)
   // The creator alone at the table has one thing to do next: invite people. Later a small button is enough.
@@ -47,7 +56,7 @@
       <h1>{bill.title}</h1>
       {#if app.isOwner}<button class="icon-button" aria-label="Изменить название и обслуживание" title="Изменить чек" onclick={() => app.checkEditOpen = true}>✎</button>{/if}
     </div>
-    <p class="muted">{formatUzs(app.billTotal)}{bill.servicePercent ? ` · обслуживание ${bill.servicePercent}%` : ''} · создан {createdDate.format(new Date(bill.createdAt))}</p>
+    <p class="muted">{[app.billTotal ? formatUzs(app.billTotal) : '', bill.servicePercent ? `обслуживание ${bill.servicePercent}%` : '', `создан ${createdDate.format(new Date(bill.createdAt))}`].filter(Boolean).join(' · ')}</p>
     <div class="check-meta">
       {#if bill.dbId}
         <span class="expiry-pill" class:soon={expiresSoon} title={`Общие чеки хранятся ${plural(checkLifetimeDays, 'день', 'дня', 'дней')}. Итог можно сохранить картинкой или PDF в «Итогах и оплате».`}>⏳ Удалится {expiryDate.format(expires)}</span>
@@ -156,7 +165,7 @@
 
   {#if bill.items.length && app.currentParticipant}
     <div class="sticky-total">
-      <div><small>Ваш итог</small><b>{formatUzs(app.currentTotal?.due ?? 0)}</b></div>
+      <div><small>{sticky?.label}</small><b>{sticky?.value}</b></div>
       <button class="accent-button" onclick={switchTab}>{app.activeTab === 'order' ? 'Итоги и оплата →' : '← К позициям'}</button>
     </div>
   {/if}

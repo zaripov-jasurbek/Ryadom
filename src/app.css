@@ -374,6 +374,16 @@ button.notice:active { transform: translateY(1px); }
 .pay-text b.card-number { white-space: nowrap; }
 .progress-card { padding: 18px 22px; display: grid; gap: 12px; }
 .progress-card b { font-size: 16px; }
+.progress-head { display: flex; align-items: baseline; justify-content: space-between; gap: 6px 12px; flex-wrap: wrap; }
+.progress-head .eyebrow { white-space: nowrap; }
+.added-note { margin-top: 10px; padding: 10px 14px; border-radius: var(--radius-sm); background: var(--ok-bg); color: var(--ok); font-size: 13px; font-weight: 600; }
+.my-pay-card { padding: 20px; display: grid; gap: 14px; }
+.my-pay-card.settled { background: var(--ok-bg); }
+.my-pay-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.my-pay-head > div { display: grid; gap: 4px; }
+.my-pay-amount { font: 500 30px/1.15 var(--serif); letter-spacing: -.02em; }
+.my-pay-note { font-size: 14px; color: var(--ink-soft); }
+.my-pay-card .pay-details { padding: 12px 14px; border-radius: var(--radius-sm); box-shadow: var(--inset-sm); }
 .progress-track { height: 12px; border-radius: 999px; box-shadow: var(--inset-sm); overflow: hidden; padding: 2px; }
 .progress-track i { display: block; height: 100%; border-radius: 999px; background: var(--accent); transition: width .4s; }
 .export-card { padding: 18px 20px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px; }
@@ -500,8 +510,7 @@ button.notice:active { transform: translateY(1px); }
   .summary-card, .comments-card { padding: 18px 16px; }
   .summary-person { padding: 12px 6px; }
   .person-items { padding-left: 0; }
-  .export-card .chip-row { width: 100%; }
-  .export-card .chip { flex: 1; }
+  .export-card .chip-row { width: 100%; display: grid; grid-template-columns: 1fr 1fr; }
   .modal-backdrop { place-items: end center; padding: 0; }
   .modal-card { width: 100%; max-height: 92vh; border-radius: 24px 24px 0 0; padding: 26px 20px calc(24px + env(safe-area-inset-bottom)); animation: sheet .25s ease-out; }
   .sticky-total {
@@ -531,7 +540,7 @@ button.notice:active { transform: translateY(1px); }
 /* ─── Print: always light, no controls ─────────────────────── */
 @media print {
   :root, :root[data-theme="dark"] { color-scheme: light; --bg: #fff; --ink: #111; --ink-soft: #333; --muted: #666; --line: #ddd; --sd: transparent; --sl: transparent; }
-  .topbar, .check-meta, .share-banner, .people-strip, .segmented, .notice, .title-row .icon-button, .pay-details button, .share-all, .primary-button, .back-link, .comments-card, .danger-zone, .sticky-total, .check-footer, .export-card, .summary-actions, .theme-switch { display: none !important; }
+  .topbar, .check-meta, .share-banner, .people-strip, .segmented, .notice, .title-row .icon-button, .pay-details button, .share-all, .primary-button, .back-link, .comments-card, .danger-zone, .sticky-total, .check-footer, .export-card, .summary-actions, .theme-switch, .my-pay-card { display: none !important; }
   .app-shell, .check-page { max-width: none; padding: 0; }
   .panel, .summary-person { box-shadow: none !important; break-inside: avoid; }
 }

@@ -92,8 +92,10 @@ export function assignedSubtotal(bill: Pick<Bill, 'items'>): number {
   return sum
 }
 
-const uzs = new Intl.NumberFormat('uz-UZ')
-export function formatUzs(amount: number): string { return `${uzs.format(amount)} UZS` }
+// ru-RU groups thousands with a non-breaking space everywhere; uz-UZ gives "60,134" in some browsers and "60 134" in others.
+const uzs = new Intl.NumberFormat('ru-RU')
+/** "60 134 сум"; the non-breaking spaces keep an amount on one line. */
+export function formatUzs(amount: number): string { return `${uzs.format(amount)} сум` }
 
 export type PersonItem = { id: string; name: string; amount: number; units: number; shared: boolean }
 

@@ -13,7 +13,13 @@ export const initial = (name: string) => name.slice(0, 1).toUpperCase()
 
 export const createdDate = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long' })
 export const expiryDate = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })
-export const commentDate = new Intl.DateTimeFormat('ru-RU', { dateStyle: 'short', timeStyle: 'short' })
+const timeOnly = new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' })
+const dayAndTime = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+/** "22:21" for today, "4 окт., 22:21" for earlier days: a check lives a few days at most. */
+export function commentTime(iso: string, now = new Date()) {
+  const date = new Date(iso)
+  return date.toDateString() === now.toDateString() ? timeOnly.format(date) : dayAndTime.format(date)
+}
 
 /** A 16-digit card number reads in groups of four; anything else is shown as typed. */
 export function formatPaymentDetails(details: string) {
