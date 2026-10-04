@@ -477,7 +477,6 @@ body:has(.comment-form textarea:focus) .tab-bar { display: none; }
 /* ─── Share QR ─────────────────────────────────────────────── */
 .qr-frame { justify-self: center; width: min(100%, 260px); margin: 8px 0 4px; padding: 12px; border-radius: 20px; background: #fff; box-shadow: var(--raise); }
 .qr-frame svg { display: block; width: 100%; height: auto; }
-.qr-link { text-align: center; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
 .qr-actions { display: flex; gap: 10px; margin-top: 14px; }
 .qr-actions > * { flex: 1; margin: 0; }
 

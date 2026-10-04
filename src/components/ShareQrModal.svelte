@@ -18,7 +18,6 @@
   <h2 id="share-qr-title">Наведите камеру</h2>
   <p class="lead">Друзья сканируют код камерой телефона и сразу попадают в чек.</p>
   <div class="qr-frame" role="img" aria-label="QR-код со ссылкой на чек">{@html svg}</div>
-  <div class="qr-link">{link.replace(/^https?:\/\//, '')}</div>
   <div class="qr-actions">
     {#if prefersShareSheet()}<button type="button" class="soft-button" onclick={() => app.invite()}>Отправить</button>{/if}
     <button class="primary-button">Скопировать ссылку</button>
