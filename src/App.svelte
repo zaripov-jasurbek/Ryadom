@@ -13,6 +13,8 @@
   import ScanReceiptModal from './components/ScanReceiptModal.svelte'
   import ShareQrModal from './components/ShareQrModal.svelte'
   import ConfirmSheet from './components/ConfirmSheet.svelte'
+  import PeopleModal from './components/PeopleModal.svelte'
+  import PayDetailsModal from './components/PayDetailsModal.svelte'
 
   onMount(() => { restoreTheme(); return app.init() })
   // Each screen starts at the top instead of inheriting the previous screen's scroll position.
@@ -46,6 +48,8 @@
   {#if app.checkEditOpen && app.bill}<EditCheckModal />{/if}
   {#if app.scanOpen && app.bill}<ScanReceiptModal />{/if}
   {#if app.qrOpen && app.bill}<ShareQrModal />{/if}
+  {#if app.peopleOpen && app.bill}<PeopleModal />{/if}
+  {#if app.payDetailsOpen && app.bill}<PayDetailsModal />{/if}
   {#if app.paymentFor && app.bill}<PaymentModal personId={app.paymentFor} />{/if}
   {#if app.confirmRequest}{#key app.confirmRequest}<ConfirmSheet />{/key}{/if}
   {#if app.toast}<div class="toast" role="status" aria-live="polite">{app.toast}</div>{/if}

@@ -34,6 +34,9 @@
   --inset-sm: inset 2px 2px 5px var(--sd), inset -2px -2px 5px var(--sl);
   --inset: inset 4px 4px 9px var(--sd), inset -4px -4px 9px var(--sl);
   --focus: 0 0 0 3px color-mix(in srgb, var(--brand) 45%, transparent);
+  /* "Это моё": a hint of the brand colour over the page and a thin ring, so it reads in both themes without muddying the card. */
+  --mine-tint: color-mix(in srgb, var(--brand) 6%, var(--bg));
+  --mine-ring: color-mix(in srgb, var(--brand) 55%, var(--bg));
   --radius: 18px;
   --radius-sm: 12px;
   --serif: Georgia, 'Times New Roman', serif;
@@ -129,8 +132,8 @@ p { margin: 0; }
 .brand { display: flex; align-items: center; gap: 10px; font: 700 25px var(--serif); letter-spacing: -.04em; color: var(--ink); text-decoration: none; }
 .brand-mark { width: 34px; height: 34px; border-radius: 11px; display: grid; place-items: center; background: var(--accent); color: var(--accent-ink); font-size: 22px; box-shadow: var(--raise-sm); }
 .top-actions { display: flex; align-items: center; gap: 12px; }
-.online-count i, .online-now i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
-.online-count i, .online-now i { background: #7fbf55; box-shadow: 0 0 0 3px color-mix(in srgb, #7fbf55 25%, transparent); }
+.online-count i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+.online-count i { background: #7fbf55; box-shadow: 0 0 0 3px color-mix(in srgb, #7fbf55 25%, transparent); }
 .theme-toggle { color: var(--brand); font-size: 17px; }
 
 /* ─── Home ─────────────────────────────────────────────────── */
@@ -232,6 +235,15 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 .check-bar { position: sticky; top: 0; z-index: 6; display: flex; align-items: center; gap: 12px; margin: 0 -8px; padding: calc(10px + env(safe-area-inset-top)) 8px 10px; background: var(--bg); }
 .check-bar-title { flex: 1; min-width: 0; display: grid; }
 .check-bar h1 { font-size: 21px; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.check-bar-meta { display: flex; align-items: center; gap: 10px; min-width: 0; margin-top: 3px; }
+/* Who is at the table: a green ring for whoever has the check open now, a grey one for the rest. Tapping opens the list. */
+.face-stack { flex: none; display: flex; align-items: center; padding: 3px 4px; border: 0; border-radius: 999px; background: transparent; }
+.face-stack:active { box-shadow: var(--inset-sm); }
+.face-stack .person-avatar { margin-right: -5px; }
+.face-stack .person-avatar:last-child { margin-right: 0; }
+.face-more { margin-left: 9px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.face-stack .person-avatar, .people-list .person-avatar { box-shadow: 0 0 0 2px var(--bg), 0 0 0 3.5px var(--line); }
+.face-stack .person-avatar.online, .people-list .person-avatar.online { box-shadow: 0 0 0 2px var(--bg), 0 0 0 3.5px #7fbf55; }
 .check-bar small { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .check-bar small.soon { color: var(--warn-ink); font-weight: 600; }
 .check-bar .icon-button { font-size: 18px; }
@@ -293,7 +305,7 @@ button.notice:active { transform: translateY(1px); }
 .item-card.single .item-menu { grid-area: menu; align-self: center; }
 .item-card.single .item-menu .icon-button { width: 32px; height: 38px; border-radius: 10px; }
 .item-action { grid-area: action; align-self: center; }
-.item-card.unit-mine { background: color-mix(in srgb, var(--accent) 22%, var(--bg)); }
+.item-card.unit-mine { background: var(--mine-tint); box-shadow: var(--raise), inset 0 0 0 2px var(--mine-ring); }
 .item-menu { position: relative; }
 .menu-popover { position: absolute; z-index: 4; right: 0; top: calc(100% + 8px); min-width: 210px; display: grid; gap: 2px; padding: 6px; border-radius: 14px; background: var(--bg); box-shadow: var(--raise-lg); animation: fade .12s ease-out; }
 .menu-popover button { display: flex; align-items: center; gap: 10px; min-height: 42px; padding: 0 12px; border: 0; border-radius: 10px; background: transparent; font-size: 14px; font-weight: 550; color: var(--ink-soft); text-align: left; white-space: nowrap; }
@@ -301,7 +313,7 @@ button.notice:active { transform: translateY(1px); }
 .menu-popover button.danger { color: var(--danger); }
 .unit-list { display: grid; gap: 10px; }
 .unit-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 12px; border-radius: 14px; box-shadow: var(--inset-sm); transition: background-color .2s; }
-.unit-row.unit-mine { background: color-mix(in srgb, var(--accent) 22%, var(--bg)); }
+.unit-row.unit-mine { background: var(--mine-tint); box-shadow: var(--inset-sm), inset 0 0 0 1.5px var(--mine-ring); }
 .unit-label { font-size: 12px; font-weight: 700; color: var(--muted); min-width: 26px; }
 .unit-consumers { flex: 1; min-width: 150px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .consumer-pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px 3px 3px; border-radius: 999px; font-size: 13px; background: var(--bg); box-shadow: var(--raise-sm); }
@@ -309,7 +321,7 @@ button.notice:active { transform: translateY(1px); }
 .unit-note { font-size: 12px; color: var(--muted); }
 .unit-actions { display: flex; align-items: center; gap: 6px; margin-left: auto; }
 .mine-toggle { min-height: 38px; min-width: 96px; padding: 0 14px; border: 0; border-radius: 11px; background: var(--bg); box-shadow: var(--raise-sm); font-size: 14px; font-weight: 650; color: var(--ink-soft); transition: box-shadow .18s, background-color .18s, color .18s; }
-.mine-toggle.active { background: var(--accent); color: var(--accent-ink); box-shadow: var(--inset-sm); }
+.mine-toggle.active { background: var(--accent); color: var(--accent-ink); box-shadow: none; }
 .mine-toggle:active { transform: translateY(1px); }
 /* No vibration on iPhone, so a tap answers with motion: the button springs, the count bumps. */
 .mine-toggle.pop { animation: pop .28s ease-out; }
@@ -325,7 +337,7 @@ button.notice:active { transform: translateY(1px); }
 .danger-button.confirm-danger { background: var(--danger-bg); }
 .portion-summary { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 12px; border-radius: 14px; box-shadow: var(--inset-sm); transition: background-color .2s; }
 .portion-summary .unit-consumers { min-width: 0; }
-.portion-summary.unit-mine { background: color-mix(in srgb, var(--accent) 22%, var(--bg)); }
+.portion-summary.unit-mine { background: var(--mine-tint); box-shadow: var(--inset-sm), inset 0 0 0 1.5px var(--mine-ring); }
 .portion-stepper { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; padding: 4px; border-radius: 13px; background: var(--bg); box-shadow: var(--raise-sm); }
 .portion-stepper button { width: 38px; height: 38px; border: 0; border-radius: 10px; background: transparent; font-size: 20px; font-weight: 600; color: var(--ink-soft); }
 .portion-stepper button:not(:disabled):active { box-shadow: var(--inset-sm); }
@@ -344,8 +356,16 @@ button.notice:active { transform: translateY(1px); }
 .editor-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 
 /* ─── Summary ──────────────────────────────────────────────── */
-.summary-card { padding: 22px; }
-.summary-title { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; padding-bottom: 14px; }
+.summary-card { padding: 22px; display: grid; gap: 10px; }
+.summary-card.settled { background: var(--ok-bg); }
+.summary-paid { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+.person-progress { width: 100%; padding-left: 44px; display: grid; gap: 4px; }
+.person-progress small { font-size: 12px; color: var(--muted); }
+.progress-track.slim { height: 9px; padding: 2px; }
+.progress-track.done i { background: var(--ok); }
+.owner-pay { display: grid; gap: 4px; padding: 14px 16px; }
+.owner-pay > .ghost-button { justify-self: center; }
+.summary-title { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
 .summary-title h2 { font-size: 26px; margin-top: 4px; }
 .summary-grand { text-align: right; display: grid; }
 .summary-grand small { font-size: 12px; color: var(--muted); }
@@ -380,10 +400,6 @@ button.notice:active { transform: translateY(1px); }
 .pay-text small { font-size: 12px; color: var(--muted); }
 .pay-text b { font-size: 17px; letter-spacing: .02em; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
 .pay-text b.card-number { white-space: nowrap; }
-.progress-card { padding: 18px 22px; display: grid; gap: 12px; }
-.progress-card b { font-size: 16px; }
-.progress-head { display: flex; align-items: baseline; justify-content: space-between; gap: 6px 12px; flex-wrap: wrap; }
-.progress-head .eyebrow { white-space: nowrap; }
 .added-note { margin-top: 10px; padding: 10px 14px; border-radius: var(--radius-sm); background: var(--ok-bg); color: var(--ok); font-size: 13px; font-weight: 600; }
 .my-pay-card { padding: 20px; display: grid; gap: 14px; }
 .my-pay-card.settled { background: var(--ok-bg); }
@@ -421,6 +437,7 @@ button.notice:active { transform: translateY(1px); }
 
 
 /* ─── Bottom menu ──────────────────────────────────────────── */
+.tab-list { display: contents; }
 .tab-bar { position: fixed; z-index: 7; left: 50%; bottom: calc(10px + env(safe-area-inset-bottom)); transform: translateX(-50%); width: min(calc(100% - 24px), 520px); display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 6px; border-radius: 22px; background: var(--bg); box-shadow: var(--raise-lg); }
 .tab-bar button { min-width: 0; min-height: 54px; display: grid; justify-items: center; align-content: center; gap: 3px; padding: 4px 2px; border: 0; border-radius: 16px; background: transparent; color: var(--muted); font-size: 11px; font-weight: 600; transition: color .18s, box-shadow .18s; }
 .tab-bar button.active { color: var(--brand); box-shadow: var(--inset-sm); }
@@ -433,25 +450,13 @@ button.notice:active { transform: translateY(1px); }
 /* The keyboard is up while typing in the chat; the menu would float in the middle of the screen. */
 body:has(.comment-form textarea:focus) .tab-bar { display: none; }
 
-.table-section { display: grid; gap: 18px; }
-.people-card { padding: 18px 20px; display: grid; gap: 10px; }
-.people-list { list-style: none; margin: 0; padding: 0; display: grid; }
+.people-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; }
 .people-list li { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
 .people-list li:first-child { border-top: 0; }
 .people-text { flex: 1; min-width: 0; display: grid; gap: 1px; }
 .people-text b { font-size: 15px; font-weight: 600; }
 .people-text small { font-size: 12px; color: var(--muted); }
 .people-text small:empty { display: none; }
-.online-now { display: inline-flex; align-items: center; gap: 6px; }
-.online-now i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; }
-.settings-row { width: 100%; display: flex; align-items: center; gap: 14px; padding: 16px 18px; border: 0; text-align: left; color: var(--ink); }
-.settings-row:active { box-shadow: var(--inset-sm); }
-.settings-row .notice-action { color: var(--muted); font-size: 18px; }
-.about-card { padding: 16px 20px; display: grid; gap: 10px; }
-.about-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 14px; }
-.about-row > span { color: var(--muted); }
-.about-row .chip-row { gap: 8px; }
-.about-row .chip { min-width: 44px; padding: 0 12px; font-size: 15px; }
 
 /* ─── Modal & toast ────────────────────────────────────────── */
 .modal-backdrop { position: fixed; inset: 0; z-index: 10; display: grid; place-items: center; padding: 16px; background: color-mix(in srgb, var(--bg) 55%, #0000004d); backdrop-filter: blur(6px); animation: fade .18s ease-out; }
@@ -550,7 +555,7 @@ body:has(.comment-form textarea:focus) .tab-bar { display: none; }
   .editor-row .suffix-input { width: 150px; }
   .summary-card { padding: 18px 16px; }
   .summary-person { padding: 12px 6px; }
-  .person-items { padding-left: 0; }
+  .person-items, .person-progress { padding-left: 0; }
   .export-card .chip-row { width: 100%; display: grid; grid-template-columns: 1fr 1fr; }
   .modal-backdrop { place-items: end center; padding: 0; }
   .modal-card { width: 100%; max-height: 92vh; max-height: 92dvh; border-radius: 24px 24px 0 0; padding: 26px 20px calc(24px + env(safe-area-inset-bottom)); animation: sheet .25s ease-out; }

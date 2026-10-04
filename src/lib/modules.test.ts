@@ -117,8 +117,14 @@ describe('export', () => {
   })
   it('says the creator paid the bill instead of what they still owe', () => {
     const bill = withItems(item('tea', 'Чай', 2, 10_000, { '0': ['0'], '1': ['1'] }))
-    const lines = summaryText('Ужин', 20_000, calculateTotals(bill), '0').split('\n')
+    const lines = summaryText(bill, 20_000, calculateTotals(bill), '0').split('\n')
     assert.match(lines[3], /^Jasur: .* · платил по счёту$/)
-    assert.match(lines[4], /^Aziz: .* · осталось /)
+    assert.match(lines.find(line => line.startsWith('Aziz:'))!, /^Aziz: .* · осталось /)
+  })
+  it('lists what each amount is made of under the name', () => {
+    const bill = { ...withItems(item('tea', 'Чай', 2, 10_000, { '0': ['0'], '1': ['0', '1'] })), servicePercent: 10 }
+    const text = summaryText(bill, 22_000, calculateTotals(bill), '0')
+    assert.match(text, /Jasur: [^\n]*\n {2}• Чай × 2 \(доля\) — 15\s000\sсум\n {2}• Обслуживание 10% — /)
+    assert.match(text, /Aziz: [^\n]*\n {2}• Чай \(доля\) — 5\s000\sсум/)
   })
 })

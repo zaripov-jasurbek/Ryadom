@@ -16,8 +16,8 @@ const nameKey = 'billsplit:name'
 /** When this browser last looked at a check's chat, for the unread badge on the tab. */
 const seenKey = (billId: string) => `billsplit:seen:${billId}`
 
-/** The check page's bottom menu: items, payment, chat, the people at the table. */
-export type CheckTab = 'order' | 'pay' | 'chat' | 'table'
+/** The check page's bottom menu: items, payment, chat; its fourth button invites people. */
+export type CheckTab = 'order' | 'pay' | 'chat'
 
 function parseBills(raw: string | null): Bill[] | null {
   if (raw === null) return null
@@ -59,6 +59,10 @@ class AppStore {
   editingUnit = $state('')
   editingItem = $state<BillItem | null>(null)
   checkEditOpen = $state(false)
+  /** The sheet with everyone at the table, opened from the avatars under the check's name. */
+  peopleOpen = $state(false)
+  /** The creator's sheet for the card or phone guests transfer to. */
+  payDetailsOpen = $state(false)
   /** The open confirmation sheet; it replaces window.confirm, which looks foreign on phones. */
   confirmRequest = $state<ConfirmRequest | null>(null)
   itemFilter = $state<'all' | 'mine' | 'open'>('all')
@@ -141,7 +145,7 @@ class AppStore {
     request?.resolve(answer)
   }
 
-  closeOverlays() { this.answerConfirm(false); this.addItemOpen = false; this.scanOpen = false; this.qrOpen = false; this.paymentFor = null; this.editingUnit = ''; this.editingItem = null; this.checkEditOpen = false }
+  closeOverlays() { this.answerConfirm(false); this.addItemOpen = false; this.scanOpen = false; this.qrOpen = false; this.paymentFor = null; this.editingUnit = ''; this.editingItem = null; this.checkEditOpen = false; this.peopleOpen = false; this.payDetailsOpen = false }
 
   private rememberName(name: string) { this.savedName = name; writeStorage(nameKey, name) }
 
