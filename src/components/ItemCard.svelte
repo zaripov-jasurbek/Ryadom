@@ -54,7 +54,7 @@
   }
   async function shareWithEveryone() {
     const marked = units.some(unit => isUnitAssigned(item, unit))
-    if (marked && !await app.confirm({ title: `Разделить «${item.name}» на всех?`, body: `Каждая порция поделится поровну между ${everyone.length} участниками. Текущие отметки на позиции заменятся.`, action: 'Разделить' })) return
+    if (marked && !await app.confirm({ title: `Разделить «${item.name}» на всех?`, body: `Поровну на ${everyone.length}. Текущие отметки сбросятся.`, action: 'Разделить' })) return
     void app.shareItemEqually(item)
   }
   function toggleEditor(key: string) {
@@ -126,11 +126,11 @@
         <div class="portion-stepper" role="group" aria-label={`Ваши порции: ${item.name}`}>
           <button type="button" aria-label="Убрать одну порцию" disabled={giveBack === undefined} onclick={() => tap('stepper', giveBack!)}>−</button>
           <span aria-live="polite">{#key myUnits.length}<b class:bump={tapped === 'stepper'}>{myUnits.length}</b>{/key} из {item.quantity}</span>
-          <button type="button" aria-label="Взять ещё порцию" title={nextFree === undefined ? 'Свободных порций нет — поделить порцию можно в списке по порциям' : ''} disabled={nextFree === undefined} onclick={() => tap('stepper', nextFree!)}>+</button>
+          <button type="button" aria-label="Взять ещё порцию" title={nextFree === undefined ? 'Свободных порций нет' : ''} disabled={nextFree === undefined} onclick={() => tap('stepper', nextFree!)}>+</button>
         </div>
       {/if}
     </div>
-    <button type="button" class="ghost-button units-toggle" aria-expanded={showUnits} onclick={toggleUnits}>{showUnits ? 'Свернуть порции ▴' : 'Делили порцию? По порциям ▾'}</button>
+    <button type="button" class="ghost-button units-toggle" aria-expanded={showUnits} onclick={toggleUnits}>{showUnits ? 'Свернуть порции ▴' : 'По порциям ▾'}</button>
   {/if}
   {#if showUnits}
   <div class="unit-list">
@@ -149,6 +149,6 @@
   </div>
   {/if}
   {#if app.isOwner && canShareAll && !units.some(unit => isUnitAssigned(item, unit))}
-    <button class="ghost-button share-all" disabled={app.busy} title="Хлеб, чай, кальян — всё, что брали на всех" onclick={shareWithEveryone}>÷ Поровну на всех · {everyone.length}</button>
+    <button class="ghost-button share-all" disabled={app.busy} onclick={shareWithEveryone}>÷ Поровну на всех · {everyone.length}</button>
   {/if}
 </article>

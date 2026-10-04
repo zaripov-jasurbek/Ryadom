@@ -29,7 +29,7 @@
     <section class="panel form-card join-gone">
       <div class="empty-illustration" aria-hidden="true">🧾</div>
       <h1>Чек не найден</h1>
-      <p class="lead">Его удалили, или прошло больше трёх дней. Попросите у друзей свежую ссылку.</p>
+      <p class="lead">Его удалили или он устарел. Попросите новую ссылку.</p>
       <button class="primary-button wide" onclick={() => app.goHome()}>На главную</button>
     </section>
   {:else}
@@ -45,12 +45,12 @@
           </div>
         </div>
       {/if}
-      <p class="lead">{owner ? 'Вы открываете чек, который создали. Введите своё имя, чтобы продолжить.' : 'Введите имя, под которым вас увидят друзья.'}</p>
+      {#if owner}<p class="lead">Введите имя, чтобы продолжить.</p>{/if}
       <label class="field">{owner ? 'Ваше имя в чеке' : 'Ваше имя'}<input bind:value={name} placeholder="Например, Aziz" maxlength={limits.nameLength} autocomplete="given-name" required /></label>
-      {#if taken}<p class="field-note">«{taken}» уже за столом. Если это не вы, добавьте букву фамилии, чтобы друзья вас не перепутали.</p>{/if}
+      {#if taken}<p class="field-note">«{taken}» уже за столом. Если это не вы, добавьте букву фамилии.</p>{/if}
       {#if error}<div class="form-error" role="alert">{error}</div>{/if}
       <button class="primary-button wide" disabled={app.busy || !name.trim()}>{app.busy ? 'Подключаемся…' : owner ? 'Открыть чек' : 'Присоединиться'} <span aria-hidden="true">↗</span></button>
-      <div class="privacy-note">🔒 Вход без пароля и регистрации.</div>
+      <div class="privacy-note">🔒 Без регистрации</div>
     </form>
   {/if}
 </main>

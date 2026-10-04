@@ -10,7 +10,7 @@
 <Modal labelledby="install-title" {onclose} onsubmit={onclose}>
   <div class="eyebrow">Приложение</div>
   <h2 id="install-title">{installHint === 'mac' ? 'Добавьте «Рядом» в Dock' : 'Добавьте «Рядом» на экран «Домой»'}</h2>
-  <p class="lead">Чек будет открываться одним касанием, как обычное приложение. Скачивать ничего не нужно.</p>
+  <p class="lead">Чеки будут открываться одним касанием.</p>
   <ol class="install-steps">
     {#if installHint === 'mac'}
       <li>В строке меню Safari откройте <b>Файл</b>.</li>

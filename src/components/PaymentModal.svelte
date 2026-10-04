@@ -21,7 +21,7 @@
 <Modal labelledby="payment-title" onclose={() => app.paymentFor = null} onsubmit={() => void submit()}>
   <div class="eyebrow">Ваш платёж</div>
   <h2 id="payment-title">Сколько вы уже отдали{owner ? ` ${owner}` : ' создателю'}?</h2>
-  <p class="lead">Ваша часть счёта <b>{formatUzs(due)}</b>. {amount && left ? `Останется отдать ${formatUzs(left)}.` : amount ? 'Это вся сумма — создатель чека подтвердит.' : ''}</p>
+  <p class="lead">Ваша часть счёта <b>{formatUzs(due)}</b>. {amount && left ? `Останется отдать ${formatUzs(left)}.` : amount ? 'Это вся сумма.' : ''}</p>
   <!-- svelte-ignore a11y_autofocus -->
   <label class="field">Уже отдали
     <span class="suffix-input"><input type="number" bind:value={paid} min="0" max={due} step="1" inputmode="numeric" placeholder="0" autofocus /><span>сум</span></span>

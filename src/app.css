@@ -357,6 +357,7 @@ button.notice:active { transform: translateY(1px); }
 .summary-paid { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); margin-bottom: 4px; }
 .person-progress { width: 100%; padding-left: 44px; display: grid; gap: 4px; }
 .person-progress small { font-size: 12px; color: var(--muted); }
+.person-progress small:empty { display: none; }
 .progress-track.slim { height: 9px; padding: 2px; }
 .progress-track.done i { background: var(--ok); }
 .owner-pay { display: grid; gap: 4px; padding: 14px 16px; }

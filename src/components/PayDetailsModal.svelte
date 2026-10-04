@@ -18,9 +18,8 @@
 <Modal labelledby="pay-details-title" onclose={() => app.payDetailsOpen = false} onsubmit={() => void submit()}>
   <div class="eyebrow">Оплата</div>
   <h2 id="pay-details-title">Куда гостям переводить?</h2>
-  <p class="lead">Гости увидят номер у себя в «Оплате» и скопируют его в одно касание.</p>
   <!-- svelte-ignore a11y_autofocus -->
   <label class="field">Карта или телефон<input bind:value={details} placeholder="8600 1234 5678 9012" maxlength={limits.paymentDetailsLength} autocomplete="off" inputmode="text" autofocus /></label>
-  <p class="field-note">Срок действия карты и коды из SMS не нужны никогда.</p>
+  <p class="field-note">Только номер: срок действия и коды из SMS не нужны.</p>
   <button class="primary-button wide" disabled={app.busy}>Сохранить <span aria-hidden="true">✓</span></button>
 </Modal>

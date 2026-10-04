@@ -75,7 +75,7 @@
   </header>
 
   {#if app.unassignedTotal > 0 && app.activeTab !== 'chat'}
-    <button class="notice warning unassigned-notice" onclick={showUnassigned}><span aria-hidden="true">◌</span><div>{#if app.isOwner}<b>{formatUzs(app.unassignedTotal)} ещё не распределено</b><small>Отметьте, кто ел оставшиеся позиции, чтобы итог сошёлся с чеком.</small>{:else}<b>{formatUzs(app.unassignedTotal)} ещё никто не отметил</b><small>Посмотрите, нет ли там вашего.</small>{/if}</div>{#if app.activeTab !== 'order' || app.itemFilter !== 'open'}<span class="notice-action">Показать →</span>{/if}</button>
+    <button class="notice warning unassigned-notice" onclick={showUnassigned}><span aria-hidden="true">◌</span><div>{#if app.isOwner}<b>{formatUzs(app.unassignedTotal)} ещё не распределено</b><small>Отметьте, кто это ел</small>{:else}<b>{formatUzs(app.unassignedTotal)} ещё никто не отметил</b><small>Проверьте, нет ли вашего</small>{/if}</div>{#if app.activeTab !== 'order' || app.itemFilter !== 'open'}<span class="notice-action">Показать →</span>{/if}</button>
   {/if}
 
   {#if app.activeTab === 'order'}
@@ -84,7 +84,7 @@
         <section class="panel empty-items">
           <div class="empty-illustration" aria-hidden="true">🍽️</div>
           <h2>Стол пока пустой</h2>
-          <p>{app.isOwner ? 'Добавьте позиции из чека — друзья сами отметят, что заказывали.' : 'Создатель чека ещё не добавил позиции.'}</p>
+          <p>{app.isOwner ? 'Отсканируйте чек или добавьте позиции вручную.' : 'Позиции скоро появятся.'}</p>
           {#if app.isOwner}
             <div class="empty-actions">
               <button class="primary-button" onclick={() => app.scanOpen = true}>📷 Сканировать чек</button>
@@ -94,7 +94,7 @@
         </section>
       {:else}
         <div class="section-row">
-          <div><h2>Что вы заказали?</h2><p class="muted">Нажмите «Это моё» у своих блюд</p></div>
+          <h2>Что вы заказали?</h2>
           {#if app.isOwner}
             <div class="item-tools">
               <button class="soft-button" aria-label="Сканировать чек" title="Сканировать чек" onclick={() => app.scanOpen = true}>📷<span class="tool-label"> Скан</span></button>

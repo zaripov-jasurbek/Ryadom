@@ -23,7 +23,7 @@
 
   async function forget(saved: Bill) {
     const body = saved.ownerToken
-      ? 'У участников чек останется, но управлять им с этого устройства вы больше не сможете.'
+      ? 'У остальных чек останется, но управлять им отсюда будет нельзя.'
       : 'Вернуться к нему можно по ссылке.'
     if (await app.confirm({ title: `Убрать «${saved.title}» из списка?`, body, action: 'Убрать' })) app.forgetBill(saved.id)
   }

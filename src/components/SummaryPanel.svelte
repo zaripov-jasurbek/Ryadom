@@ -17,11 +17,11 @@
   const mine = $derived(app.isOwner ? undefined : app.currentTotal)
   const myNote = $derived.by(() => {
     if (!mine) return ''
-    if (!mine.due) return 'Вы пока ничего не отметили — выберите свои блюда во вкладке «Позиции».'
-    if (mine.status === 'paid') return 'Создатель чека подтвердил оплату. Вы рассчитались.'
-    if (mine.status === 'proof_submitted') return `Вы отметили всю сумму — ждём подтверждения${ownerName ? ` от ${ownerName}` : ''}.`
+    if (!mine.due) return 'Отметьте свои блюда в «Позициях».'
+    if (mine.status === 'paid') return 'Оплата подтверждена.'
+    if (mine.status === 'proof_submitted') return `Ждём подтверждения${ownerName ? ` от ${ownerName}` : ''}.`
     if (mine.paid > 0) return `Отдали ${formatUzs(mine.paid)} · осталось ${formatUzs(mine.remaining)}.`
-    return `Переведите${ownerName ? ` ${ownerName}` : ' создателю'} или отдайте наличными, затем нажмите «Оплата сделана».`
+    return `Переведите${ownerName ? ` ${ownerName}` : ' создателю'} или отдайте наличными.`
   })
   const others = $derived(app.totals.filter(person => person.id !== app.ownerId))
   const owed = $derived(others.reduce((sum, person) => sum + person.remaining, 0))
@@ -32,7 +32,7 @@
   let printing = $state(false)
 
   async function unconfirm(person: ParticipantTotal) {
-    if (await app.confirm({ title: `Отменить подтверждение у ${person.name}?`, body: 'Оплата снова будет ждать вашей проверки.', action: 'Отменить подтверждение' })) void app.unconfirm(person.id)
+    if (await app.confirm({ title: `Отменить подтверждение у ${person.name}?`, body: 'Оплата вернётся на проверку.', action: 'Отменить подтверждение' })) void app.unconfirm(person.id)
   }
 </script>
 
@@ -87,7 +87,7 @@
         {#if person.due > 0}
           <div class="person-progress">
             <div class="progress-track slim" class:done={payer || person.status === 'paid'} role="progressbar" aria-label={`${person.name}: оплачено`} aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(done)}><i style={`width:${done}%`}></i></div>
-            <small>{payer ? 'оплатил ресторану' : person.remaining ? `оплачено ${formatUzs(person.paid)} · осталось ${formatUzs(person.remaining)}` : `оплачено ${formatUzs(person.paid)}`}</small>
+            <small>{payer ? '' : person.remaining ? `оплачено ${formatUzs(person.paid)} · осталось ${formatUzs(person.remaining)}` : `оплачено ${formatUzs(person.paid)}`}</small>
           </div>
         {/if}
         {#if lines.length}
@@ -115,13 +115,13 @@
   {#if app.isOwner && bill.paymentDetails}
     <div class="panel pay-card owner-pay"><PaymentDetails details={bill.paymentDetails} /><button class="ghost-button" onclick={() => app.payDetailsOpen = true}>Изменить</button></div>
   {:else if app.isOwner}
-    <button class="notice info" onclick={() => app.payDetailsOpen = true}><span aria-hidden="true">💳</span><div><b>Куда гостям переводить?</b><small>Добавьте номер карты или телефона — гости скопируют его в одно касание.</small></div><span class="notice-action">Добавить →</span></button>
+    <button class="notice info" onclick={() => app.payDetailsOpen = true}><span aria-hidden="true">💳</span><div><b>Куда гостям переводить?</b><small>Номер карты или телефона для гостей</small></div><span class="notice-action">Добавить →</span></button>
   {/if}
 
   <div class="panel export-card" class:all-paid={app.allConfirmed}>
     <div class="export-text">
       {#if app.allConfirmed}<span class="done-mark" aria-hidden="true">✓</span>{/if}
-      <div><b>{app.allConfirmed ? 'Все оплаты подтверждены' : 'Сохранить или отправить итог'}</b><small class="muted">Весь чек: кто сколько должен и из чего сложилась каждая сумма. Чек удалится {expiryDate.format(expiresAt(bill.createdAt))} — нужен надолго, сохраните картинку или PDF.</small></div>
+      <div><b>{app.allConfirmed ? 'Все оплаты подтверждены' : 'Итог'}</b><small class="muted">Чек удалится {expiryDate.format(expiresAt(bill.createdAt))}</small></div>
     </div>
     <div class="chip-row">
       <button class="chip" onclick={() => app.copy(text(), 'Итог скопирован')}>Копировать</button>

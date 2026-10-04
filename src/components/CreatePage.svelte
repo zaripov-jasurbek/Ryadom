@@ -22,18 +22,17 @@
 <main class="form-page">
   <button class="back-link" onclick={() => app.goHome()}>← Назад</button>
   <form class="panel form-card" onsubmit={(e) => { e.preventDefault(); submit() }}>
-    <div class="eyebrow">Новый чек</div>
-    <h1>Кто платит по счёту?</h1>
-    <p class="lead">Друзья вернут деньги вам. Позиции добавите на следующем шаге: сфотографируйте чек или введите вручную.</p>
+    <h1>Новый чек</h1>
+    <p class="lead">Позиции добавите на следующем шаге.</p>
     <label class="field">Ваше имя<input bind:value={ownerName} placeholder="Как к вам обращаться?" maxlength={limits.nameLength} autocomplete="given-name" required /></label>
     <label class="field"><span>Название <span class="label-hint">по желанию</span></span><input bind:value={title} placeholder={fallbackTitle} maxlength={limits.titleLength} /></label>
-    <label class="field"><span>Обслуживание <span class="label-hint">{feeValid ? 'посмотрите в счёте' : 'от 0 до 100%'}</span></span>
+    <label class="field"><span>Обслуживание <span class="label-hint">{feeValid ? 'если есть в счёте' : 'от 0 до 100%'}</span></span>
       <span class="suffix-input"><input type="number" bind:value={fee} min="0" max="100" step="0.01" inputmode="decimal" aria-invalid={!feeValid} /><span>%</span></span>
     </label>
     <div class="chip-row" role="group" aria-label="Быстрый выбор процента">
       {#each [0, 10, 12, 15] as preset (preset)}<button type="button" class="chip" class:active={fee === preset} onclick={() => fee = preset}>{preset ? `${preset}%` : 'Нет'}</button>{/each}
     </div>
     <button class="primary-button wide" disabled={app.busy || !ready}>{app.busy ? 'Создаём…' : 'Создать чек'} <span aria-hidden="true">↗</span></button>
-    <div class="privacy-note">🔒 Без регистрации. Чек доступен только по ссылке.</div>
+    <div class="privacy-note">🔒 Без регистрации</div>
   </form>
 </main>

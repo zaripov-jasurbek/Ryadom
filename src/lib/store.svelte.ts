@@ -441,7 +441,7 @@ class AppStore {
     const bill = this.bill
     if (!bill) return
     const url = this.publicLink()
-    void shareOr({ title: bill.title, text: 'Открой чек и отметь своё', url }, () => void this.copy(url, 'Ссылка скопирована — отправьте её в чат'))
+    void shareOr({ title: bill.title, text: 'Открой чек и отметь своё', url }, () => void this.copy(url, 'Ссылка скопирована'))
   }
 
   async copy(text: string, success: string) {

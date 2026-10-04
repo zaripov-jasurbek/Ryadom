@@ -53,7 +53,7 @@
     } catch (failure) {
       if (current.signal.aborted) return
       console.error(failure)
-      error = 'Не удалось распознать фото. Попробуйте снять чек ближе и при хорошем свете.'
+      error = 'Не получилось распознать. Снимите ближе и при хорошем свете.'
       step = 'pick'
     }
   }
@@ -91,13 +91,13 @@
   <h2 id="scan-title">{step === 'review' ? 'Проверьте позиции' : 'Сфотографируйте чек'}</h2>
 
   {#if step === 'pick'}
-    <p class="lead">Положите чек на ровную поверхность, чтобы в кадр попали все строки с ценами.</p>
+    <p class="lead">Снимите чек целиком, вместе с ценами.</p>
     {#if error}<div class="form-error" role="alert">{error}</div>{/if}
     <div class="scan-actions">
       <button type="button" class="primary-button wide" onclick={() => camera.click()}>📷 Сфотографировать</button>
       <button type="button" class="soft-button wide" onclick={() => gallery.click()}>Выбрать из галереи</button>
     </div>
-    <div class="privacy-note">🔒 Фото никуда не отправляется — чек читается прямо на телефоне. В первый раз подготовка займёт чуть дольше.</div>
+    <div class="privacy-note">🔒 Фото остаётся на телефоне</div>
   {:else if step === 'reading'}
     <div class="scan-reading" role="status" aria-live="polite">
       {#if preview}<img class="scan-preview" src={preview} alt="Фото чека" />{/if}
@@ -107,7 +107,7 @@
     <button type="button" class="soft-button wide" onclick={restart}>Отменить</button>
   {:else}
     {#if rows.length}
-      <p class="lead">Исправьте, если что-то распозналось неточно, и снимите галочку с лишнего.</p>
+      <p class="lead">Исправьте ошибки и снимите галочку с лишнего.</p>
     {:else}
       <div class="notice warning"><span aria-hidden="true">◌</span><div><b>Позиции не найдены</b><small>Переснимите чек ровнее или добавьте строки вручную.</small></div></div>
     {/if}

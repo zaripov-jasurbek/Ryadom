@@ -11,5 +11,5 @@
     <small>Куда переводить{owner ? ` · ${owner}` : ''}</small>
     <b class:card-number={isNumberLike(details)}>{formatPaymentDetails(details)}</b>
   </div>
-  <button type="button" class="soft-button" onclick={() => app.copy(paymentCopyValue(details), 'Скопировано — вставьте в приложение банка')}>Скопировать</button>
+  <button type="button" class="soft-button" onclick={() => app.copy(paymentCopyValue(details), 'Номер скопирован')}>Скопировать</button>
 </div>

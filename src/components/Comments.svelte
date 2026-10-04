@@ -25,7 +25,7 @@
 </script>
 
 <div class="panel comments-card" role="tabpanel" id="panel-chat" aria-labelledby="tab-chat">
-  <div class="section-row"><div><div class="eyebrow">Чат чека</div><h2>Обсуждение</h2></div><span class="muted">{comments.length || ''}</span></div>
+  <div class="section-row"><h2>Чат</h2><span class="muted">{comments.length || ''}</span></div>
   <div class="comment-list">
     {#each comments as comment (comment.id)}
       {@const name = app.personName(comment.participantId)}
@@ -38,7 +38,7 @@
         {#if app.selectedPerson && comment.participantId === app.selectedPerson}<button class="icon-button small danger" aria-label="Удалить комментарий" title="Удалить комментарий" onclick={() => remove(comment)}>×</button>{/if}
       </article>
     {:else}
-      <p class="no-comments">Вопрос по счёту? Напишите здесь — увидят все за столом.</p>
+      <p class="no-comments">Сообщений пока нет</p>
     {/each}
   </div>
   <form class="comment-form" onsubmit={(e) => { e.preventDefault(); void send() }}>
