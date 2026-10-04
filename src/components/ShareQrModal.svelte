@@ -10,7 +10,7 @@
   const canShare = typeof navigator.share === 'function'
 
   function copy() {
-    void app.copy(link, shared ? 'Ссылка скопирована — гости могут открыть чек' : 'Демо-ссылка скопирована · доступна только в этом браузере')
+    void app.copy(link, shared ? 'Ссылка скопирована — гости могут открыть чек' : 'Ссылка скопирована, но этот чек открывается только на этом устройстве')
   }
   async function share() {
     try { await navigator.share({ title: app.bill?.title, text: 'Открой чек и отметь, что ты заказывал', url: link }) }
@@ -19,9 +19,9 @@
 </script>
 
 <Modal labelledby="share-qr-title" onclose={() => app.qrOpen = false} onsubmit={copy}>
-  <div class="eyebrow">{shared ? 'Пригласить за стол' : 'Демо-режим'}</div>
+  <div class="eyebrow">{shared ? 'Пригласить за стол' : 'Только на этом устройстве'}</div>
   <h2 id="share-qr-title">Наведите камеру</h2>
-  <p class="lead">{shared ? 'Друзья сканируют код камерой телефона и сразу попадают в чек.' : 'Ссылка откроется только в этом браузере — подключите Supabase, чтобы делиться чеком.'}</p>
+  <p class="lead">{shared ? 'Друзья сканируют код камерой телефона и сразу попадают в чек.' : 'Этот чек сохранён только здесь, друзья по ссылке его не откроют. Итог можно отправить им из вкладки «Итоги».'}</p>
   <div class="qr-frame" role="img" aria-label="QR-код со ссылкой на чек">{@html svg}</div>
   <div class="qr-link">{link.replace(/^https?:\/\//, '')}</div>
   <div class="qr-actions">

@@ -167,8 +167,12 @@ describe('payment details', () => {
 describe('error messages', () => {
   it('translates server errors and falls back for unknown ones', () => {
     assert.equal(errorMessage({ message: 'Owner access required', code: 'P0001' }, 'x'), 'Это может сделать только создатель чека')
-    assert.equal(errorMessage(new TypeError('Failed to fetch'), 'x'), 'Нет соединения с сервером')
+    assert.equal(errorMessage(new TypeError('Failed to fetch'), 'x'), 'Нет интернета — проверьте подключение и попробуйте ещё раз')
     assert.equal(errorMessage(new Error('something odd'), 'Не удалось'), 'Не удалось')
+  })
+  it('never shows a guest the names of the services behind the app', () => {
+    for (const message of ['Supabase is not configured. Add VITE_SUPABASE_URL', 'Anonymous sign-ins are disabled'])
+      assert.doesNotMatch(errorMessage(new Error(message), 'x'), /supabase|анонимн/i)
   })
 })
 

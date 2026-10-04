@@ -135,7 +135,7 @@ class AppStore {
       if (!this.token) this.token = found.ownerToken
       this.show(found, Boolean(this.token && this.token === found.ownerToken))
     } else if (isSupabaseConfigured) { this.disconnect(); this.bill = null; this.joinPublicId = id; this.mode = 'join'; preloadSupabase() }
-    else { this.mode = 'home'; this.notify('Эта ссылка создана на другом устройстве. Подключите Supabase для общего доступа.') }
+    else { this.mode = 'home'; this.notify('Этот чек открывается только на том устройстве, где его создали') }
   }
 
   private show(bill: Bill, owner: boolean) {
@@ -196,7 +196,7 @@ class AppStore {
       if (this.bill?.id !== bill.id) return
       this.remote = subscribeToRemoteCheck(bill.id, userId, () => void this.refresh(), users => this.onlineUsers = users, this.presence('Просматривает чек'))
       void this.refresh()
-    } catch (error) { this.fail(error, 'Не удалось подключиться к общему чеку') }
+    } catch (error) { this.fail(error, 'Не удалось загрузить чек — проверьте интернет') }
   }
 
   private applyRemote(result: RemoteBill) {

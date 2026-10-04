@@ -32,7 +32,7 @@
   const showFilters = $derived(bill.items.length > 3 || app.itemFilter !== 'all')
 
   function copyLink() {
-    void app.copy(app.publicLink(), bill.dbId ? 'Ссылка скопирована — гости могут открыть чек' : 'Демо-ссылка скопирована · доступна только в этом браузере')
+    void app.copy(app.publicLink(), bill.dbId ? 'Ссылка скопирована — гости могут открыть чек' : 'Ссылка скопирована, но этот чек открывается только на этом устройстве')
   }
   async function removeParticipant(person: Participant) {
     if (await app.confirm({ title: `Убрать ${person.name} из чека?`, body: 'Отметки, оплата и комментарии участника будут удалены.', action: 'Убрать', danger: true })) void app.removeParticipant(person)
@@ -62,9 +62,9 @@
       {#if bill.dbId}
         <span class="expiry-pill" class:soon={expiresSoon} title={`Общие чеки хранятся ${plural(checkLifetimeDays, 'день', 'дня', 'дней')}. Итог можно сохранить картинкой или PDF в «Итогах и оплате».`}>⏳ Удалится {expiryDate.format(expires)}</span>
       {:else}
-        <span class="expiry-pill">Демо · только в этом браузере</span>
+        <span class="expiry-pill">Только на этом устройстве</span>
       {/if}
-      {#if !inviteFirst}<button class="soft-button invite-button" onclick={() => app.qrOpen = true}><span aria-hidden="true">▦</span> Пригласить</button>{/if}
+      {#if bill.dbId && !inviteFirst}<button class="soft-button invite-button" onclick={() => app.qrOpen = true}><span aria-hidden="true">▦</span> Пригласить</button>{/if}
     </div>
   </header>
 
@@ -119,7 +119,7 @@
     </div>
 
     {#if app.unassignedTotal > 0}
-      <button class="notice warning unassigned-notice" onclick={showUnassigned}><span aria-hidden="true">◌</span><div><b>{formatUzs(app.unassignedTotal)} ещё не распределено</b><small>{app.activeTab === 'order' ? 'Отметьте, кто ел оставшиеся позиции, чтобы итог сошёлся с чеком.' : 'Распределите все позиции, прежде чем закрывать чек.'}</small></div><span class="notice-action">Показать →</span></button>
+      <button class="notice warning unassigned-notice" onclick={showUnassigned}><span aria-hidden="true">◌</span><div><b>{formatUzs(app.unassignedTotal)} ещё не распределено</b><small>{app.activeTab === 'order' ? 'Отметьте, кто ел оставшиеся позиции, чтобы итог сошёлся с чеком.' : 'Отметьте, кто ел оставшиеся позиции, чтобы итог сошёлся с чеком.'}</small></div><span class="notice-action">Показать →</span></button>
     {/if}
 
     {#if app.activeTab === 'order'}

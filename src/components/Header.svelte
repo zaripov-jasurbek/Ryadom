@@ -9,7 +9,7 @@
 <header class="topbar">
   <a class="brand" href={homePath()} onclick={(e) => { e.preventDefault(); app.goHome() }}><span class="brand-mark">р</span>рядом</a>
   <div class="top-actions">
-    <span class="sync-pill" class:sync-live={live}><i></i>{live ? 'Онлайн' : 'На устройстве'}</span>
+    {#if live}<span class="sync-pill sync-live"><i></i>Онлайн</span>{/if}
     <div class="theme-switch" role="radiogroup" aria-label="Тема оформления">
       {#each themes as option (option.value)}
         <button role="radio" aria-checked={theme.current === option.value} aria-label={option.label} title={option.label} class:active={theme.current === option.value} onclick={() => setTheme(option.value)}>{option.icon}</button>

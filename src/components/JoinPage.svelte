@@ -16,8 +16,8 @@
   <button class="back-link" onclick={() => app.goHome()}>← На главную</button>
   <form class="panel form-card" onsubmit={(e) => { e.preventDefault(); void submit() }}>
     <div class="eyebrow">Приглашение в чек</div>
-    <h1>{owner ? 'Войти как создатель' : 'Кто за этим столом?'}</h1>
-    <p class="lead">{owner ? 'Подтвердим секретную ссылку владельца. Введите своё имя, чтобы восстановить участника.' : 'Введите имя, под которым вас увидят друзья.'}</p>
+    <h1>{owner ? 'Это ваш чек' : 'Кто за этим столом?'}</h1>
+    <p class="lead">{owner ? 'Вы открываете чек, который создали. Введите своё имя, чтобы продолжить.' : 'Введите имя, под которым вас увидят друзья.'}</p>
     <label class="field">{owner ? 'Ваше имя в чеке' : 'Ваше имя'}<input bind:value={name} placeholder="Например, Aziz" maxlength={limits.nameLength} autocomplete="given-name" required /></label>
     {#if error}<div class="form-error" role="alert">{error}</div>{/if}
     <button class="primary-button wide" disabled={app.busy || !name.trim()}>{app.busy ? 'Подключаемся…' : owner ? 'Открыть чек' : 'Присоединиться'} <span aria-hidden="true">↗</span></button>

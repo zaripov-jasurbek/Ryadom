@@ -90,7 +90,7 @@
       <button type="button" class="primary-button wide" onclick={() => camera.click()}>📷 Сфотографировать</button>
       <button type="button" class="soft-button wide" onclick={() => gallery.click()}>Выбрать из галереи</button>
     </div>
-    <div class="privacy-note">🔒 Распознаётся на телефоне, фото никуда не отправляется. Первый раз загрузятся модели (~10 МБ), дальше работает офлайн.</div>
+    <div class="privacy-note">🔒 Фото никуда не отправляется — чек читается прямо на телефоне. В первый раз подготовка займёт чуть дольше.</div>
   {:else if step === 'reading'}
     <div class="scan-reading" role="status" aria-live="polite">
       {#if preview}<img class="scan-preview" src={preview} alt="Фото чека" />{/if}

@@ -4,10 +4,10 @@
 export type OcrProgress = (status: string, progress: number) => void
 
 const stages: Record<string, string> = {
-  'loading tesseract core': 'Загружаем распознавание',
-  'initializing tesseract': 'Запускаем распознавание',
-  'loading language traineddata': 'Загружаем языковые модели',
-  'initializing api': 'Готовим модели',
+  'loading tesseract core': 'Готовим сканер',
+  'initializing tesseract': 'Готовим сканер',
+  'loading language traineddata': 'Готовим сканер — в первый раз чуть дольше',
+  'initializing api': 'Почти готово',
   'recognizing text': 'Читаем чек',
 }
 
@@ -45,7 +45,7 @@ export async function recognizeReceipt(file: Blob, onProgress: OcrProgress, sign
     workerPath: `${root}worker.min.js`,
     corePath: `${root}core`,
     langPath: `${root}lang`,
-    logger: message => onProgress(stages[message.status] ?? 'Распознаём', message.progress),
+    logger: message => onProgress(stages[message.status] ?? 'Читаем чек', message.progress),
   })
   const stop = () => void worker.terminate()
   signal.addEventListener('abort', stop)

@@ -2,11 +2,11 @@
 const messages: [RegExp, string][] = [
   [/Owner access required/, 'Это может сделать только создатель чека'],
   [/Check not found/, 'Чек не найден — возможно, его удалили'],
-  [/Invalid owner link/, 'Ссылка создателя недействительна'],
+  [/Invalid owner link/, 'Эта ссылка больше не работает'],
   [/Participant access required|Join the check first/, 'Сначала присоединитесь к чеку'],
   [/custom split/, 'Создатель распределил эту порцию вручную'],
   [/Shares must equal/, 'Доли должны в сумме дать цену порции'],
-  [/Invalid (participant )?allocations?/, 'Некорректное распределение долей'],
+  [/Invalid (participant )?allocations?/, 'Доли распределены неверно — проверьте суммы'],
   [/No submitted proof/, 'Участник ещё не отметил оплату'],
   [/Owner may only confirm/, 'Подтвердить можно только полную оплату'],
   [/Nothing to pay yet/, 'Участник ещё ничего не отметил'],
@@ -22,9 +22,9 @@ const messages: [RegExp, string][] = [
   [/Invalid check details/, 'Проверьте название, процент и реквизиты'],
   [/Invalid comment/, 'Комментарий пустой или слишком длинный'],
   [/Invalid title or participant name|Invalid participant session/, 'Проверьте название и имя'],
-  [/Anonymous sign-ins are disabled/i, 'Анонимный вход отключён в настройках Supabase'],
-  [/Failed to fetch|NetworkError|Load failed|fetch failed/i, 'Нет соединения с сервером'],
-  [/Supabase is not configured/, 'Supabase не настроен'],
+  [/Anonymous sign-ins are disabled/i, 'Сервис временно недоступен — попробуйте позже'],
+  [/Failed to fetch|NetworkError|Load failed|fetch failed/i, 'Нет интернета — проверьте подключение и попробуйте ещё раз'],
+  [/Supabase is not configured/, 'Сервис временно недоступен — попробуйте позже'],
 ]
 
 export function errorText(error: unknown): string {
