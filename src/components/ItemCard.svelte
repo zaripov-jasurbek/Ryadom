@@ -89,7 +89,7 @@
   {/if}
 {/snippet}
 
-<article class="panel item-card" class:single={!stepper} class:owner={app.isOwner} class:unit-mine={!stepper && isMine(0)}>
+<article class="panel item-card" class:single={!stepper} class:owner={app.isOwner} class:unit-mine={stepper ? myUnits.length > 0 : isMine(0)}>
   <div class="item-head">
     <div class="item-icon" aria-hidden="true">{itemIcon(item.name)}</div>
     <div class="item-title">
@@ -114,7 +114,7 @@
   </div>
   {#if !stepper && app.editingUnit === `${item.id}:0`}<CustomShareEditor {item} unit={0} />{/if}
   {#if stepper}
-    <div class="portion-summary" class:unit-mine={myUnits.length > 0}>
+    <div class="portion-summary">
       <div class="unit-consumers">
         {#each tally as { person, count } (person.id)}
           <span class="consumer-pill"><span class="person-avatar mini tone-{app.personIndex(person.id) % 5}">{initial(person.name)}</span>{person.name}{count > 1 ? ` ×${count}` : ''}</span>
