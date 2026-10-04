@@ -1,6 +1,7 @@
 <script lang="ts">
   import { formatUzs, hasUnassignedUnit, itemShares, type Participant } from '../lib/calculations'
-  import { createdDate, initial, plural } from '../lib/format'
+  import { createdDate, expiryDate, initial, plural } from '../lib/format'
+  import { checkLifetimeDays, expiresAt } from '../lib/limits'
   import { app } from '../lib/store.svelte'
   import ItemCard from './ItemCard.svelte'
   import SummaryPanel from './SummaryPanel.svelte'
@@ -10,6 +11,9 @@
   const mine = $derived(new Set(app.selectedPerson ? bill.items.filter(item => itemShares(item, bill.participants)[app.selectedPerson!] > 0).map(item => item.id) : []))
   const open = $derived(new Set(bill.items.filter(hasUnassignedUnit).map(item => item.id)))
   const shown = $derived(app.itemFilter === 'mine' ? bill.items.filter(item => mine.has(item.id)) : app.itemFilter === 'open' ? bill.items.filter(item => open.has(item.id)) : bill.items)
+  const expires = $derived(expiresAt(bill.createdAt))
+  // The last day gets the warning color.
+  const expiresSoon = $derived(expires.getTime() - Date.now() < 86_400_000)
   // Long receipts get filters; a filter picked from the warning stays visible on a short one too.
   const showFilters = $derived(bill.items.length > 3 || app.itemFilter !== 'all')
 
@@ -44,6 +48,13 @@
       <p class="muted">Создан {createdDate.format(new Date(bill.createdAt))} · {plural(bill.participants.length, 'участник', 'участника', 'участников')} · {formatUzs(app.billTotal)}{bill.servicePercent ? ` · обслуживание ${bill.servicePercent}%` : ''}</p>
     </div>
   </div>
+
+  {#if bill.dbId}
+    <div class="notice {expiresSoon ? 'warning' : 'info'}" role="note">
+      <span aria-hidden="true">⏳</span>
+      <div><b>Чек удалится {expiryDate.format(expires)}</b><small>Общие чеки хранятся {plural(checkLifetimeDays, 'день', 'дня', 'дней')}. Если итог нужен дольше, сохраните его картинкой или PDF в «Итогах и оплате».</small></div>
+    </div>
+  {/if}
 
   <div class="panel share-banner">
     <div class="share-symbol" aria-hidden="true">🔗</div>

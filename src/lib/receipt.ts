@@ -4,7 +4,7 @@ export type ScannedItem = { name: string; quantity: number; unitPrice: number }
 export type ScanResult = { items: ScannedItem[]; total: number | null }
 
 /** Same limits as the add-item form: whole sums, 1–99 pieces, names up to 48 characters. */
-export const scanLimits = { nameLength: 48, maxQuantity: 99, minPrice: 100 }
+export const scanLimits = { nameLength: 80, maxQuantity: 99, minPrice: 100 }
 
 // "25 000,00", "25.000", "25000", "1,5": thousands groups of exactly three digits, then optional decimals.
 const amount = String.raw`\d{1,3}(?:[  .,']\d{3})+(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?`

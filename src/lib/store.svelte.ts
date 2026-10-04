@@ -1,14 +1,22 @@
-import { assignedSubtotal, calculateTotals, ownerIdOf, type Bill, type BillItem, type CommentMessage, type Participant } from './calculations'
+import { assignedSubtotal, calculateTotals, ownerIdOf, serviceFee, type Bill, type BillItem, type CommentMessage, type Participant } from './calculations'
 import { errorMessage } from './errors'
 import * as local from './local'
 import { addRemoteComment, addRemoteItem, updateRemoteCheck, updateRemoteItem, shareRemoteItemEqually, claimRemoteCheckOwner, confirmRemotePayment, createRemoteCheck, deleteRemoteCheck, deleteRemoteComment, deleteRemoteItem, ensureAnonymousSession, isRemoteCheckGone, joinRemoteCheck, loadRemoteCheck, removeRemoteParticipant, resetRemoteCustomShares, setRemoteCustomShares, submitRemotePayment, subscribeToRemoteCheck, toggleRemoteUnit, unconfirmRemotePayment, type PresenceUser, type RemoteBill, type RemoteSubscription } from './remote'
-import { checkPath, homePath, ownerPath, readOwnerToken, routeCheckId } from './routes'
+import { checkPath, homePath, readOwnerToken, routeCheckId } from './routes'
 import { isSupabaseConfigured, preloadSupabase } from './supabase'
+import { expiresAt } from './limits'
 
 export type Mode = 'home' | 'create' | 'join' | 'check'
 const billsKey = 'billsplit:v1'
 const personKey = (billId: string) => `billsplit:person:${billId}`
+/** A guest's join token: this browser gets its participant back after losing its Supabase session. */
+const guestKey = (billId: string) => `billsplit:guest:${billId}`
 const nameKey = 'billsplit:name'
+
+function parseBills(raw: string | null): Bill[] | null {
+  if (raw === null) return null
+  try { return JSON.parse(raw) as Bill[] } catch { return null }
+}
 
 function readStorage(key: string) { try { return localStorage.getItem(key) } catch { return null } }
 function writeStorage(key: string, value: string | null) {
@@ -17,7 +25,7 @@ function writeStorage(key: string, value: string | null) {
 }
 
 export const totalFood = (bill: Bill) => bill.items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0)
-export const grandTotal = (bill: Bill) => Math.round(totalFood(bill) * (1 + bill.servicePercent / 100))
+export const grandTotal = (bill: Bill) => totalFood(bill) + serviceFee(totalFood(bill), bill.servicePercent)
 
 class AppStore {
   bills = $state<Bill[]>([])
@@ -59,6 +67,8 @@ class AppStore {
   private remote: RemoteSubscription | null = null
   private refreshSeq = 0
   private reclaimed = new Set<string>()
+  /** The anonymous account the open check was connected with; a different one means the session was lost. */
+  private sessionUser = ''
   private toastTimer: ReturnType<typeof setTimeout> | undefined
 
   personIndex = (id: string) => this.participantIndex.get(id) ?? 0
@@ -68,11 +78,16 @@ class AppStore {
   publicLink = () => this.bill ? `${location.origin}${checkPath(this.bill.id)}` : ''
 
   init() {
-    try { this.bills = JSON.parse(readStorage(billsKey) ?? '[]') as Bill[] } catch { this.bills = [] }
+    this.bills = parseBills(readStorage(billsKey)) ?? []
+    // The server deletes shared checks a few days after they were made; the list forgets them too.
+    for (const saved of this.bills.filter(entry => entry.dbId && expiresAt(entry.createdAt).getTime() <= Date.now())) this.forgetBill(saved.id)
     const onPop = () => this.restoreRoute()
+    // Another tab saved or removed a check.
+    const onStorage = (event: StorageEvent) => { if (event.key === billsKey) this.bills = parseBills(event.newValue) ?? [] }
     this.restoreRoute()
     window.addEventListener('popstate', onPop)
-    return () => { window.removeEventListener('popstate', onPop); this.disconnect() }
+    window.addEventListener('storage', onStorage)
+    return () => { window.removeEventListener('popstate', onPop); window.removeEventListener('storage', onStorage); this.disconnect() }
   }
 
   notify(message: string) {
@@ -96,9 +111,10 @@ class AppStore {
     const id = routeCheckId(location.pathname)
     this.closeOverlays()
     if (!id) { this.disconnect(); this.bill = null; this.mode = 'home'; return }
-    const { token, legacy } = readOwnerToken(location.search, location.hash)
+    const { token } = readOwnerToken(location.search, location.hash)
     this.token = token
-    if (legacy) history.replaceState(history.state, '', ownerPath(id, token))
+    // An owner link from an earlier version: keep the secret in memory, not in the address bar where it gets copied.
+    if (token) history.replaceState(history.state, '', checkPath(id))
     const found = this.bills.find(entry => entry.id === id)
     if (found) {
       if (!this.token) this.token = found.ownerToken
@@ -121,15 +137,19 @@ class AppStore {
     const found = this.bills.find(entry => entry.id === id)
     if (!found) return
     this.token = found.ownerToken
-    history.pushState({}, '', ownerPath(id, found.ownerToken))
+    history.pushState({}, '', checkPath(id))
     this.show(found, Boolean(found.ownerToken))
+  }
+
+  /** Changes the saved list as it is stored now, so checks saved by another tab are not overwritten. */
+  private updateBills(change: (bills: Bill[]) => Bill[]) {
+    this.bills = change(parseBills(readStorage(billsKey)) ?? this.bills)
+    writeStorage(billsKey, JSON.stringify(this.bills))
   }
 
   private save() {
     const bill = this.bill
-    if (!bill) return
-    this.bills = [bill, ...this.bills.filter(entry => entry.id !== bill.id)]
-    writeStorage(billsKey, JSON.stringify(this.bills))
+    if (bill) this.updateBills(bills => [bill, ...bills.filter(entry => entry.id !== bill.id)])
   }
 
   private forget(message: string) {
@@ -142,8 +162,8 @@ class AppStore {
 
   /** Removes a check from this device's list only; it stays available to everyone else by its link. */
   forgetBill(id: string) {
-    this.bills = this.bills.filter(entry => entry.id !== id)
-    writeStorage(billsKey, JSON.stringify(this.bills)); writeStorage(personKey(id), null)
+    this.updateBills(bills => bills.filter(entry => entry.id !== id))
+    writeStorage(personKey(id), null); writeStorage(guestKey(id), null)
   }
 
   // ---- realtime ----
@@ -156,7 +176,7 @@ class AppStore {
 
   private async connect(bill: Bill) {
     try {
-      const userId = await ensureAnonymousSession()
+      const userId = this.sessionUser = await ensureAnonymousSession()
       this.disconnect()
       if (this.bill?.id !== bill.id) return
       this.remote = subscribeToRemoteCheck(bill.id, userId, () => void this.refresh(), users => this.onlineUsers = users, this.presence('Просматривает чек'))
@@ -185,21 +205,27 @@ class AppStore {
     } catch (error) {
       if (stale()) return
       if (!isRemoteCheckGone(error)) { console.error('Remote refresh failed', error); return }
-      if (await this.reclaimOwnership(id)) return
+      if (await this.reclaim(id)) return
       if (!stale()) this.forget('Чек удалён или вас убрали из участников')
     }
   }
 
   /**
    * A lost Supabase session (expired or cleared) looks exactly like being removed from the check.
-   * Before forgetting the check — and its owner secret with it — the secret re-attaches this device.
+   * Before forgetting the check, the owner secret or the guest's saved join token re-attaches this browser.
+   * A guest still on the same account was really removed, so they are not brought back.
    * Tried once per check per visit, so a check that is really gone cannot loop.
    */
-  private async reclaimOwnership(id: string) {
-    const token = this.bills.find(entry => entry.id === id)?.ownerToken || this.token
-    if (!token || this.reclaimed.has(id)) return false
+  private async reclaim(id: string) {
+    const ownerToken = this.bills.find(entry => entry.id === id)?.ownerToken || this.token
+    const guestToken = readStorage(guestKey(id))
+    if (this.reclaimed.has(id) || (!ownerToken && !guestToken)) return false
+    if (!ownerToken && await ensureAnonymousSession().catch(() => '') === this.sessionUser) return false
     this.reclaimed.add(id)
-    try { await claimRemoteCheckOwner(id, token) } catch { return false }
+    try {
+      if (ownerToken) await claimRemoteCheckOwner(id, ownerToken)
+      else await joinRemoteCheck(id, this.savedName || 'Гость', guestToken!)
+    } catch { return false }
     // The realtime channel was refused for the unknown session, so subscribe again; connect() reloads the check.
     if (this.bill?.id === id) await this.connect(this.bill)
     return true
@@ -223,7 +249,7 @@ class AppStore {
     }
     this.bill = bill; this.isOwner = true; this.token = ownerToken; this.mode = 'check'; this.activeTab = 'order'
     this.selectedPerson = bill.participants[0].id; writeStorage(personKey(bill.id), this.selectedPerson)
-    history.pushState({}, '', ownerPath(bill.id, ownerToken))
+    history.pushState({}, '', checkPath(bill.id))
     this.save()
     if (bill.dbId) await this.connect(bill)
   }
@@ -234,11 +260,13 @@ class AppStore {
     this.busy = true
     this.rememberName(name)
     try {
+      let sessionToken: string = crypto.randomUUID()
       if (this.token) await claimRemoteCheckOwner(this.joinPublicId, this.token)
-      await joinRemoteCheck(this.joinPublicId, name, crypto.randomUUID())
+      else { sessionToken = readStorage(guestKey(this.joinPublicId)) ?? sessionToken; writeStorage(guestKey(this.joinPublicId), sessionToken) }
+      await joinRemoteCheck(this.joinPublicId, name, sessionToken)
       const loaded = await loadRemoteCheck(this.joinPublicId)
       this.applyRemote(loaded); this.mode = 'check'; this.activeTab = 'order'
-      history.replaceState({}, '', ownerPath(loaded.id, this.token))
+      history.replaceState({}, '', checkPath(loaded.id))
       await this.connect(loaded)
       return ''
     } catch (error) {

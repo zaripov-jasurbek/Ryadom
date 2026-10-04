@@ -4,6 +4,7 @@
   import { recognizeReceipt } from '../lib/ocr'
   import { parseReceipt, scanLimits } from '../lib/receipt'
   import { plural } from '../lib/format'
+  import { limits } from '../lib/limits'
   import { app } from '../lib/store.svelte'
   import Modal from './Modal.svelte'
 
@@ -21,7 +22,7 @@
   let camera: HTMLInputElement, gallery: HTMLInputElement
   let controller: AbortController | null = null
 
-  const valid = (row: Row) => Boolean(row.name.trim()) && Number.isInteger(row.quantity) && row.quantity! >= 1 && row.quantity! <= scanLimits.maxQuantity && Number.isInteger(row.price) && row.price! >= 1
+  const valid = (row: Row) => Boolean(row.name.trim()) && Number.isInteger(row.quantity) && row.quantity! >= 1 && row.quantity! <= scanLimits.maxQuantity && Number.isInteger(row.price) && row.price! >= 1 && row.price! <= limits.maxUnitPrice
   const chosen = $derived(rows.filter(row => row.include))
   const ready = $derived(chosen.length > 0 && chosen.every(valid))
   const chosenTotal = $derived(chosen.reduce((sum, row) => sum + (valid(row) ? row.quantity! * row.price! : 0), 0))
@@ -109,7 +110,7 @@
           <input type="checkbox" bind:checked={row.include} aria-label={`Добавить позицию ${i + 1}`} />
           <input class="scan-name" bind:value={row.name} maxlength={scanLimits.nameLength} placeholder="Название" aria-label="Название" />
           <span class="scan-qty"><input type="number" bind:value={row.quantity} min="1" max={scanLimits.maxQuantity} step="1" inputmode="numeric" aria-label="Количество" /><span>шт</span></span>
-          <span class="scan-price"><input type="number" bind:value={row.price} min="1" step="1" inputmode="numeric" placeholder="0" aria-label="Цена за штуку" /><span>сум</span></span>
+          <span class="scan-price"><input type="number" bind:value={row.price} min="1" max={limits.maxUnitPrice} step="1" inputmode="numeric" placeholder="0" aria-label="Цена за штуку" /><span>сум</span></span>
           <button type="button" class="icon-button small danger" aria-label="Убрать строку" onclick={() => removeRow(row)}>×</button>
         </div>
       {/each}

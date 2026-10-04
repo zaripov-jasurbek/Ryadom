@@ -9,9 +9,15 @@ let realtimeClient: SupabaseClient<Database> | null = null
 
 // Concurrent callers share one sign-in instead of each creating an anonymous user.
 let sessionPromise: Promise<string> | null = null
+let watchingAuth = false
 export function ensureAnonymousSession() {
   sessionPromise ??= (async () => {
     const db = realtimeClient = await loadSupabase()
+    if (!watchingAuth) {
+      watchingAuth = true
+      // A revoked or deleted session signs out; the next call signs in again instead of reusing the old user id.
+      db.auth.onAuthStateChange(event => { if (event === 'SIGNED_OUT') { sessionPromise = null; touchedAt = 0 } })
+    }
     const { data: sessionData, error: sessionError } = await db.auth.getSession()
     if (sessionError) throw sessionError
     if (sessionData.session) return sessionData.session.user.id
@@ -23,12 +29,35 @@ export function ensureAnonymousSession() {
   return sessionPromise
 }
 
+/**
+ * Every RPC is granted to signed-in users only, so these mean the request went out without a usable session:
+ * 42501 — no session at all (anon role), PGRST301/PGRST303 — an invalid or expired token.
+ */
+const lostSession = new Set(['42501', 'PGRST301', 'PGRST303'])
+
+// Anonymous accounts unused for 10 days are deleted (public.account_lifetime()); using the app renews them.
+// The server writes at most once an hour anyway, so the client does not ask more often.
+let touchedAt = 0
+function touchAccount(db: SupabaseClient<Database>) {
+  if (Date.now() - touchedAt < 3_600_000) return
+  touchedAt = Date.now()
+  void db.rpc('touch_account').then(({ error }) => { if (error) touchedAt = 0 })
+}
+
 type Rpc = Database['public']['Functions']
 async function call<K extends keyof Rpc>(fn: K, args: Rpc[K]['Args']): Promise<unknown> {
-  await ensureAnonymousSession()
-  const { data, error } = await (await loadSupabase()).rpc(fn, args)
-  if (error) throw error
-  return data
+  for (let retried = false; ; retried = true) {
+    await ensureAnonymousSession()
+    const db = await loadSupabase()
+    touchAccount(db)
+    const { data, error } = await db.rpc(fn, args)
+    if (!error) return data
+    if (retried || !lostSession.has(error.code)) throw error
+    // Drop the broken session and retry once as a fresh anonymous user; get_check then reports the check
+    // as unknown, and the store re-attaches this browser with its owner or guest token.
+    await db.auth.signOut({ scope: 'local' }).catch(() => {})
+    sessionPromise = null; touchedAt = 0
+  }
 }
 
 type Created = { id: string; public_id: string; participant_id: string }

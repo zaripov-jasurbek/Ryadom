@@ -23,16 +23,28 @@ export const ownerIdOf = (bill: Pick<Bill, 'ownerId' | 'participants'>) => bill.
 
 export type ParticipantTotal = { id: string; name: string; subtotal: number; service: number; due: number; paid: number; remaining: number; status: PaymentStatus }
 
+/**
+ * Splits whole UZS in proportion to whole-number weights; the largest fractions get the leftover sums.
+ * Integer math, like participant_due_totals on the server: floats can order two equal fractions
+ * differently and move a sum to another person, so a "full" payment would come up 1 UZS short.
+ */
 export function splitInteger(total: number, weights: number[]): number[] {
-  if (!Number.isSafeInteger(total) || total < 0 || weights.some(w => !Number.isFinite(w) || w < 0)) throw new Error('Amounts must be non-negative whole UZS values')
-  const weightSum = weights.reduce((a, b) => a + b, 0)
+  if (!Number.isSafeInteger(total) || total < 0 || weights.some(w => !Number.isSafeInteger(w) || w < 0)) throw new Error('Amounts must be non-negative whole UZS values')
+  const weightSum = BigInt(weights.reduce((a, b) => a + b, 0))
   if (!weightSum) return weights.map(() => 0)
-  const exact = weights.map(w => total * w / weightSum)
-  const result = exact.map(Math.floor)
+  const parts = weights.map(w => BigInt(total) * BigInt(w))
+  const result = parts.map(part => Number(part / weightSum))
   const remainder = total - result.reduce((a, b) => a + b, 0)
-  const order = exact.map((value, index) => ({ index, fraction: value - Math.floor(value) })).sort((a, b) => b.fraction - a.fraction || a.index - b.index)
-  for (let i = 0; i < remainder; i++) result[order[i % order.length].index]++
+  const order = parts.map((part, index) => ({ index, fraction: part % weightSum }))
+    .sort((a, b) => a.fraction === b.fraction ? a.index - b.index : a.fraction > b.fraction ? -1 : 1)
+  for (let i = 0; i < remainder; i++) result[order[i].index]++
   return result
+}
+
+/** The service fee on an amount, rounded half up like Postgres round(); the percent has at most two decimals. */
+export function serviceFee(amount: number, percent: number): number {
+  const scaled = BigInt(amount) * BigInt(Math.round(percent * 100))
+  return Number((scaled * 2n + 10_000n) / 20_000n)
 }
 
 /** The amounts a unit is split into, or undefined while nobody has claimed it. */
@@ -58,7 +70,7 @@ export function itemShares(item: BillItem, participants: Participant[]): Record<
 export function calculateTotals(bill: Pick<Bill, 'participants' | 'items' | 'servicePercent'>): ParticipantTotal[] {
   const perItem = bill.items.map(item => itemShares(item, bill.participants))
   const subtotals = bill.participants.map(p => perItem.reduce((sum, shares) => sum + shares[p.id], 0))
-  const serviceTotal = Math.round(subtotals.reduce((a, b) => a + b, 0) * bill.servicePercent / 100)
+  const serviceTotal = serviceFee(subtotals.reduce((a, b) => a + b, 0), bill.servicePercent)
   const services = splitInteger(serviceTotal, subtotals)
   return bill.participants.map((p, i) => {
     const due = subtotals[i] + services[i]

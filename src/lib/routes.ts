@@ -8,10 +8,10 @@ export function routeCheckId(pathname: string, base = basePath): string | null {
   return /^\/check\/([^/]+)\/?$/.exec(path)?.[1] ?? null
 }
 
-/** The owner secret travels in the fragment, which browsers never send to a server or in a Referer. */
-export const ownerPath = (id: string, token: string) => `${checkPath(id)}${token ? `#p=${encodeURIComponent(token)}` : ''}`
-
-/** Reads the owner secret from #p=, or from the ?p= of links shared before it moved to the fragment. */
+/**
+ * Reads the owner secret from #p= (or the older ?p=) of owner links made by earlier versions.
+ * The app no longer puts the secret in the address bar: whoever got a copy of it became the creator.
+ */
 export function readOwnerToken(search: string, hash: string): { token: string; legacy: boolean } {
   const fromHash = new URLSearchParams(hash.replace(/^#/, '')).get('p')
   if (fromHash) return { token: fromHash, legacy: false }

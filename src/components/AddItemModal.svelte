@@ -1,6 +1,7 @@
 <script lang="ts">
   import { untrack } from 'svelte'
   import { formatUzs, isUnitAssigned, type BillItem } from '../lib/calculations'
+  import { limits } from '../lib/limits'
   import { app } from '../lib/store.svelte'
   import Modal from './Modal.svelte'
 
@@ -14,7 +15,7 @@
   let price = $state<number | null>(editing?.unitPrice ?? null)
   // Same limits as add_item on the server.
   const qty = $derived(Math.floor(Number(quantity) || 0))
-  const valid = $derived(Boolean(name.trim()) && qty >= 1 && qty <= 99 && typeof price === 'number' && price >= 1)
+  const valid = $derived(Boolean(name.trim()) && qty >= 1 && qty <= 99 && typeof price === 'number' && price >= 1 && price <= limits.maxUnitPrice)
   const unitPrice = $derived(Math.floor(price ?? 0))
   const changed = $derived(!editing || name.trim() !== editing.name || qty !== editing.quantity || unitPrice !== editing.unitPrice)
 
@@ -42,7 +43,7 @@
   <div class="eyebrow">{editing ? 'Изменить позицию' : 'Новая позиция'}</div>
   <h2 id="add-item-title">{editing ? 'Исправим позицию' : 'Что было на столе?'}</h2>
   <!-- svelte-ignore a11y_autofocus -->
-  <label class="field">Название<input bind:value={name} placeholder="Например, Пицца пепперони" maxlength="48" autofocus /></label>
+  <label class="field">Название<input bind:value={name} placeholder="Например, Пицца пепперони" maxlength={limits.itemNameLength} autofocus /></label>
   <div class="modal-fields">
     <label class="field">Количество
       <span class="stepper">
@@ -51,7 +52,7 @@
         <button type="button" aria-label="Больше" disabled={qty >= 99} onclick={() => quantity = Math.min(99, qty + 1)}>+</button>
       </span>
     </label>
-    <label class="field">Цена за штуку<span class="suffix-input"><input type="number" bind:value={price} min="1" step="1" inputmode="numeric" placeholder="0" /><span>сум</span></span></label>
+    <label class="field">Цена за штуку<span class="suffix-input"><input type="number" bind:value={price} min="1" max={limits.maxUnitPrice} step="1" inputmode="numeric" placeholder="0" /><span>сум</span></span></label>
   </div>
   <div class="modal-total">Сумма позиции <b>{formatUzs(Math.max(0, qty * unitPrice))}</b></div>
   {#each warnings as warning (warning)}<p class="modal-warning">{warning}</p>{/each}
