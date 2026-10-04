@@ -1,14 +1,17 @@
 <script lang="ts">
   import type { CommentMessage } from '../lib/calculations'
   import { commentDate, initial } from '../lib/format'
+  import { limits } from '../lib/limits'
   import { app } from '../lib/store.svelte'
 
   let text = $state('')
   const comments = $derived(app.bill?.comments ?? [])
+  const full = $derived(comments.length >= limits.comments)
+  const canWrite = $derived(Boolean(app.selectedPerson) && !full)
 
   async function send() {
     const body = text.trim()
-    if (!body || !app.selectedPerson || app.busy) return
+    if (!body || !canWrite || app.busy) return
     if (await app.addComment(body)) text = ''
   }
   function remove(comment: CommentMessage) {
@@ -34,7 +37,7 @@
     {/each}
   </div>
   <form class="comment-form" onsubmit={(e) => { e.preventDefault(); void send() }}>
-    <textarea bind:value={text} maxlength="1000" rows="1" aria-label="Комментарий" placeholder={app.selectedPerson ? 'Напишите сообщение… (Enter — отправить)' : 'Выберите себя, чтобы писать'} disabled={!app.selectedPerson} onkeydown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); void send() } }}></textarea>
-    <button class="accent-button" disabled={!text.trim() || !app.selectedPerson} aria-label="Отправить">↑</button>
+    <textarea bind:value={text} maxlength="1000" rows="1" aria-label="Комментарий" placeholder={full ? `В чеке уже ${limits.comments} комментариев` : app.selectedPerson ? 'Напишите сообщение… (Enter — отправить)' : 'Выберите себя, чтобы писать'} disabled={!canWrite} onkeydown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); void send() } }}></textarea>
+    <button class="accent-button" disabled={!text.trim() || !canWrite} aria-label="Отправить">↑</button>
   </form>
 </section>

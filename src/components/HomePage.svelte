@@ -1,7 +1,28 @@
 <script lang="ts">
-  import { formatUzs } from '../lib/calculations'
+  import { billStanding, formatUzs, type Bill, type BillStanding } from '../lib/calculations'
   import { plural } from '../lib/format'
+  import { install, promptInstall } from '../lib/pwa.svelte'
   import { app, grandTotal } from '../lib/store.svelte'
+
+  const standingText = (standing: BillStanding, owner: boolean) => {
+    switch (standing.kind) {
+      case 'owed': return `Вам должны ${formatUzs(standing.amount)}`
+      case 'owes': return `С вас ${formatUzs(standing.amount)}`
+      case 'settled': return owner ? '✓ Все рассчитались' : '✓ Вы рассчитались'
+      case 'pending': return owner ? 'Проверьте оплаты' : 'Оплата на проверке'
+      case 'unassigned': return 'Не всё распределено'
+      case 'nothing-marked': return 'Вы ещё ничего не отметили'
+      case 'empty': return 'Позиций пока нет'
+    }
+  }
+
+  function forget(saved: Bill) {
+    const owner = Boolean(saved.ownerToken)
+    const message = owner
+      ? `Убрать «${saved.title}» из списка? У участников чек останется, но на этом устройстве вы больше не сможете им управлять.`
+      : `Убрать «${saved.title}» из списка? Вернуться к нему можно по ссылке.`
+    if (window.confirm(message)) app.forgetBill(saved.id)
+  }
 </script>
 
 <main class="home-page">
@@ -10,7 +31,10 @@
       <div class="eyebrow"><span class="accent-star">✳</span> Друзья. Ужин. Без сложных подсчётов.</div>
       <h1>Счёт на всех.<br /><span>Дружба цела.</span></h1>
       <p>Создайте чек, поделитесь ссылкой — и пусть каждый отметит своё. Остальное мы посчитаем.</p>
-      <button class="primary-button" onclick={() => app.beginCreate()}>Создать новый чек <span aria-hidden="true">↗</span></button>
+      <div class="hero-actions">
+        <button class="primary-button" onclick={() => app.beginCreate()}>Создать новый чек <span aria-hidden="true">↗</span></button>
+        {#if install.prompt}<button class="soft-button" onclick={() => void promptInstall()}><span aria-hidden="true">📲</span> Установить приложение</button>{/if}
+      </div>
       <div class="hero-note"><span class="note-avatars" aria-hidden="true"><b>J</b><b>A</b><b>B</b></span>Понятно каждому за пару секунд</div>
     </div>
     <div class="hero-art" aria-hidden="true">
@@ -34,12 +58,21 @@
       <div class="section-row"><h2>Ваши чеки</h2><span class="muted">{plural(app.bills.length, 'чек', 'чека', 'чеков')}</span></div>
       <div class="saved-list">
         {#each app.bills as saved (saved.id)}
-          <button class="saved-card" onclick={() => app.openCheck(saved.id)}>
-            <span class="saved-icon" aria-hidden="true">🧾</span>
-            <span class="saved-text"><b>{saved.title}</b><small>{plural(saved.participants.length, 'участник', 'участника', 'участников')} · {plural(saved.items.length, 'позиция', 'позиции', 'позиций')}</small></span>
-            <span class="saved-total">{formatUzs(grandTotal(saved))}</span>
-            <span class="saved-arrow" aria-hidden="true">→</span>
-          </button>
+          {@const owner = Boolean(saved.ownerToken)}
+          {@const standing = billStanding(saved, app.personOf(saved.id), owner)}
+          <div class="saved-entry">
+            <button class="saved-card" onclick={() => app.openCheck(saved.id)}>
+              <span class="saved-icon" aria-hidden="true">{standing?.kind === 'settled' ? '✅' : '🧾'}</span>
+              <span class="saved-text">
+                <b>{saved.title}</b>
+                <small>{plural(saved.participants.length, 'участник', 'участника', 'участников')} · {plural(saved.items.length, 'позиция', 'позиции', 'позиций')}</small>
+                {#if standing}<span class="standing standing-{standing.kind}">{standingText(standing, owner)}</span>{/if}
+              </span>
+              <span class="saved-total">{formatUzs(grandTotal(saved))}</span>
+              <span class="saved-arrow" aria-hidden="true">→</span>
+            </button>
+            <button class="icon-button small saved-remove" aria-label={`Убрать «${saved.title}» из списка`} title="Убрать из списка" onclick={() => forget(saved)}>×</button>
+          </div>
         {/each}
       </div>
     </section>
