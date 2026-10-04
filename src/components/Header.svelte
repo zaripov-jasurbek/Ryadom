@@ -4,16 +4,15 @@
   import { setTheme, theme, themes } from '../lib/theme.svelte'
 
   const live = $derived(Boolean(app.bill && app.mode === 'check'))
+  // One button that steps through the themes: three always-visible buttons crowd the top bar on a phone.
+  const current = $derived(themes.find(option => option.value === theme.current) ?? themes[0])
+  const next = $derived(themes[(themes.indexOf(current) + 1) % themes.length])
 </script>
 
 <header class="topbar">
   <a class="brand" href={homePath()} onclick={(e) => { e.preventDefault(); app.goHome() }}><span class="brand-mark">р</span>рядом</a>
   <div class="top-actions">
     {#if live}<span class="sync-pill sync-live"><i></i>Онлайн</span>{/if}
-    <div class="theme-switch" role="radiogroup" aria-label="Тема оформления">
-      {#each themes as option (option.value)}
-        <button role="radio" aria-checked={theme.current === option.value} aria-label={option.label} title={option.label} class:active={theme.current === option.value} onclick={() => setTheme(option.value)}>{option.icon}</button>
-      {/each}
-    </div>
+    <button class="icon-button theme-toggle" aria-label={`${current.label}. Переключить: ${next.label.toLowerCase()}`} title={current.label} onclick={() => setTheme(next.value)}>{current.icon}</button>
   </div>
 </header>

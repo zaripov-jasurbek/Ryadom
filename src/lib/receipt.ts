@@ -1,7 +1,8 @@
 // Turns OCR text of a restaurant receipt into bill items. Pure, so it is unit-tested without Tesseract.
 
 export type ScannedItem = { name: string; quantity: number; unitPrice: number }
-export type ScanResult = { items: ScannedItem[]; total: number | null }
+/** `servicePercent` is the service charge printed on the receipt, as a share of the food; null when there is none. */
+export type ScanResult = { items: ScannedItem[]; total: number | null; servicePercent: number | null }
 
 /** Same limits as the add-item form: whole sums, 1–99 pieces, names up to 48 characters. */
 export const scanLimits = { nameLength: 80, maxQuantity: 99, minPrice: 100 }
@@ -126,8 +127,11 @@ export function parseReceipt(text: string): ScanResult {
   // Only letters without a twin in the other alphabet tell which one the receipt is printed in.
   const distinct = (script: RegExp, twins: Map<string, string>) => (text.match(script) ?? []).filter(char => !twins.has(char)).length
   const cyrillicReceipt = distinct(/\p{Script=Cyrillic}/gu, toLatin) > distinct(/\p{Script=Latin}/gu, toCyrillic)
+  const food = total === null ? null : Math.round(total - (service < total ? service : 0))
+  const base = food ?? items.reduce((sum, entry) => sum + entry.quantity * entry.unitPrice, 0)
   return {
     items: items.map(entry => ({ ...entry, name: unifyScript(entry.name, cyrillicReceipt) })),
-    total: total === null ? null : Math.round(total - (service < total ? service : 0)),
+    total: food,
+    servicePercent: service && base ? Math.round(service / base * 100) : null,
   }
 }

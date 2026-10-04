@@ -17,6 +17,13 @@
   let preview = $state('')
   let rawText = $state('')
   let receiptTotal = $state<number | null>(null)
+  // The service charge printed on the receipt; offered when it differs from the one set for the check.
+  let receiptService = $state<number | null>(null)
+  const serviceMismatch = $derived(receiptService !== null && receiptService <= 30 && app.bill !== null && receiptService !== app.bill.servicePercent)
+  function applyService() {
+    const bill = app.bill
+    if (bill && receiptService !== null) void app.updateCheck(bill.title, receiptService, bill.paymentDetails ?? '')
+  }
   let rows = $state<Row[]>([])
   let nextId = 0
   let camera: HTMLInputElement, gallery: HTMLInputElement
@@ -40,7 +47,7 @@
       const text = await recognizeReceipt(file, (stage, value) => { if (controller === current) { status = stage; progress = value } }, current.signal)
       if (controller !== current) return
       const result = parseReceipt(text)
-      rawText = text; receiptTotal = result.total
+      rawText = text; receiptTotal = result.total; receiptService = result.servicePercent
       rows = result.items.map(entry => ({ id: nextId++, include: true, name: entry.name, quantity: entry.quantity, price: entry.unitPrice }))
       step = 'review'
     } catch (failure) {
@@ -60,7 +67,7 @@
 
   function addRow() { rows = [...rows, { id: nextId++, include: true, name: '', quantity: 1, price: null }] }
   function removeRow(row: Row) { rows = rows.filter(entry => entry.id !== row.id) }
-  function restart() { controller?.abort(); controller = null; setPreview(null); rows = []; rawText = ''; receiptTotal = null; error = ''; step = 'pick' }
+  function restart() { controller?.abort(); controller = null; setPreview(null); rows = []; rawText = ''; receiptTotal = null; receiptService = null; error = ''; step = 'pick' }
 
   async function submit() {
     if (step !== 'review' || !ready || app.busy) return
@@ -120,6 +127,9 @@
       <span>Выбрано {plural(chosen.length, 'позиция', 'позиции', 'позиций')}{#if receiptTotal}<small>{` · в чеке ${formatUzs(receiptTotal)}`}</small>{/if}</span>
       <b>{formatUzs(chosenTotal)}</b>
     </div>
+    {#if serviceMismatch}
+      <div class="notice info scan-service"><span aria-hidden="true">%</span><div><b>В чеке обслуживание {receiptService}%</b><small>Сейчас в расчёте {app.bill?.servicePercent}%.</small></div><button type="button" class="chip" disabled={app.busy} onclick={applyService}>Поставить {receiptService}%</button></div>
+    {/if}
     {#if rawText}
       <details class="scan-raw"><summary>Распознанный текст</summary><pre>{rawText}</pre></details>
     {/if}

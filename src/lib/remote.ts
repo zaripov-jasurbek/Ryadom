@@ -82,6 +82,13 @@ export const submitRemotePayment = (checkId: string, amount: number) => call('su
 export const confirmRemotePayment = (checkId: string, participantId: string) => call('confirm_payment', { p_check_id: checkId, p_participant_id: participantId })
 export const deleteRemoteCheck = (checkId: string) => call('delete_check', { p_check_id: checkId })
 
+/** Title, names and total for the invitation page; null when the check is gone or expired. */
+export type CheckPreview = { title: string; servicePercent: number; participants: string[]; items: number; foodTotal: number }
+export async function previewRemoteCheck(publicId: string): Promise<CheckPreview | null> {
+  const row = await call('check_preview', { p_public_id: publicId }) as { title: string; service_percent: number; participants: string[]; items: number; food_total: number } | null
+  return row && { title: row.title, servicePercent: Number(row.service_percent), participants: row.participants, items: Number(row.items), foodTotal: Number(row.food_total) }
+}
+
 /** True when the check is gone or the current user is no longer one of its participants. */
 export function isRemoteCheckGone(error: unknown) {
   const code = typeof error === 'object' && error !== null ? (error as { code?: string }).code : undefined

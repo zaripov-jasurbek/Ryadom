@@ -19,7 +19,7 @@
     if (mine.status === 'paid') return 'Создатель чека подтвердил оплату. Вы рассчитались.'
     if (mine.status === 'proof_submitted') return `Вы отметили всю сумму — ждём подтверждения${ownerName ? ` от ${ownerName}` : ''}.`
     if (mine.paid > 0) return `Отдали ${formatUzs(mine.paid)} · осталось ${formatUzs(mine.remaining)}.`
-    return `Переведите${ownerName ? ` ${ownerName}` : ' создателю'} или отдайте наличными, затем отметьте оплату.`
+    return `Переведите${ownerName ? ` ${ownerName}` : ' создателю'} или отдайте наличными, затем нажмите «Оплата сделана».`
   })
   const others = $derived(app.totals.filter(person => person.id !== app.ownerId))
   const owed = $derived(others.reduce((sum, person) => sum + person.remaining, 0))
@@ -39,8 +39,12 @@
       </div>
       <p class="my-pay-note">{myNote}</p>
       {#if bill.paymentDetails && mine.remaining > 0}<PaymentDetails details={bill.paymentDetails} owner={ownerName} />{/if}
-      {#if mine.due && mine.status !== 'paid'}
-        <button class="primary-button" onclick={() => app.paymentFor = mine.id}>{mine.status === 'unpaid' ? 'Отметить оплату' : 'Изменить сумму'} <span aria-hidden="true">↗</span></button>
+      <!-- Almost everyone pays the whole amount at once, so that is one tap; a part payment is the exception. -->
+      {#if mine.due && mine.status !== 'paid' && mine.status !== 'proof_submitted'}
+        <button class="primary-button" disabled={app.busy} onclick={() => void app.submitPayment(mine.due)}>{mine.paid ? 'Остаток отдан' : 'Оплата сделана'} · {formatUzs(mine.remaining)} <span aria-hidden="true">✓</span></button>
+        <button class="ghost-button pay-part" onclick={() => app.paymentFor = mine.id}>{mine.paid ? 'Изменить отданную сумму' : 'Отдали только часть?'}</button>
+      {:else if mine.status === 'proof_submitted'}
+        <button class="ghost-button pay-part" onclick={() => app.paymentFor = mine.id}>Изменить сумму</button>
       {/if}
     </div>
   {:else if app.isOwner}

@@ -369,6 +369,16 @@ describe('check snapshot and broadcasts', () => {
     await assert.rejects(db.rpc(stranger, 'get_check', { p_public_id: 'missing' }), (error: { code?: string }) => error.code === 'P0002')
   })
 
+  it('previews a check for anyone with its link, without the details', async () => {
+    const s = await setup(db)
+    const stranger = await db.newUser()
+    const preview = await db.rpc<Record<string, unknown>>(stranger, 'check_preview', { p_public_id: s.check.public_id })
+    assert.deepEqual(preview, { title: 'Ужин', service_percent: 10, participants: ['Jasur', 'Aziz'], items: 1, food_total: 40_000 })
+    assert.equal(await db.rpc(stranger, 'check_preview', { p_public_id: 'missing' }), null)
+    await db.query("update public.checks set created_at = now() - interval '3 days 1 minute' where id = $1", [s.check.id])
+    assert.equal(await db.rpc(stranger, 'check_preview', { p_public_id: s.check.public_id }), null)
+  })
+
   it('broadcasts one change per transaction on the check topic', async () => {
     const s = await setup(db)
     await clearMessages()

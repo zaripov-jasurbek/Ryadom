@@ -11,9 +11,14 @@
   const bill = $derived(app.bill!)
   const mine = $derived(new Set(app.selectedPerson ? bill.items.filter(item => itemShares(item, bill.participants)[app.selectedPerson!] > 0).map(item => item.id) : []))
   const open = $derived(new Set(bill.items.filter(hasUnassignedUnit).map(item => item.id)))
-  const shown = $derived(app.itemFilter === 'mine' ? bill.items.filter(item => mine.has(item.id)) : app.itemFilter === 'open' ? bill.items.filter(item => open.has(item.id)) : bill.items)
+  // A long receipt gets a search box: a guest looks for their two dishes among twenty.
+  let query = $state('')
+  const searchable = $derived(bill.items.length > 8)
+  const needle = $derived(searchable ? query.trim().toLowerCase() : '')
+  const filtered = $derived(app.itemFilter === 'mine' ? bill.items.filter(item => mine.has(item.id)) : app.itemFilter === 'open' ? bill.items.filter(item => open.has(item.id)) : bill.items)
+  const shown = $derived(needle ? filtered.filter(item => item.name.toLowerCase().includes(needle)) : filtered)
   const expires = $derived(expiresAt(bill.createdAt))
-  // The last day gets the warning color.
+  // Shown only on the last day; until then the date is in the summary's export card.
   const expiresSoon = $derived(expires.getTime() - Date.now() < 86_400_000)
   // After a partial payment the bar says what is left; once confirmed, that the person is done.
   const sticky = $derived.by(() => {
@@ -34,11 +39,8 @@
   async function removeParticipant(person: Participant) {
     if (await app.confirm({ title: `Убрать ${person.name} из чека?`, body: 'Отметки, оплата и комментарии участника будут удалены.', action: 'Убрать', danger: true })) void app.removeParticipant(person)
   }
-  async function removeBill() {
-    if (await app.confirm({ title: `Удалить чек «${bill.title}»?`, body: 'Чек исчезнет у всех участников. Отменить это нельзя.', action: 'Удалить чек', danger: true })) void app.removeBill()
-  }
   function showUnassigned() {
-    app.activeTab = 'order'; app.itemFilter = 'open'
+    app.activeTab = 'order'; app.itemFilter = 'open'; query = ''
     document.getElementById('panel-order')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
   function switchTab() {
@@ -52,18 +54,10 @@
     <button class="back-link" onclick={() => app.goHome()}>← Все чеки</button>
     <div class="title-row">
       <h1>{bill.title}</h1>
-      {#if app.isOwner}<button class="icon-button" aria-label="Изменить название и обслуживание" title="Изменить чек" onclick={() => app.checkEditOpen = true}>✎</button>{/if}
+      {#if app.isOwner}<button class="icon-button" aria-label="Настройки чека" title="Настройки чека" onclick={() => app.checkEditOpen = true}>✎</button>{/if}
     </div>
     <p class="muted">{[app.billTotal ? formatUzs(app.billTotal) : '', bill.servicePercent ? `обслуживание ${bill.servicePercent}%` : '', `создан ${createdDate.format(new Date(bill.createdAt))}`].filter(Boolean).join(' · ')}</p>
-    <div class="check-meta">
-      <span class="expiry-pill" class:soon={expiresSoon} title={`Чеки хранятся ${plural(checkLifetimeDays, 'день', 'дня', 'дней')}. Итог можно сохранить картинкой или PDF в «Итогах и оплате».`}>⏳ Удалится {expiryDate.format(expires)}</span>
-      {#if !inviteFirst}
-        <div class="invite-actions">
-          <button class="soft-button" onclick={() => app.invite()}>Пригласить</button>
-          <button class="icon-button" aria-label="Показать QR-код" title="QR-код для тех, кто рядом" onclick={() => app.qrOpen = true}>▦</button>
-        </div>
-      {/if}
-    </div>
+    {#if expiresSoon}<span class="expiry-pill soon" title={`Чеки хранятся ${plural(checkLifetimeDays, 'день', 'дня', 'дней')}. Итог можно сохранить картинкой или PDF в «Итогах и оплате».`}>⏳ Удалится {expiryDate.format(expires)}</span>{/if}
   </header>
 
   {#if inviteFirst}
@@ -78,7 +72,15 @@
   {/if}
 
   <section class="people-strip" aria-label="Участники">
-    <div class="section-row small"><span class="eyebrow">За столом · {bill.participants.length}</span><span class="online-count"><i></i>{app.onlineUsers.length || 1} онлайн</span></div>
+    <div class="section-row small">
+      <span class="eyebrow">За столом · {bill.participants.length} <span class="online-count"><i></i>{app.onlineUsers.length || 1} онлайн</span></span>
+      {#if !inviteFirst}
+        <div class="invite-actions">
+          <button class="soft-button" onclick={() => app.invite()}>Пригласить</button>
+          <button class="icon-button" aria-label="Показать QR-код" title="QR-код для тех, кто рядом" onclick={() => app.qrOpen = true}>▦</button>
+        </div>
+      {/if}
+    </div>
     <div class="people-row">
       {#each bill.participants as person, i (person.id)}
         <span class="person-entry">
@@ -88,7 +90,7 @@
         </span>
       {/each}
     </div>
-    {#if app.onlineUsers.length > 1}<div class="presence-feed">{#each app.onlineUsers.slice(0, 4) as user, i (user.participantId ?? i)}<span><i></i>{user.name} · {user.activity}</span>{/each}</div>{/if}
+    {#if app.onlineUsers.length > 1}<div class="presence-feed">{#each app.onlineUsers.slice(0, 6) as user, i (user.participantId ?? i)}<span><i></i>{user.name} · {user.activity}</span>{/each}</div>{/if}
   </section>
 
   {#if !bill.items.length}
@@ -110,13 +112,13 @@
     </div>
 
     {#if app.unassignedTotal > 0}
-      <button class="notice warning unassigned-notice" onclick={showUnassigned}><span aria-hidden="true">◌</span><div><b>{formatUzs(app.unassignedTotal)} ещё не распределено</b><small>{app.activeTab === 'order' ? 'Отметьте, кто ел оставшиеся позиции, чтобы итог сошёлся с чеком.' : 'Отметьте, кто ел оставшиеся позиции, чтобы итог сошёлся с чеком.'}</small></div><span class="notice-action">Показать →</span></button>
+      <button class="notice warning unassigned-notice" onclick={showUnassigned}><span aria-hidden="true">◌</span><div>{#if app.isOwner}<b>{formatUzs(app.unassignedTotal)} ещё не распределено</b><small>Отметьте, кто ел оставшиеся позиции, чтобы итог сошёлся с чеком.</small>{:else}<b>{formatUzs(app.unassignedTotal)} ещё никто не отметил</b><small>Посмотрите, нет ли там вашего.</small>{/if}</div><span class="notice-action">Показать →</span></button>
     {/if}
 
     {#if app.activeTab === 'order'}
       <div class="items-section" role="tabpanel" id="panel-order" aria-labelledby="tab-order">
         <div class="section-row">
-          <div><h2>Что вы заказали?</h2><p class="muted">Нажмите «Это моё» — сумма посчитается сама</p></div>
+          <div><h2>Что вы заказали?</h2><p class="muted">Нажмите «Это моё» у своих блюд</p></div>
           {#if app.isOwner}
             <div class="item-tools">
               <button class="soft-button" aria-label="Сканировать чек" title="Сканировать чек" onclick={() => app.scanOpen = true}>📷<span class="tool-label"> Скан</span></button>
@@ -124,6 +126,9 @@
             </div>
           {/if}
         </div>
+        {#if searchable}
+          <input class="item-search" type="search" bind:value={query} placeholder="Найти блюдо" aria-label="Найти блюдо" enterkeyhint="search" />
+        {/if}
         {#if showFilters}
           <div class="chip-row item-filter" role="group" aria-label="Какие позиции показать">
             <button class="chip" class:active={app.itemFilter === 'all'} aria-pressed={app.itemFilter === 'all'} onclick={() => app.itemFilter = 'all'}>Все <span class="chip-count">{bill.items.length}</span></button>
@@ -134,8 +139,8 @@
         <div class="item-list">
           {#each shown as item (item.id)}<ItemCard {item} />{:else}
             <div class="filter-empty">
-              <p>{app.itemFilter === 'open' ? '✓ Все позиции распределены' : 'Вы пока ничего не отметили'}</p>
-              <button class="ghost-button" onclick={() => app.itemFilter = 'all'}>Показать все позиции</button>
+              <p>{needle && filtered.length ? `Ничего не нашлось по «${query.trim()}»` : app.itemFilter === 'open' ? '✓ Все позиции распределены' : 'Вы пока ничего не отметили'}</p>
+              <button class="ghost-button" onclick={() => { app.itemFilter = 'all'; query = '' }}>Показать все позиции</button>
             </div>
           {/each}
         </div>
@@ -147,13 +152,6 @@
   {/if}
 
   <Comments />
-
-  {#if app.isOwner}
-    <section class="danger-zone">
-      <div><b>Удалить чек</b><small class="muted">Чек исчезнет у всех участников. Отменить нельзя.</small></div>
-      <button class="danger-button" onclick={removeBill}>Удалить чек</button>
-    </section>
-  {/if}
 
   {#if bill.items.length && app.currentParticipant}
     <div class="sticky-total">

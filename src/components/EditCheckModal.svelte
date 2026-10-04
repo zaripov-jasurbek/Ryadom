@@ -18,6 +18,11 @@
     if (title.trim() === bill.title && percent === bill.servicePercent && details === (bill.paymentDetails ?? '')) { app.checkEditOpen = false; return }
     if (await app.updateCheck(title.trim(), percent, details)) app.checkEditOpen = false
   }
+  // Rare and final, so it lives here rather than at the bottom of every check page.
+  async function removeBill() {
+    app.checkEditOpen = false
+    if (await app.confirm({ title: `Удалить чек «${bill.title}»?`, body: 'Чек исчезнет у всех участников. Отменить это нельзя.', action: 'Удалить чек', danger: true })) void app.removeBill()
+  }
 </script>
 
 <Modal labelledby="edit-check-title" onclose={() => app.checkEditOpen = false} onsubmit={() => void submit()}>
@@ -28,7 +33,7 @@
     <span class="suffix-input"><input type="number" bind:value={fee} min="0" max="100" step="0.01" inputmode="decimal" aria-invalid={!feeValid} /><span>%</span></span>
   </label>
   <div class="chip-row" role="group" aria-label="Быстрый выбор процента">
-    {#each [0, 10, 12, 15] as preset (preset)}<button type="button" class="chip" class:active={fee === preset} onclick={() => fee = preset}>{preset}%</button>{/each}
+    {#each [0, 10, 12, 15] as preset (preset)}<button type="button" class="chip" class:active={fee === preset} onclick={() => fee = preset}>{preset ? `${preset}%` : 'Нет'}</button>{/each}
   </div>
   {#if feeValid && fee! > bill.servicePercent && bill.participants.some(person => person.status === 'paid' || person.status === 'proof_submitted')}
     <p class="modal-warning">Итоги вырастут — подтверждённые оплаты, которых теперь не хватает, откроются снова.</p>
@@ -36,4 +41,5 @@
   <label class="field"><span>Карта или телефон для перевода <span class="label-hint">по желанию</span></span><input bind:value={paymentDetails} placeholder="8600 1234 5678 9012" maxlength={limits.paymentDetailsLength} autocomplete="off" /></label>
   <p class="field-note">Гости увидят его в итогах и скопируют в одно касание. Срок действия карты и коды из SMS не нужны никогда.</p>
   <button class="primary-button wide" disabled={app.busy || !ready}>Сохранить <span aria-hidden="true">✓</span></button>
+  <button type="button" class="ghost-button danger" onclick={removeBill}>Удалить чек</button>
 </Modal>

@@ -12,6 +12,11 @@ export const itemIcon = (name: string) => itemIcons.find(([pattern]) => pattern.
 export const initial = (name: string) => name.slice(0, 1).toUpperCase()
 
 export const createdDate = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long' })
+/** The name a check gets when the creator leaves it empty: «Ужин 4 октября». */
+export function defaultTitle(now = new Date()) {
+  const hour = now.getHours()
+  return `${hour >= 5 && hour < 11 ? 'Завтрак' : hour >= 11 && hour < 16 ? 'Обед' : 'Ужин'} ${createdDate.format(now)}`
+}
 export const expiryDate = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })
 const timeOnly = new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' })
 const dayAndTime = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })

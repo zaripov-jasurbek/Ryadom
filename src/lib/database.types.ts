@@ -6,6 +6,7 @@ export interface Database {
     Views: Record<string, never>
     Functions: {
       get_check: { Args: { p_public_id: string }; Returns: Json }
+      check_preview: { Args: { p_public_id: string }; Returns: Json }
       touch_account: { Args: Record<string, never>; Returns: undefined }
       create_check: { Args: { p_title: string; p_service_percent: number; p_owner_name: string; p_owner_token: string; p_payment_details: string | null }; Returns: Json }
       join_check: { Args: { p_public_id: string; p_name: string; p_session_token: string }; Returns: Json }

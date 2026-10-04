@@ -16,9 +16,10 @@
   function fromMenu(action: () => void) { menuOpen = false; action() }
 
   // Several servings are marked with a stepper; the per-serving rows open for sharing one serving or custom splits.
+  // A single serving is one line: name, who has it and the button, so a long receipt stays short to scroll.
   let expanded = $state(false)
   const stepper = $derived(item.quantity > 1)
-  const showUnits = $derived(!stepper || expanded || app.editingUnit.startsWith(`${item.id}:`))
+  const showUnits = $derived(stepper && (expanded || app.editingUnit.startsWith(`${item.id}:`)))
   const isCustom = (unit: number) => item.unitModes?.[String(unit)] === 'custom'
   const me = $derived(app.selectedPerson)
   const myUnits = $derived(me ? units.filter(unit => consumers(unit).some(person => person.id === me)) : [])
@@ -47,6 +48,7 @@
     const key = String(unit), custom = item.unitModes?.[key] === 'custom' ? item.unitCustomAmounts?.[key] : undefined
     return app.bill!.participants.filter(person => custom ? (custom[person.id] ?? 0) > 0 : item.unitSelections[key]?.includes(person.id))
   }
+  const isMine = (unit: number) => Boolean(me && consumers(unit).some(person => person.id === me))
   async function remove() {
     if (await app.confirm({ title: `Удалить «${item.name}»?`, body: 'Отметки и доли на этой позиции пропадут.', action: 'Удалить', danger: true })) void app.removeItem(item)
   }
@@ -63,13 +65,39 @@
 
 <svelte:window onclick={(e) => { if (menuOpen && !menu?.contains(e.target as Node)) menuOpen = false }} onkeydown={(e) => { if (e.key === 'Escape') menuOpen = false }} />
 
-<article class="panel item-card">
+{#snippet people(unit: number)}
+  {@const key = String(unit)}
+  {@const list = consumers(unit)}
+  <div class="unit-consumers">
+    {#each list as person (person.id)}
+      <span class="consumer-pill"><span class="person-avatar mini tone-{app.personIndex(person.id) % 5}">{initial(person.name)}</span>{person.name}{isCustom(unit) ? ` · ${formatUzs(item.unitCustomAmounts?.[key]?.[person.id] ?? 0)}` : ''}</span>
+    {:else}
+      <!-- On a one-line card an empty place says it already; repeated on every row it is only noise. -->
+      {#if stepper}<span class="unit-empty">Пока никто не отметил</span>{/if}
+    {/each}
+    {#if !isCustom(unit) && list.length > 1}<span class="unit-note">по {item.unitPrice % list.length ? '~' : ''}{formatUzs(Math.round(item.unitPrice / list.length))}</span>{/if}
+  </div>
+{/snippet}
+
+{#snippet mineButton(unit: number)}
+  {@const mine = isMine(unit)}
+  {@const pending = Boolean(item.unitIds?.[unit] && app.pendingUnits[item.unitIds[unit]])}
+  {#if isCustom(unit)}
+    <span class="unit-note">Доли вручную</span>
+  {:else if me}
+    <button class="mine-toggle" class:active={mine} class:pop={tapped === `unit:${unit}`} aria-pressed={mine} aria-busy={pending} disabled={pending} onclick={() => tap(`unit:${unit}`, unit)}>{mine ? '✓ Моё' : 'Это моё'}</button>
+  {/if}
+{/snippet}
+
+<article class="panel item-card" class:single={!stepper} class:owner={app.isOwner} class:unit-mine={!stepper && isMine(0)}>
   <div class="item-head">
     <div class="item-icon" aria-hidden="true">{itemIcon(item.name)}</div>
     <div class="item-title">
       <b>{item.name}</b>
       <span class="muted">{formatUzs(item.unitPrice)}{item.quantity > 1 ? ` × ${item.quantity} = ${formatUzs(item.unitPrice * item.quantity)}` : ''}</span>
     </div>
+    {#if !stepper}{@render people(0)}{/if}
+    {#if !stepper}<div class="item-action">{@render mineButton(0)}</div>{/if}
     {#if app.isOwner}
       <div class="item-menu" bind:this={menu}>
         <button class="icon-button" aria-haspopup="menu" aria-expanded={menuOpen} aria-label={`Действия с позицией «${item.name}»`} title="Действия" onclick={() => menuOpen = !menuOpen}>⋯</button>
@@ -77,12 +105,14 @@
           <div class="menu-popover" role="menu">
             <button role="menuitem" onclick={() => fromMenu(() => app.editingItem = item)}>✎ Изменить</button>
             {#if canShareAll}<button role="menuitem" disabled={app.busy} onclick={() => fromMenu(() => void shareWithEveryone())}>÷ Поровну на всех · {everyone.length}</button>{/if}
+            {#if !stepper}<button role="menuitem" onclick={() => fromMenu(() => toggleEditor('0'))}>⚖ Доли вручную</button>{/if}
             <button role="menuitem" class="danger" onclick={() => fromMenu(() => void remove())}>🗑 Удалить</button>
           </div>
         {/if}
       </div>
     {/if}
   </div>
+  {#if !stepper && app.editingUnit === `${item.id}:0`}<CustomShareEditor {item} unit={0} />{/if}
   {#if stepper}
     <div class="portion-summary" class:unit-mine={myUnits.length > 0}>
       <div class="unit-consumers">
@@ -106,26 +136,11 @@
   <div class="unit-list">
     {#each units as unit (unit)}
       {@const key = String(unit)}
-      {@const custom = item.unitModes?.[key] === 'custom'}
-      {@const people = consumers(unit)}
-      {@const mine = Boolean(app.selectedPerson && people.some(person => person.id === app.selectedPerson))}
-      {@const pending = Boolean(item.unitIds?.[unit] && app.pendingUnits[item.unitIds[unit]])}
-      <div class="unit-row" class:unit-mine={mine}>
-        {#if item.quantity > 1}<span class="unit-label">№{unit + 1}</span>{/if}
-        <div class="unit-consumers">
-          {#each people as person (person.id)}
-            <span class="consumer-pill"><span class="person-avatar mini tone-{app.personIndex(person.id) % 5}">{initial(person.name)}</span>{person.name}{custom ? ` · ${formatUzs(item.unitCustomAmounts?.[key]?.[person.id] ?? 0)}` : ''}</span>
-          {:else}
-            <span class="unit-empty">Пока никто не отметил</span>
-          {/each}
-          {#if !custom && people.length > 1}<span class="unit-note">по {item.unitPrice % people.length ? '~' : ''}{formatUzs(Math.round(item.unitPrice / people.length))}</span>{/if}
-        </div>
+      <div class="unit-row" class:unit-mine={isMine(unit)}>
+        <span class="unit-label">№{unit + 1}</span>
+        {@render people(unit)}
         <div class="unit-actions">
-          {#if custom}
-            <span class="unit-note">Доли вручную</span>
-          {:else if app.selectedPerson}
-            <button class="mine-toggle" class:active={mine} class:pop={tapped === `unit:${unit}`} aria-pressed={mine} aria-busy={pending} disabled={pending} onclick={() => tap(`unit:${unit}`, unit)}>{mine ? '✓ Моё' : 'Это моё'}</button>
-          {/if}
+          {@render mineButton(unit)}
           {#if app.isOwner}<button class="ghost-button" aria-expanded={app.editingUnit === `${item.id}:${key}`} onclick={() => toggleEditor(key)}>Доли</button>{/if}
         </div>
       </div>

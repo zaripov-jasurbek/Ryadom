@@ -31,6 +31,7 @@ describe('receipt parsing', () => {
       ],
       // Without the service charge: the bill adds its own.
       total: 143000,
+      servicePercent: 10,
     })
   })
 
@@ -73,6 +74,7 @@ Naqd: 62 000,00`
         { name: 'Coca-Cola 0,5', quantity: 1, unitPrice: 12000 },
       ],
       total: 62000,
+      servicePercent: null,
     })
   })
 
@@ -105,6 +107,6 @@ Cola 0,5 12 000
 ИНН 301234567
 Добро пожаловать!
 12.09.2026 19:40
-~~~ ---`), { items: [], total: null })
+~~~ ---`), { items: [], total: null, servicePercent: null })
   })
 })
