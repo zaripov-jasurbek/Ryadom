@@ -1,7 +1,8 @@
 <script lang="ts">
   import { formatUzs, personItems, type ParticipantTotal } from '../lib/calculations'
   import { downloadImage, downloadText, summaryText } from '../lib/export'
-  import { initial, plural, statusLabels } from '../lib/format'
+  import { expiryDate, initial, plural, statusLabels } from '../lib/format'
+  import { expiresAt } from '../lib/limits'
   import { app } from '../lib/store.svelte'
   import PaymentDetails from './PaymentDetails.svelte'
 
@@ -10,8 +11,8 @@
   const ownerName = $derived(app.ownerId ? app.personName(app.ownerId) : '')
   const text = () => summaryText(bill.title, app.billTotal, app.totals, app.ownerId)
 
-  function unconfirm(person: ParticipantTotal) {
-    if (window.confirm(`Отменить подтверждение оплаты у ${person.name}?`)) void app.unconfirm(person.id)
+  async function unconfirm(person: ParticipantTotal) {
+    if (await app.confirm({ title: `Отменить подтверждение у ${person.name}?`, body: 'Оплата снова будет ждать вашей проверки.', action: 'Отменить подтверждение' })) void app.unconfirm(person.id)
   }
 </script>
 
@@ -73,7 +74,7 @@
   <div class="panel export-card" class:all-paid={app.allConfirmed}>
     <div class="export-text">
       {#if app.allConfirmed}<span class="done-mark" aria-hidden="true">✓</span>{/if}
-      <div><b>{app.allConfirmed ? 'Все оплаты подтверждены' : 'Поделиться итогом'}</b><small class="muted">{app.allConfirmed ? 'Можно сохранить итог встречи.' : 'Отправьте сводку в чат друзьям.'}</small></div>
+      <div><b>{app.allConfirmed ? 'Все оплаты подтверждены' : 'Поделиться итогом'}</b><small class="muted">{app.allConfirmed ? 'Можно сохранить итог встречи.' : 'Отправьте сводку в чат друзьям.'}{bill.dbId ? ` Чек удалится ${expiryDate.format(expiresAt(bill.createdAt))} — нужен итог надолго, сохраните картинку или PDF.` : ''}</small></div>
     </div>
     <div class="chip-row">
       <button class="chip" onclick={() => app.copy(text(), 'Итог скопирован')}>Копировать</button>

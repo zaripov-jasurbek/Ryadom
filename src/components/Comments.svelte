@@ -14,8 +14,8 @@
     if (!body || !canWrite || app.busy) return
     if (await app.addComment(body)) text = ''
   }
-  function remove(comment: CommentMessage) {
-    if (window.confirm('Удалить комментарий?')) void app.deleteComment(comment)
+  async function remove(comment: CommentMessage) {
+    if (await app.confirm({ title: 'Удалить комментарий?', action: 'Удалить', danger: true })) void app.deleteComment(comment)
   }
 </script>
 

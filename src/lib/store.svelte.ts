@@ -7,6 +7,7 @@ import { isSupabaseConfigured, preloadSupabase } from './supabase'
 import { expiresAt } from './limits'
 
 export type Mode = 'home' | 'create' | 'join' | 'check'
+export type ConfirmRequest = { title: string; body?: string; action: string; danger?: boolean; resolve: (answer: boolean) => void }
 const billsKey = 'billsplit:v1'
 const personKey = (billId: string) => `billsplit:person:${billId}`
 /** A guest's join token: this browser gets its participant back after losing its Supabase session. */
@@ -49,6 +50,8 @@ class AppStore {
   editingUnit = $state('')
   editingItem = $state<BillItem | null>(null)
   checkEditOpen = $state(false)
+  /** The open confirmation sheet; it replaces window.confirm, which looks foreign on phones. */
+  confirmRequest = $state<ConfirmRequest | null>(null)
   itemFilter = $state<'all' | 'mine' | 'open'>('all')
   /** The name typed last time, so the next check does not ask for it again. */
   savedName = $state(readStorage(nameKey) ?? '')
@@ -101,7 +104,19 @@ class AppStore {
     this.notify(errorMessage(error, fallback))
   }
 
-  closeOverlays() { this.addItemOpen = false; this.scanOpen = false; this.qrOpen = false; this.paymentFor = null; this.editingUnit = ''; this.editingItem = null; this.checkEditOpen = false }
+  /** Asks in an in-app sheet; resolves false when it is dismissed or replaced by another question. */
+  confirm(request: Omit<ConfirmRequest, 'resolve'>) {
+    this.answerConfirm(false)
+    return new Promise<boolean>(resolve => { this.confirmRequest = { ...request, resolve } })
+  }
+
+  answerConfirm(answer: boolean) {
+    const request = this.confirmRequest
+    this.confirmRequest = null
+    request?.resolve(answer)
+  }
+
+  closeOverlays() { this.answerConfirm(false); this.addItemOpen = false; this.scanOpen = false; this.qrOpen = false; this.paymentFor = null; this.editingUnit = ''; this.editingItem = null; this.checkEditOpen = false }
 
   private rememberName(name: string) { this.savedName = name; writeStorage(nameKey, name) }
 

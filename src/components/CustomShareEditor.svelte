@@ -25,7 +25,7 @@
     if (await app.saveCustomShares(item, unit, Object.fromEntries(participants.map(person => [person.id, clean(amounts[person.id])])))) app.editingUnit = ''
   }
   async function reset() {
-    if (!window.confirm('Сбросить ручное распределение? Позиция снова разделится поровну.')) return
+    if (!await app.confirm({ title: 'Сбросить ручное распределение?', body: 'Порция снова разделится поровну между теми, кто её отметил.', action: 'Сбросить' })) return
     if (await app.resetCustomShares(item, unit)) app.editingUnit = ''
   }
 </script>

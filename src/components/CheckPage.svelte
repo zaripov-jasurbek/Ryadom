@@ -14,17 +14,21 @@
   const expires = $derived(expiresAt(bill.createdAt))
   // The last day gets the warning color.
   const expiresSoon = $derived(expires.getTime() - Date.now() < 86_400_000)
+  // Payments the creator still has to look at, shown on the summary tab.
+  const toConfirm = $derived(app.isOwner ? app.totals.filter(person => person.id !== app.ownerId && person.status === 'proof_submitted').length : 0)
+  // The creator alone at the table has one thing to do next: invite people. Later a small button is enough.
+  const inviteFirst = $derived(Boolean(bill.dbId && app.isOwner && bill.participants.length === 1))
   // Long receipts get filters; a filter picked from the warning stays visible on a short one too.
   const showFilters = $derived(bill.items.length > 3 || app.itemFilter !== 'all')
 
   function copyLink() {
     void app.copy(app.publicLink(), bill.dbId ? 'Ссылка скопирована — гости могут открыть чек' : 'Демо-ссылка скопирована · доступна только в этом браузере')
   }
-  function removeParticipant(person: Participant) {
-    if (window.confirm(`Убрать ${person.name} из чека? Отметки, оплата и комментарии участника будут удалены.`)) void app.removeParticipant(person)
+  async function removeParticipant(person: Participant) {
+    if (await app.confirm({ title: `Убрать ${person.name} из чека?`, body: 'Отметки, оплата и комментарии участника будут удалены.', action: 'Убрать', danger: true })) void app.removeParticipant(person)
   }
-  function removeBill() {
-    if (window.confirm(`Удалить чек «${bill.title}» для всех участников? Это действие нельзя отменить.`)) void app.removeBill()
+  async function removeBill() {
+    if (await app.confirm({ title: `Удалить чек «${bill.title}»?`, body: 'Чек исчезнет у всех участников. Отменить это нельзя.', action: 'Удалить чек', danger: true })) void app.removeBill()
   }
   function showUnassigned() {
     app.activeTab = 'order'; app.itemFilter = 'open'
@@ -37,48 +41,53 @@
 </script>
 
 <main class="check-page">
-  <div class="check-header">
-    <div>
-      <button class="back-link" onclick={() => app.goHome()}>← Все чеки</button>
-      <div class="eyebrow check-kicker">Совместный чек <span class="live-dot" class:offline={!bill.dbId}></span> {bill.dbId ? 'обновляется в реальном времени' : 'хранится на этом устройстве'}</div>
-      <div class="title-row">
-        <h1>{bill.title}</h1>
-        {#if app.isOwner}<button class="icon-button" aria-label="Изменить название и обслуживание" title="Изменить чек" onclick={() => app.checkEditOpen = true}>✎</button>{/if}
-      </div>
-      <p class="muted">Создан {createdDate.format(new Date(bill.createdAt))} · {plural(bill.participants.length, 'участник', 'участника', 'участников')} · {formatUzs(app.billTotal)}{bill.servicePercent ? ` · обслуживание ${bill.servicePercent}%` : ''}</p>
+  <header class="check-header">
+    <button class="back-link" onclick={() => app.goHome()}>← Все чеки</button>
+    <div class="title-row">
+      <h1>{bill.title}</h1>
+      {#if app.isOwner}<button class="icon-button" aria-label="Изменить название и обслуживание" title="Изменить чек" onclick={() => app.checkEditOpen = true}>✎</button>{/if}
     </div>
-  </div>
+    <p class="muted">{formatUzs(app.billTotal)}{bill.servicePercent ? ` · обслуживание ${bill.servicePercent}%` : ''} · создан {createdDate.format(new Date(bill.createdAt))}</p>
+    <div class="check-meta">
+      {#if bill.dbId}
+        <span class="expiry-pill" class:soon={expiresSoon} title={`Общие чеки хранятся ${plural(checkLifetimeDays, 'день', 'дня', 'дней')}. Итог можно сохранить картинкой или PDF в «Итогах и оплате».`}>⏳ Удалится {expiryDate.format(expires)}</span>
+      {:else}
+        <span class="expiry-pill">Демо · только в этом браузере</span>
+      {/if}
+      {#if !inviteFirst}<button class="soft-button invite-button" onclick={() => app.qrOpen = true}><span aria-hidden="true">▦</span> Пригласить</button>{/if}
+    </div>
+  </header>
 
-  {#if bill.dbId}
-    <div class="notice {expiresSoon ? 'warning' : 'info'}" role="note">
-      <span aria-hidden="true">⏳</span>
-      <div><b>Чек удалится {expiryDate.format(expires)}</b><small>Общие чеки хранятся {plural(checkLifetimeDays, 'день', 'дня', 'дней')}. Если итог нужен дольше, сохраните его картинкой или PDF в «Итогах и оплате».</small></div>
+  {#if inviteFirst}
+    <div class="panel share-banner">
+      <div class="share-symbol" aria-hidden="true">🔗</div>
+      <div class="share-text"><b>Пригласите остальных за стол</b><span>Отправьте ссылку или покажите QR-код — гости сами присоединятся по имени.</span></div>
+      <div class="share-actions">
+        <button class="soft-button" onclick={() => app.qrOpen = true}><span aria-hidden="true">▦</span> QR-код</button>
+        <button class="soft-button" onclick={copyLink}>Скопировать ссылку</button>
+      </div>
     </div>
   {/if}
 
-  <div class="panel share-banner">
-    <div class="share-symbol" aria-hidden="true">🔗</div>
-    <div class="share-text"><b>{bill.dbId ? 'Пригласите остальных за стол' : 'Демо-режим'}</b><span>{bill.dbId ? 'Отправьте ссылку — гости сами присоединятся по имени.' : 'Чек хранится только в этом браузере.'}</span></div>
-    <div class="share-actions">
-      <button class="soft-button" onclick={() => app.qrOpen = true}><span aria-hidden="true">▦</span> QR-код</button>
-      <button class="soft-button" onclick={copyLink}>Скопировать ссылку</button>
-    </div>
-  </div>
-
   <section class="people-strip" aria-label="Участники">
-    <div class="section-row small"><span class="eyebrow">За столом</span>{#if bill.dbId}<span class="online-count"><i></i>{app.onlineUsers.length || 1} онлайн</span>{/if}</div>
+    <div class="section-row small"><span class="eyebrow">За столом · {bill.participants.length}</span>{#if bill.dbId}<span class="online-count"><i></i>{app.onlineUsers.length || 1} онлайн</span>{/if}</div>
     <div class="people-row">
       {#each bill.participants as person, i (person.id)}
         <span class="person-entry">
-          <button class="person-chip" class:active={app.selectedPerson === person.id} aria-pressed={app.selectedPerson === person.id} disabled={Boolean(bill.dbId && app.selectedPerson !== person.id)} onclick={() => app.choosePerson(person.id)}>
-            <span class="person-avatar tone-{i % 5}">{initial(person.name)}</span>{person.name}{app.selectedPerson === person.id ? ' · вы' : ''}
-          </button>
+          {#if bill.dbId}
+            <!-- In a shared check everyone is who they joined as; the names are just who is at the table. -->
+            <span class="person-chip" class:active={app.selectedPerson === person.id}><span class="person-avatar tone-{i % 5}">{initial(person.name)}</span>{person.name}{app.selectedPerson === person.id ? ' · вы' : ''}</span>
+          {:else}
+            <button class="person-chip" class:active={app.selectedPerson === person.id} aria-pressed={app.selectedPerson === person.id} onclick={() => app.choosePerson(person.id)}>
+              <span class="person-avatar tone-{i % 5}">{initial(person.name)}</span>{person.name}{app.selectedPerson === person.id ? ' · вы' : ''}
+            </button>
+          {/if}
           {#if app.isOwner && i > 0}<button class="remove-person" aria-label={`Убрать ${person.name} из чека`} title="Убрать из чека" onclick={() => removeParticipant(person)}>×</button>{/if}
         </span>
       {/each}
     </div>
     {#if app.onlineUsers.length > 1}<div class="presence-feed">{#each app.onlineUsers.slice(0, 4) as user, i (user.participantId ?? i)}<span><i></i>{user.name} · {user.activity}</span>{/each}</div>{/if}
-    {#if !app.selectedPerson}<p class="hint">Нажмите на своё имя, чтобы отмечать блюда.</p>{/if}
+    {#if !bill.dbId && !app.selectedPerson}<p class="hint">Нажмите на своё имя, чтобы отмечать блюда.</p>{/if}
   </section>
 
   {#if !bill.items.length}
@@ -96,11 +105,11 @@
   {:else}
     <div class="segmented" role="tablist">
       <button role="tab" id="tab-order" aria-controls="panel-order" aria-selected={app.activeTab === 'order'} class:active={app.activeTab === 'order'} onclick={() => app.activeTab = 'order'}>Позиции <span class="count">{bill.items.length}</span></button>
-      <button role="tab" id="tab-summary" aria-controls="panel-summary" aria-selected={app.activeTab === 'summary'} class:active={app.activeTab === 'summary'} onclick={() => app.activeTab = 'summary'}>Итоги и оплата</button>
+      <button role="tab" id="tab-summary" aria-controls="panel-summary" aria-selected={app.activeTab === 'summary'} class:active={app.activeTab === 'summary'} onclick={() => app.activeTab = 'summary'}>Итоги и оплата{#if toConfirm}<span class="count" title="Ждут вашего подтверждения">{toConfirm}</span>{/if}</button>
     </div>
 
     {#if app.unassignedTotal > 0}
-      <button class="notice warning" onclick={showUnassigned}><span aria-hidden="true">◌</span><div><b>{formatUzs(app.unassignedTotal)} ещё не распределено</b><small>{app.activeTab === 'order' ? 'Отметьте, кто ел оставшиеся позиции, чтобы итог сошёлся с чеком.' : 'Распределите все позиции, прежде чем закрывать чек.'}</small></div><span class="notice-action">Показать →</span></button>
+      <button class="notice warning unassigned-notice" onclick={showUnassigned}><span aria-hidden="true">◌</span><div><b>{formatUzs(app.unassignedTotal)} ещё не распределено</b><small>{app.activeTab === 'order' ? 'Отметьте, кто ел оставшиеся позиции, чтобы итог сошёлся с чеком.' : 'Распределите все позиции, прежде чем закрывать чек.'}</small></div><span class="notice-action">Показать →</span></button>
     {/if}
 
     {#if app.activeTab === 'order'}

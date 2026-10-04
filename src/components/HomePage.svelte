@@ -16,16 +16,40 @@
     }
   }
 
-  function forget(saved: Bill) {
-    const owner = Boolean(saved.ownerToken)
-    const message = owner
-      ? `Убрать «${saved.title}» из списка? У участников чек останется, но на этом устройстве вы больше не сможете им управлять.`
-      : `Убрать «${saved.title}» из списка? Вернуться к нему можно по ссылке.`
-    if (window.confirm(message)) app.forgetBill(saved.id)
+  async function forget(saved: Bill) {
+    const body = saved.ownerToken
+      ? 'У участников чек останется, но управлять им с этого устройства вы больше не сможете.'
+      : 'Вернуться к нему можно по ссылке.'
+    if (await app.confirm({ title: `Убрать «${saved.title}» из списка?`, body, action: 'Убрать' })) app.forgetBill(saved.id)
   }
 </script>
 
 <main class="home-page">
+  <!-- Someone coming back is here for their checks; the introduction follows them. -->
+  {#if app.bills.length}
+    <section class="recent">
+      <div class="section-row"><div><h2>Ваши чеки</h2><span class="muted">{plural(app.bills.length, 'чек', 'чека', 'чеков')}</span></div><button class="accent-button" onclick={() => app.beginCreate()}>＋ Новый чек</button></div>
+      <div class="saved-list">
+        {#each app.bills as saved (saved.id)}
+          {@const owner = Boolean(saved.ownerToken)}
+          {@const standing = billStanding(saved, app.personOf(saved.id), owner)}
+          <div class="saved-entry">
+            <button class="saved-card" onclick={() => app.openCheck(saved.id)}>
+              <span class="saved-icon" aria-hidden="true">{standing?.kind === 'settled' ? '✅' : '🧾'}</span>
+              <span class="saved-text">
+                <b>{saved.title}</b>
+                <small>{plural(saved.participants.length, 'участник', 'участника', 'участников')} · {plural(saved.items.length, 'позиция', 'позиции', 'позиций')}</small>
+                {#if standing}<span class="standing standing-{standing.kind}">{standingText(standing, owner)}</span>{/if}
+              </span>
+              <span class="saved-total">{formatUzs(grandTotal(saved))}</span>
+              <span class="saved-arrow" aria-hidden="true">→</span>
+            </button>
+            <button class="icon-button small saved-remove" aria-label={`Убрать «${saved.title}» из списка`} title="Убрать из списка" onclick={() => forget(saved)}>×</button>
+          </div>
+        {/each}
+      </div>
+    </section>
+  {/if}
   <section class="hero">
     <div class="hero-copy">
       <div class="eyebrow"><span class="accent-star">✳</span> Друзья. Ужин. Без сложных подсчётов.</div>
@@ -53,30 +77,6 @@
     </div>
   </section>
 
-  {#if app.bills.length}
-    <section class="recent">
-      <div class="section-row"><h2>Ваши чеки</h2><span class="muted">{plural(app.bills.length, 'чек', 'чека', 'чеков')}</span></div>
-      <div class="saved-list">
-        {#each app.bills as saved (saved.id)}
-          {@const owner = Boolean(saved.ownerToken)}
-          {@const standing = billStanding(saved, app.personOf(saved.id), owner)}
-          <div class="saved-entry">
-            <button class="saved-card" onclick={() => app.openCheck(saved.id)}>
-              <span class="saved-icon" aria-hidden="true">{standing?.kind === 'settled' ? '✅' : '🧾'}</span>
-              <span class="saved-text">
-                <b>{saved.title}</b>
-                <small>{plural(saved.participants.length, 'участник', 'участника', 'участников')} · {plural(saved.items.length, 'позиция', 'позиции', 'позиций')}</small>
-                {#if standing}<span class="standing standing-{standing.kind}">{standingText(standing, owner)}</span>{/if}
-              </span>
-              <span class="saved-total">{formatUzs(grandTotal(saved))}</span>
-              <span class="saved-arrow" aria-hidden="true">→</span>
-            </button>
-            <button class="icon-button small saved-remove" aria-label={`Убрать «${saved.title}» из списка`} title="Убрать из списка" onclick={() => forget(saved)}>×</button>
-          </div>
-        {/each}
-      </div>
-    </section>
-  {/if}
 
   <section class="how-section">
     <div class="section-heading"><div class="eyebrow">Всё просто</div><h2>Четыре шага — и можно заказывать десерт</h2></div>
