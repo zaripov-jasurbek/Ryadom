@@ -27,7 +27,8 @@
 <svelte:window onkeydown={(e) => { if (e.key === 'Escape') app.closeOverlays() }} />
 
 <div class="app-shell">
-  <Header />
+  <!-- A check is its own small app: its top bar and bottom menu replace the site header. -->
+  {#if app.mode !== 'check' || !app.bill}<Header />{/if}
   {#if !app.online}<div class="offline-banner" role="status">Нет интернета — изменения не сохранятся, пока связь не вернётся</div>{/if}
 
   {#if app.mode === 'home'}

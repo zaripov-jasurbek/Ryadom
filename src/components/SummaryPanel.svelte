@@ -30,7 +30,7 @@
   }
 </script>
 
-<div class="summary-section" role="tabpanel" id="panel-summary" aria-labelledby="tab-summary">
+<div class="summary-section" role="tabpanel" id="panel-pay" aria-labelledby="tab-pay">
   {#if mine}
     <div class="panel my-pay-card" class:settled={mine.status === 'paid'}>
       <div class="my-pay-head">

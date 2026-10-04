@@ -105,6 +105,8 @@ export function assignedSubtotal(bill: Pick<Bill, 'items'>): number {
 const uzs = new Intl.NumberFormat('ru-RU')
 /** "60 134 сум"; the non-breaking spaces keep an amount on one line. */
 export function formatUzs(amount: number): string { return `${uzs.format(amount)} сум` }
+/** "60 134" without the currency, where space is short. */
+export const formatAmount = (amount: number) => uzs.format(amount)
 
 export type PersonItem = { id: string; name: string; amount: number; units: number; shared: boolean }
 
