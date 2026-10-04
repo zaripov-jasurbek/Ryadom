@@ -12,7 +12,15 @@ export type BillItem = {
   unitAmounts?: Record<string, Record<string, number>>
 }
 export type CommentMessage = { id: string; itemId?: string; participantId: string; body: string; createdAt: string }
-export type Bill = { id: string; dbId?: string; title: string; servicePercent: number; participants: Participant[]; items: BillItem[]; createdAt: string; ownerToken: string; comments?: CommentMessage[] }
+export type Bill = {
+  id: string; dbId?: string; title: string; servicePercent: number; participants: Participant[]; items: BillItem[]; createdAt: string; ownerToken: string; comments?: CommentMessage[]
+  /** Card or phone number the creator wants transfers to; shown to every member. */
+  paymentDetails?: string
+  /** The creator's participant id; older saved checks lack it, and the creator is always listed first. */
+  ownerId?: string
+}
+export const ownerIdOf = (bill: Pick<Bill, 'ownerId' | 'participants'>) => bill.ownerId ?? bill.participants[0]?.id
+
 export type ParticipantTotal = { id: string; name: string; subtotal: number; service: number; due: number; paid: number; remaining: number; status: PaymentStatus }
 
 export function splitInteger(total: number, weights: number[]): number[] {
@@ -64,6 +72,8 @@ export function isUnitAssigned(item: BillItem, unit: number): boolean {
   return item.unitModes?.[key] === 'custom' || Boolean(item.unitSelections[key]?.length)
 }
 
+export const hasUnassignedUnit = (item: BillItem) => Array.from({ length: item.quantity }, (_, unit) => unit).some(unit => !isUnitAssigned(item, unit))
+
 export function assignedSubtotal(bill: Pick<Bill, 'items'>): number {
   let sum = 0
   for (const item of bill.items) for (let unit = 0; unit < item.quantity; unit++) if (isUnitAssigned(item, unit)) sum += item.unitPrice
@@ -72,3 +82,45 @@ export function assignedSubtotal(bill: Pick<Bill, 'items'>): number {
 
 const uzs = new Intl.NumberFormat('uz-UZ')
 export function formatUzs(amount: number): string { return `${uzs.format(amount)} UZS` }
+
+export type PersonItem = { id: string; name: string; amount: number; units: number; shared: boolean }
+
+/** What a participant's subtotal is made of: their amount per item, how many servings, and whether any was shared. */
+export function personItems(bill: Pick<Bill, 'participants' | 'items'>, personId: string): PersonItem[] {
+  const result: PersonItem[] = []
+  for (const item of bill.items) {
+    let amount = 0, units = 0, shared = false
+    for (let unit = 0; unit < item.quantity; unit++) {
+      const share = unitAmounts(item, unit, bill.participants)?.[personId] ?? 0
+      if (!share) continue
+      amount += share; units++
+      if (share < item.unitPrice) shared = true
+    }
+    if (amount) result.push({ id: item.id, name: item.name, amount, units, shared })
+  }
+  return result
+}
+
+export type BillStanding =
+  | { kind: 'empty' | 'unassigned' | 'nothing-marked' | 'pending' | 'settled' }
+  | { kind: 'owed' | 'owes'; amount: number }
+
+/** One line for the saved-checks list: what the creator is still owed, or what this guest still owes. */
+export function billStanding(bill: Bill, me: string | null, owner: boolean): BillStanding | null {
+  if (!bill.items.length) return { kind: 'empty' }
+  const totals = calculateTotals(bill)
+  if (owner) {
+    const food = bill.items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0)
+    if (assignedSubtotal(bill) < food) return { kind: 'unassigned' }
+    const ownerId = ownerIdOf(bill)
+    const others = totals.filter(person => person.id !== ownerId)
+    const owed = others.reduce((sum, person) => sum + person.remaining, 0)
+    if (owed > 0) return { kind: 'owed', amount: owed }
+    return others.some(person => person.status === 'proof_submitted') ? { kind: 'pending' } : { kind: 'settled' }
+  }
+  const mine = totals.find(person => person.id === me)
+  if (!mine) return null
+  if (!mine.due) return { kind: 'nothing-marked' }
+  if (mine.status === 'paid') return { kind: 'settled' }
+  return mine.remaining > 0 ? { kind: 'owes', amount: mine.remaining } : { kind: 'pending' }
+}

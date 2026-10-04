@@ -8,6 +8,7 @@
   import JoinPage from './components/JoinPage.svelte'
   import CheckPage from './components/CheckPage.svelte'
   import AddItemModal from './components/AddItemModal.svelte'
+  import EditCheckModal from './components/EditCheckModal.svelte'
   import PaymentModal from './components/PaymentModal.svelte'
   import ScanReceiptModal from './components/ScanReceiptModal.svelte'
   import ShareQrModal from './components/ShareQrModal.svelte'
@@ -38,6 +39,8 @@
   {/if}
 
   {#if app.addItemOpen && app.bill}<AddItemModal />{/if}
+  {#if app.editingItem && app.bill}{#key app.editingItem.id}<AddItemModal item={app.editingItem} />{/key}{/if}
+  {#if app.checkEditOpen && app.bill}<EditCheckModal />{/if}
   {#if app.scanOpen && app.bill}<ScanReceiptModal />{/if}
   {#if app.qrOpen && app.bill}<ShareQrModal />{/if}
   {#if app.paymentFor && app.bill}<PaymentModal personId={app.paymentFor} />{/if}

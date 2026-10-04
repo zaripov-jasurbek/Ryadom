@@ -1,11 +1,13 @@
 <script lang="ts">
-  import { formatUzs, type BillItem } from '../lib/calculations'
+  import { formatUzs, isUnitAssigned, type BillItem } from '../lib/calculations'
   import { initial, itemIcon } from '../lib/format'
   import { app } from '../lib/store.svelte'
   import CustomShareEditor from './CustomShareEditor.svelte'
 
   let { item }: { item: BillItem } = $props()
   const units = $derived(Array.from({ length: item.quantity }, (_, unit) => unit))
+  const everyone = $derived(app.bill!.participants)
+  const sharedByAll = $derived(units.every(unit => item.unitModes?.[String(unit)] !== 'custom' && everyone.every(person => item.unitSelections[String(unit)]?.includes(person.id))))
 
   function consumers(unit: number) {
     const key = String(unit), custom = item.unitModes?.[key] === 'custom' ? item.unitCustomAmounts?.[key] : undefined
@@ -13,6 +15,11 @@
   }
   function remove() {
     if (window.confirm(`Удалить позицию «${item.name}»?`)) void app.removeItem(item)
+  }
+  function shareWithEveryone() {
+    const marked = units.some(unit => isUnitAssigned(item, unit))
+    if (marked && !window.confirm(`Разделить «${item.name}» поровну на всех (${everyone.length})? Текущие отметки на этой позиции заменятся.`)) return
+    void app.shareItemEqually(item)
   }
   function toggleEditor(key: string) {
     const id = `${item.id}:${key}`
@@ -27,6 +34,7 @@
       <b>{item.name}</b>
       <span class="muted">{formatUzs(item.unitPrice)}{item.quantity > 1 ? ` × ${item.quantity} = ${formatUzs(item.unitPrice * item.quantity)}` : ''}</span>
     </div>
+    {#if app.isOwner}<button class="icon-button" aria-label={`Изменить позицию «${item.name}»`} title="Изменить позицию" onclick={() => app.editingItem = item}>✎</button>{/if}
     {#if app.isOwner}<button class="icon-button danger" aria-label={`Удалить позицию «${item.name}»`} title="Удалить позицию" onclick={remove}>🗑</button>{/if}
   </div>
   <div class="unit-list">
@@ -58,4 +66,7 @@
       {#if app.editingUnit === `${item.id}:${key}`}<CustomShareEditor {item} {unit} />{/if}
     {/each}
   </div>
+  {#if app.isOwner && everyone.length > 1 && !sharedByAll}
+    <button class="ghost-button share-all" disabled={app.busy} title="Хлеб, чай, кальян — всё, что брали на всех" onclick={shareWithEveryone}>÷ Поровну на всех · {everyone.length}</button>
+  {/if}
 </article>

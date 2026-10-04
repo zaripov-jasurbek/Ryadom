@@ -1,7 +1,11 @@
 import { formatUzs, type ParticipantTotal } from './calculations.ts'
 
-export function summaryText(title: string, total: number, totals: ParticipantTotal[]) {
-  return [title, `Всего: ${formatUzs(total)}`, '', ...totals.map(person => `${person.name}: ${formatUzs(person.due)} · оплачено ${formatUzs(person.paid)} · осталось ${formatUzs(person.remaining)}`)].join('\n')
+/** The creator paid the restaurant, so their line says so instead of what is left to pay. */
+const paymentLine = (person: ParticipantTotal, ownerId?: string) =>
+  person.id === ownerId ? 'платил по счёту' : `оплачено ${formatUzs(person.paid)} · осталось ${formatUzs(person.remaining)}`
+
+export function summaryText(title: string, total: number, totals: ParticipantTotal[], ownerId?: string) {
+  return [title, `Всего: ${formatUzs(total)}`, '', ...totals.map(person => `${person.name}: ${formatUzs(person.due)} · ${paymentLine(person, ownerId)}`)].join('\n')
 }
 
 /** Characters that Windows, macOS or Android refuse in file names. */
@@ -27,7 +31,7 @@ function fitText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number) 
   return `${text.slice(0, end)}…`
 }
 
-export function downloadImage(title: string, total: number, totals: ParticipantTotal[]) {
+export function downloadImage(title: string, total: number, totals: ParticipantTotal[], ownerId?: string) {
   const width = 1000, height = 340 + totals.length * 78
   const scale = Math.min(3, Math.max(2, window.devicePixelRatio || 1))
   const canvas = document.createElement('canvas')
@@ -45,7 +49,7 @@ export function downloadImage(title: string, total: number, totals: ParticipantT
     const due = formatUzs(person.due)
     ctx.fillStyle = '#eef0e5'; ctx.fillText(fitText(ctx, person.name, 790 - ctx.measureText(due).width), 96, y)
     ctx.fillStyle = '#ffffff'; ctx.textAlign = 'right'; ctx.fillText(due, 902, y); ctx.textAlign = 'left'
-    ctx.fillStyle = '#bfc7b1'; ctx.font = '15px Arial'; ctx.fillText(`оплачено ${formatUzs(person.paid)} · осталось ${formatUzs(person.remaining)}`, 96, y + 26)
+    ctx.fillStyle = '#bfc7b1'; ctx.font = '15px Arial'; ctx.fillText(paymentLine(person, ownerId), 96, y + 26)
   })
   canvas.toBlob(blob => { if (blob) download(blob, `${safeFileName(title)}.png`) }, 'image/png')
 }

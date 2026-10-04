@@ -1,13 +1,14 @@
-import { assignedSubtotal, calculateTotals, type Bill, type BillItem, type CommentMessage, type Participant } from './calculations'
+import { assignedSubtotal, calculateTotals, ownerIdOf, type Bill, type BillItem, type CommentMessage, type Participant } from './calculations'
 import { errorMessage } from './errors'
 import * as local from './local'
-import { addRemoteComment, addRemoteItem, claimRemoteCheckOwner, confirmRemotePayment, createRemoteCheck, deleteRemoteCheck, deleteRemoteComment, deleteRemoteItem, ensureAnonymousSession, isRemoteCheckGone, joinRemoteCheck, loadRemoteCheck, removeRemoteParticipant, resetRemoteCustomShares, setRemoteCustomShares, submitRemotePayment, subscribeToRemoteCheck, toggleRemoteUnit, type PresenceUser, type RemoteBill, type RemoteSubscription } from './remote'
+import { addRemoteComment, addRemoteItem, updateRemoteCheck, updateRemoteItem, shareRemoteItemEqually, markRemotePayment, claimRemoteCheckOwner, confirmRemotePayment, createRemoteCheck, deleteRemoteCheck, deleteRemoteComment, deleteRemoteItem, ensureAnonymousSession, isRemoteCheckGone, joinRemoteCheck, loadRemoteCheck, removeRemoteParticipant, resetRemoteCustomShares, setRemoteCustomShares, submitRemotePayment, subscribeToRemoteCheck, toggleRemoteUnit, type PresenceUser, type RemoteBill, type RemoteSubscription } from './remote'
 import { checkPath, homePath, ownerPath, readOwnerToken, routeCheckId } from './routes'
 import { isSupabaseConfigured, preloadSupabase } from './supabase'
 
 export type Mode = 'home' | 'create' | 'join' | 'check'
 const billsKey = 'billsplit:v1'
 const personKey = (billId: string) => `billsplit:person:${billId}`
+const nameKey = 'billsplit:name'
 
 function readStorage(key: string) { try { return localStorage.getItem(key) } catch { return null } }
 function writeStorage(key: string, value: string | null) {
@@ -38,12 +39,19 @@ class AppStore {
   qrOpen = $state(false)
   paymentFor = $state<string | null>(null)
   editingUnit = $state('')
+  editingItem = $state<BillItem | null>(null)
+  checkEditOpen = $state(false)
+  itemFilter = $state<'all' | 'mine' | 'open'>('all')
+  /** The name typed last time, so the next check does not ask for it again. */
+  savedName = $state(readStorage(nameKey) ?? '')
 
   totals = $derived(this.bill ? calculateTotals(this.bill) : [])
   billTotal = $derived(this.bill ? grandTotal(this.bill) : 0)
   unassignedTotal = $derived(this.bill ? totalFood(this.bill) - assignedSubtotal(this.bill) : 0)
-  paidAll = $derived(this.totals.reduce((sum, person) => sum + person.paid, 0))
-  allConfirmed = $derived(Boolean(this.bill && this.unassignedTotal === 0 && this.bill.participants.length && this.bill.participants.every(person => person.status === 'paid')))
+  /** The creator paid the restaurant, so their own share counts as settled. */
+  ownerId = $derived(this.bill ? ownerIdOf(this.bill) : undefined)
+  paidAll = $derived(this.totals.reduce((sum, person) => sum + (person.id === this.ownerId ? person.due : person.paid), 0))
+  allConfirmed = $derived(Boolean(this.bill && this.unassignedTotal === 0 && this.bill.items.length && this.totals.every(person => person.id === this.ownerId || person.status === 'paid' || person.due === 0)))
   currentParticipant = $derived(this.bill?.participants.find(person => person.id === this.selectedPerson))
   currentTotal = $derived(this.totals.find(person => person.id === this.selectedPerson))
   participantIndex = $derived(new Map(this.bill?.participants.map((person, index) => [person.id, index]) ?? []))
@@ -56,6 +64,7 @@ class AppStore {
   personIndex = (id: string) => this.participantIndex.get(id) ?? 0
   personName = (id: string) => this.bill?.participants[this.participantIndex.get(id) ?? -1]?.name ?? 'Участник'
   dueOf = (id: string) => this.totals.find(person => person.id === id)?.due ?? 0
+  personOf = (billId: string) => readStorage(personKey(billId))
   publicLink = () => this.bill ? `${location.origin}${checkPath(this.bill.id)}` : ''
 
   init() {
@@ -77,7 +86,9 @@ class AppStore {
     this.notify(errorMessage(error, fallback))
   }
 
-  closeOverlays() { this.addItemOpen = false; this.scanOpen = false; this.qrOpen = false; this.paymentFor = null; this.editingUnit = '' }
+  closeOverlays() { this.addItemOpen = false; this.scanOpen = false; this.qrOpen = false; this.paymentFor = null; this.editingUnit = ''; this.editingItem = null; this.checkEditOpen = false }
+
+  private rememberName(name: string) { this.savedName = name; writeStorage(nameKey, name) }
 
   // ---- navigation ----
 
@@ -97,7 +108,7 @@ class AppStore {
   }
 
   private show(bill: Bill, owner: boolean) {
-    this.bill = bill; this.isOwner = owner; this.mode = 'check'; this.activeTab = 'order'
+    this.bill = bill; this.isOwner = owner; this.mode = 'check'; this.activeTab = 'order'; this.itemFilter = 'all'
     this.selectedPerson = readStorage(personKey(bill.id))
     if (bill.dbId) void this.connect(bill)
     else this.disconnect()
@@ -125,9 +136,14 @@ class AppStore {
     const id = this.bill?.id
     if (!id) return
     this.disconnect()
+    this.forgetBill(id)
+    history.pushState({}, '', homePath()); this.bill = null; this.mode = 'home'; this.notify(message)
+  }
+
+  /** Removes a check from this device's list only; it stays available to everyone else by its link. */
+  forgetBill(id: string) {
     this.bills = this.bills.filter(entry => entry.id !== id)
     writeStorage(billsKey, JSON.stringify(this.bills)); writeStorage(personKey(id), null)
-    history.pushState({}, '', homePath()); this.bill = null; this.mode = 'home'; this.notify(message)
   }
 
   // ---- realtime ----
@@ -191,17 +207,19 @@ class AppStore {
 
   // ---- create and join ----
 
-  async createBill(title: string, ownerName: string, servicePercent: number) {
+  async createBill(title: string, ownerName: string, servicePercent: number, paymentDetails: string) {
     const ownerToken = crypto.randomUUID()
     let bill: Bill
+    this.rememberName(ownerName)
     if (isSupabaseConfigured) {
       this.busy = true
       try {
-        const created = await createRemoteCheck(title, servicePercent, ownerName, ownerToken)
-        bill = { id: created.public_id, dbId: created.id, title, servicePercent, participants: [{ id: created.participant_id, name: ownerName, paid: 0, status: 'unpaid' }], items: [], createdAt: new Date().toISOString(), ownerToken }
+        const created = await createRemoteCheck(title, servicePercent, ownerName, ownerToken, paymentDetails)
+        bill = { id: created.public_id, dbId: created.id, title, servicePercent, paymentDetails: paymentDetails || undefined, ownerId: created.participant_id, participants: [{ id: created.participant_id, name: ownerName, paid: 0, status: 'unpaid' }], items: [], createdAt: new Date().toISOString(), ownerToken }
       } catch (error) { this.fail(error, 'Не удалось создать чек'); return } finally { this.busy = false }
     } else {
-      bill = { id: crypto.randomUUID(), title, servicePercent, participants: [{ id: crypto.randomUUID(), name: ownerName, paid: 0, status: 'unpaid' }], items: [], createdAt: new Date().toISOString(), ownerToken }
+      const ownerId = crypto.randomUUID()
+      bill = { id: crypto.randomUUID(), title, servicePercent, paymentDetails: paymentDetails || undefined, ownerId, participants: [{ id: ownerId, name: ownerName, paid: 0, status: 'unpaid' }], items: [], createdAt: new Date().toISOString(), ownerToken }
     }
     this.bill = bill; this.isOwner = true; this.token = ownerToken; this.mode = 'check'; this.activeTab = 'order'
     this.selectedPerson = bill.participants[0].id; writeStorage(personKey(bill.id), this.selectedPerson)
@@ -214,6 +232,7 @@ class AppStore {
   async joinSharedCheck(name: string) {
     if (!this.joinPublicId) return ''
     this.busy = true
+    this.rememberName(name)
     try {
       if (this.token) await claimRemoteCheckOwner(this.joinPublicId, this.token)
       await joinRemoteCheck(this.joinPublicId, name, crypto.randomUUID())
@@ -275,6 +294,23 @@ class AppStore {
     } catch (error) { this.fail(error, `Добавлено ${added} из ${items.length} позиций`) }
     finally { await this.refresh(); this.busy = false }
     return added
+  }
+
+  updateItem(item: BillItem, name: string, quantity: number, unitPrice: number) {
+    return this.mutate('Не удалось сохранить позицию', dbId => updateRemoteItem(dbId, item.id, name, quantity, unitPrice), bill => local.updateItem(bill, item.id, name, quantity, unitPrice), 'Позиция обновлена')
+  }
+
+  updateCheck(title: string, servicePercent: number, paymentDetails: string) {
+    return this.mutate('Не удалось сохранить чек', dbId => updateRemoteCheck(dbId, title, servicePercent, paymentDetails), bill => local.updateCheck(bill, title, servicePercent, paymentDetails), 'Чек обновлён')
+  }
+
+  shareItemEqually(item: BillItem) {
+    return this.mutate('Не удалось разделить позицию', dbId => shareRemoteItemEqually(dbId, item.id), bill => local.shareItemEqually(bill, item.id), `«${item.name}» делится на всех`)
+  }
+
+  markPayment(personId: string, paid: boolean) {
+    const due = this.dueOf(personId)
+    return this.mutate('Не удалось обновить оплату', dbId => markRemotePayment(dbId, personId, paid), bill => local.markPayment(bill, personId, paid, due), paid ? 'Оплата отмечена' : 'Отметка об оплате снята')
   }
 
   removeItem(item: BillItem) {

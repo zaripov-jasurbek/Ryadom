@@ -1,7 +1,7 @@
 <script lang="ts">
   import { app } from '../lib/store.svelte'
 
-  let name = $state('')
+  let name = $state(app.savedName)
   let error = $state('')
   const owner = $derived(Boolean(app.token))
 

@@ -2,15 +2,16 @@
   import { app } from '../lib/store.svelte'
 
   let title = $state('')
-  let ownerName = $state('')
+  let ownerName = $state(app.savedName)
   let fee = $state<number | null>(10)
+  let paymentDetails = $state('')
   // The database stores numeric(5,2) between 0 and 100; an emptied field must not become NaN totals.
   const feeValid = $derived(typeof fee === 'number' && Number.isFinite(fee) && fee >= 0 && fee <= 100)
   const ready = $derived(Boolean(title.trim() && ownerName.trim() && feeValid))
 
   function submit() {
     if (!ready || app.busy) return
-    void app.createBill(title.trim(), ownerName.trim(), Math.round(fee! * 100) / 100)
+    void app.createBill(title.trim(), ownerName.trim(), Math.round(fee! * 100) / 100, paymentDetails.trim())
   }
 </script>
 
@@ -28,6 +29,8 @@
     <div class="chip-row" role="group" aria-label="Быстрый выбор процента">
       {#each [0, 10, 12, 15] as preset (preset)}<button type="button" class="chip" class:active={fee === preset} onclick={() => fee = preset}>{preset}%</button>{/each}
     </div>
+    <label class="field"><span>Карта или телефон для перевода <span class="label-hint">по желанию</span></span><input bind:value={paymentDetails} placeholder="8600 1234 5678 9012" maxlength="64" autocomplete="off" /></label>
+    <p class="field-note">Гости увидят его в итогах и скопируют в одно касание. Срок действия карты и коды из SMS не нужны никогда.</p>
     <button class="primary-button wide" disabled={app.busy || !ready}>{app.busy ? 'Создаём…' : 'Создать чек'} <span aria-hidden="true">↗</span></button>
     <div class="privacy-note">🔒 Без регистрации. Чек доступен только по ссылке.</div>
   </form>

@@ -1,7 +1,7 @@
 // Demo-mode state changes. Each function returns a new Bill and mirrors the matching server RPC.
 import { calculateTotals, type Bill, type BillItem, type CommentMessage } from './calculations.ts'
 
-const updateItem = (bill: Bill, itemId: string, change: (item: BillItem) => BillItem): Bill =>
+const changeItem = (bill: Bill, itemId: string, change: (item: BillItem) => BillItem): Bill =>
   ({ ...bill, items: bill.items.map(item => item.id === itemId ? change(item) : item) })
 
 /** Mirrors reconcile_check_payments: reopens confirmed or submitted payments that no longer cover the participant's total. */
@@ -31,17 +31,42 @@ export function addItem(bill: Bill, name: string, quantity: number, unitPrice: n
   return reconcilePayments({ ...bill, items: [...bill.items, { id, name, quantity, unitPrice, unitSelections: {} }] })
 }
 
+/** Mirrors update_item: a new price re-splits each unit equally among the people who had it; a smaller quantity drops the last units. */
+export function updateItem(bill: Bill, itemId: string, name: string, quantity: number, unitPrice: number): Bill {
+  const kept = <T>(record: Record<string, T> | undefined) => record && Object.fromEntries(Object.entries(record).filter(([key]) => Number(key) < quantity))
+  return reconcilePayments(changeItem(bill, itemId, item => {
+    const priced = unitPrice === item.unitPrice
+    let next: BillItem = { ...item, name, quantity, unitPrice, unitIds: item.unitIds?.slice(0, quantity), unitSelections: kept(item.unitSelections) ?? {}, unitModes: kept(item.unitModes), unitCustomAmounts: kept(item.unitCustomAmounts), unitAmounts: priced ? kept(item.unitAmounts) : undefined }
+    if (!priced) for (const [key, mode] of Object.entries(next.unitModes ?? {})) if (mode === 'custom') next = withoutCustomSplit(next, key)
+    return next
+  }))
+}
+
+/** Mirrors update_check; a higher service fee can reopen payments. */
+export function updateCheck(bill: Bill, title: string, servicePercent: number, paymentDetails: string): Bill {
+  return reconcilePayments({ ...bill, title, servicePercent, paymentDetails: paymentDetails.trim() || undefined })
+}
+
+/** Mirrors share_item_equally: every unit goes to everyone in the check, replacing marks and custom splits. */
+export function shareItemEqually(bill: Bill, itemId: string): Bill {
+  const everyone = bill.participants.map(person => person.id)
+  return reconcilePayments(changeItem(bill, itemId, item => ({
+    ...item, unitModes: {}, unitCustomAmounts: {}, unitAmounts: undefined,
+    unitSelections: Object.fromEntries(Array.from({ length: item.quantity }, (_, unit) => [String(unit), everyone])),
+  })))
+}
+
 export function removeItem(bill: Bill, itemId: string): Bill {
   return reconcilePayments({ ...bill, items: bill.items.filter(item => item.id !== itemId), comments: bill.comments?.filter(comment => comment.itemId !== itemId) })
 }
 
 export function toggleUnit(bill: Bill, itemId: string, unit: number, personId: string): Bill {
-  return reconcilePayments(updateItem(bill, itemId, item => item.unitModes?.[String(unit)] === 'custom' ? item : withSelection(item, unit, personId, !(item.unitSelections[String(unit)] ?? []).includes(personId))))
+  return reconcilePayments(changeItem(bill, itemId, item => item.unitModes?.[String(unit)] === 'custom' ? item : withSelection(item, unit, personId, !(item.unitSelections[String(unit)] ?? []).includes(personId))))
 }
 
 export function setCustomShares(bill: Bill, itemId: string, unit: number, amounts: Record<string, number>): Bill {
   const key = String(unit)
-  return reconcilePayments(updateItem(bill, itemId, item => ({
+  return reconcilePayments(changeItem(bill, itemId, item => ({
     ...item,
     unitSelections: { ...item.unitSelections, [key]: bill.participants.filter(person => amounts[person.id] > 0).map(person => person.id) },
     unitModes: { ...item.unitModes, [key]: 'custom' },
@@ -50,12 +75,18 @@ export function setCustomShares(bill: Bill, itemId: string, unit: number, amount
 }
 
 export function resetCustomShares(bill: Bill, itemId: string, unit: number): Bill {
-  return reconcilePayments(updateItem(bill, itemId, item => withoutCustomSplit(item, String(unit))))
+  return reconcilePayments(changeItem(bill, itemId, item => withoutCustomSplit(item, String(unit))))
 }
 
+/** Mirrors submit_payment: the full amount, or any amount with a link, waits for the creator's confirmation. */
 export function submitPayment(bill: Bill, personId: string, amount: number, proofUrl: string | null, due: number): Bill {
   const paid = Math.min(due, Math.max(0, Math.floor(amount)))
-  return { ...bill, participants: bill.participants.map(person => person.id !== personId ? person : { ...person, paid, proofUrl: proofUrl ?? undefined, status: proofUrl ? 'proof_submitted' : paid > 0 ? 'partially_paid' : 'unpaid' }) }
+  return { ...bill, participants: bill.participants.map(person => person.id !== personId ? person : { ...person, paid, proofUrl: proofUrl ?? undefined, status: proofUrl || (paid > 0 && paid >= due) ? 'proof_submitted' : paid > 0 ? 'partially_paid' : 'unpaid' }) }
+}
+
+/** Mirrors mark_payment: the creator records the whole total as paid, or starts the payment over. */
+export function markPayment(bill: Bill, personId: string, paid: boolean, due: number): Bill {
+  return { ...bill, participants: bill.participants.map(person => person.id !== personId ? person : paid ? { ...person, paid: due, status: 'paid' } : { ...person, paid: 0, status: 'unpaid', proofUrl: undefined }) }
 }
 
 export function confirmPayment(bill: Bill, personId: string, due: number): Bill {

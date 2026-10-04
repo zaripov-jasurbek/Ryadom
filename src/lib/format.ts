@@ -13,3 +13,15 @@ export const initial = (name: string) => name.slice(0, 1).toUpperCase()
 
 export const createdDate = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long' })
 export const commentDate = new Intl.DateTimeFormat('ru-RU', { dateStyle: 'short', timeStyle: 'short' })
+
+/** A 16-digit card number reads in groups of four; anything else is shown as typed. */
+export function formatPaymentDetails(details: string) {
+  const digits = details.replace(/\s/g, '')
+  return /^\d{16}$/.test(digits) ? digits.replace(/(\d{4})(?=\d)/g, '$1 ') : details
+}
+
+/** A card or phone number, as opposed to free text such as a bank name. */
+export const isNumberLike = (details: string) => /^[\d\s()+-]+$/.test(details)
+
+/** Banking apps take a card or phone number without spaces; free text is copied as is. */
+export const paymentCopyValue = (details: string) => isNumberLike(details) ? details.replace(/[\s()-]/g, '') : details

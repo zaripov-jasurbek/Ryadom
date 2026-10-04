@@ -146,6 +146,93 @@ describe('check RPCs', () => {
     await assert.rejects(db.rpc(s.owner, 'delete_comment', { p_comment_id: commentId }), /Only the author/)
     await db.rpc(s.guest, 'delete_comment', { p_comment_id: commentId })
   })
+
+  it('edits an item: a new price re-splits each unit equally, a smaller quantity drops the last units', async () => {
+    const s = await setup(db)
+    await db.rpc(s.owner, 'set_unit_custom_shares', { p_item_unit: s.unitIds[0], p_allocations: { [s.ownerParticipant]: 5_000, [s.guestParticipant]: 15_000 } })
+    await db.rpc(s.guest, 'toggle_unit_share', { p_item_unit: s.unitIds[1], p_enabled: true })
+    await assert.rejects(db.rpc(s.guest, 'update_item', { p_check_id: s.check.id, p_item_id: s.itemId, p_name: 'Хлеб', p_quantity: 2, p_unit_price: 1 }), /Owner access required/)
+    await db.rpc(s.owner, 'update_item', { p_check_id: s.check.id, p_item_id: s.itemId, p_name: ' Лепёшка ', p_quantity: 3, p_unit_price: 30_000 })
+    const units = (await db.query<{ id: string }>('select id from public.item_units where item_id = $1 order by unit_index', [s.itemId])).rows.map(row => row.id)
+    assert.equal(units.length, 3)
+    assert.deepEqual((await shares(db, units[0])).map(row => [row.amount, row.mode]), [['15000', 'equal'], ['15000', 'equal']])
+    assert.deepEqual(await shares(db, units[1]), [{ participant_id: s.guestParticipant, amount: '30000', mode: 'equal' }])
+    assert.deepEqual(await shares(db, units[2]), [])
+    await db.rpc(s.owner, 'update_item', { p_check_id: s.check.id, p_item_id: s.itemId, p_name: 'Лепёшка', p_quantity: 1, p_unit_price: 30_000 })
+    const { rows } = await db.query<{ name: string; quantity: number; units: number }>('select name, quantity, (select count(*)::int from public.item_units where item_id = i.id) as units from public.items i where id = $1', [s.itemId])
+    assert.deepEqual(rows[0], { name: 'Лепёшка', quantity: 1, units: 1 })
+    await assert.rejects(db.rpc(s.owner, 'update_item', { p_check_id: s.check.id, p_item_id: s.itemId, p_name: '', p_quantity: 1, p_unit_price: 1 }), /Invalid item/)
+  })
+
+  it('edits the check title and service; a higher service reopens payments it no longer covers', async () => {
+    const s = await setup(db)
+    await db.rpc(s.guest, 'toggle_unit_share', { p_item_unit: s.unitIds[0], p_enabled: true })
+    await db.rpc(s.guest, 'submit_payment', { p_check_id: s.check.id, p_amount: 22_000, p_proof_url: null })
+    await db.rpc(s.owner, 'confirm_payment', { p_check_id: s.check.id, p_participant_id: s.guestParticipant })
+    await assert.rejects(db.rpc(s.guest, 'update_check', { p_check_id: s.check.id, p_title: 'Обед', p_service_percent: 0 }), /Owner access required/)
+    await assert.rejects(db.rpc(s.owner, 'update_check', { p_check_id: s.check.id, p_title: 'Обед', p_service_percent: 101 }), /Invalid check details/)
+    const status = async () => (await db.query<{ status: string }>('select status::text from public.payments where participant_id = $1', [s.guestParticipant])).rows[0].status
+    await db.rpc(s.owner, 'update_check', { p_check_id: s.check.id, p_title: ' Обед ', p_service_percent: 5 })
+    assert.equal(await status(), 'paid', 'a lower service keeps the confirmation')
+    await db.rpc(s.owner, 'update_check', { p_check_id: s.check.id, p_title: 'Обед', p_service_percent: 15 })
+    assert.equal(await status(), 'partially_paid')
+    const { rows } = await db.query<{ title: string; service_percent: string }>('select title, service_percent::text from public.checks where id = $1', [s.check.id])
+    assert.deepEqual(rows[0], { title: 'Обед', service_percent: '15.00' })
+  })
+
+  it('stores payment details for members and lets the creator change or clear them', async () => {
+    const owner = await db.newUser(), guest = await db.newUser()
+    const check = await db.rpc<Created>(owner, 'create_check', { p_title: 'Ужин', p_service_percent: 0, p_owner_name: 'Jasur', p_owner_token: token(), p_payment_details: ' 8600 1234 5678 9012 ' })
+    await db.rpc(guest, 'join_check', { p_public_id: check.public_id, p_name: 'Aziz', p_session_token: token() })
+    type Snapshot = { payment_details: string | null; owner_id: string }
+    const read = () => db.rpc<Snapshot>(guest, 'get_check', { p_public_id: check.public_id })
+    const snapshot = await read()
+    assert.equal(snapshot.payment_details, '8600 1234 5678 9012')
+    assert.equal(snapshot.owner_id, check.participant_id)
+    await assert.rejects(db.rpc(owner, 'update_check', { p_check_id: check.id, p_title: 'Ужин', p_service_percent: 0, p_payment_details: 'x'.repeat(101) }), /Invalid check details/)
+    await db.rpc(owner, 'update_check', { p_check_id: check.id, p_title: 'Ужин', p_service_percent: 0, p_payment_details: '+998 90 123 45 67' })
+    assert.equal((await read()).payment_details, '+998 90 123 45 67')
+    await db.rpc(owner, 'update_check', { p_check_id: check.id, p_title: 'Ужин', p_service_percent: 0, p_payment_details: '  ' })
+    assert.equal((await read()).payment_details, null)
+  })
+
+  it('splits an item equally among everyone, replacing earlier marks and custom splits', async () => {
+    const s = await setup(db)
+    await db.rpc(s.owner, 'set_unit_custom_shares', { p_item_unit: s.unitIds[0], p_allocations: { [s.ownerParticipant]: 20_000 } })
+    await db.rpc(s.guest, 'toggle_unit_share', { p_item_unit: s.unitIds[1], p_enabled: true })
+    await assert.rejects(db.rpc(s.guest, 'share_item_equally', { p_check_id: s.check.id, p_item_id: s.itemId }), /Owner access required/)
+    await db.rpc(s.owner, 'share_item_equally', { p_check_id: s.check.id, p_item_id: s.itemId })
+    for (const unitId of s.unitIds) assert.deepEqual((await shares(db, unitId)).map(row => [row.amount, row.mode]), [['10000', 'equal'], ['10000', 'equal']])
+    const other = await setup(db)
+    await assert.rejects(db.rpc(s.owner, 'share_item_equally', { p_check_id: s.check.id, p_item_id: other.itemId }), /Item not found/)
+  })
+
+  it('lets the creator mark anyone as paid and undo it', async () => {
+    const s = await setup(db)
+    const payment = async () => (await db.query<{ status: string; amount_paid: string }>('select status::text, amount_paid::text from public.payments where participant_id = $1', [s.guestParticipant])).rows[0]
+    await assert.rejects(db.rpc(s.owner, 'mark_payment', { p_check_id: s.check.id, p_participant_id: s.guestParticipant, p_paid: true }), /Nothing to pay yet/)
+    await db.rpc(s.guest, 'toggle_unit_share', { p_item_unit: s.unitIds[0], p_enabled: true })
+    await db.rpc(s.guest, 'submit_payment', { p_check_id: s.check.id, p_amount: 5_000, p_proof_url: null })
+    await assert.rejects(db.rpc(s.guest, 'mark_payment', { p_check_id: s.check.id, p_participant_id: s.guestParticipant, p_paid: true }), /Owner access required/)
+    await db.rpc(s.owner, 'mark_payment', { p_check_id: s.check.id, p_participant_id: s.guestParticipant, p_paid: true })
+    assert.deepEqual(await payment(), { status: 'paid', amount_paid: '22000' })
+    // The owner still cannot write an arbitrary amount directly.
+    await assert.rejects(db.as(s.owner, () => db.query('update public.payments set amount_paid = 1 where participant_id = $1', [s.guestParticipant])), /Owner may only confirm/)
+    await db.rpc(s.owner, 'mark_payment', { p_check_id: s.check.id, p_participant_id: s.guestParticipant, p_paid: false })
+    assert.deepEqual(await payment(), { status: 'unpaid', amount_paid: '0' })
+  })
+
+  it('sends a full payment for confirmation without a proof link', async () => {
+    const s = await setup(db)
+    await db.rpc(s.guest, 'toggle_unit_share', { p_item_unit: s.unitIds[0], p_enabled: true })
+    const status = async () => (await db.query<{ status: string }>('select status::text from public.payments where participant_id = $1', [s.guestParticipant])).rows[0].status
+    await db.rpc(s.guest, 'submit_payment', { p_check_id: s.check.id, p_amount: 10_000, p_proof_url: null })
+    assert.equal(await status(), 'partially_paid')
+    await db.rpc(s.guest, 'submit_payment', { p_check_id: s.check.id, p_amount: 22_000, p_proof_url: null })
+    assert.equal(await status(), 'proof_submitted')
+    await db.rpc(s.owner, 'confirm_payment', { p_check_id: s.check.id, p_participant_id: s.guestParticipant })
+    assert.equal(await status(), 'paid')
+  })
 })
 
 describe('check snapshot and broadcasts', () => {

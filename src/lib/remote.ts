@@ -33,11 +33,15 @@ async function call<K extends keyof Rpc>(fn: K, args: Rpc[K]['Args']): Promise<u
 
 type Created = { id: string; public_id: string; participant_id: string }
 
-export const createRemoteCheck = (title: string, servicePercent: number, ownerName: string, ownerToken: string) =>
-  call('create_check', { p_title: title, p_service_percent: servicePercent, p_owner_name: ownerName, p_owner_token: ownerToken }) as Promise<Created>
+export const createRemoteCheck = (title: string, servicePercent: number, ownerName: string, ownerToken: string, paymentDetails: string) =>
+  call('create_check', { p_title: title, p_service_percent: servicePercent, p_owner_name: ownerName, p_owner_token: ownerToken, p_payment_details: paymentDetails || null }) as Promise<Created>
 export const claimRemoteCheckOwner = (publicId: string, ownerToken: string) => call('claim_check_owner', { p_public_id: publicId, p_owner_token: ownerToken })
 export const joinRemoteCheck = (publicId: string, name: string, sessionToken: string) => call('join_check', { p_public_id: publicId, p_name: name, p_session_token: sessionToken }) as Promise<Created>
 export const addRemoteItem = (checkId: string, name: string, quantity: number, price: number) => call('add_item', { p_check_id: checkId, p_name: name, p_quantity: quantity, p_unit_price: price })
+export const updateRemoteItem = (checkId: string, itemId: string, name: string, quantity: number, price: number) => call('update_item', { p_check_id: checkId, p_item_id: itemId, p_name: name, p_quantity: quantity, p_unit_price: price })
+export const updateRemoteCheck = (checkId: string, title: string, servicePercent: number, paymentDetails: string) => call('update_check', { p_check_id: checkId, p_title: title, p_service_percent: servicePercent, p_payment_details: paymentDetails })
+export const shareRemoteItemEqually = (checkId: string, itemId: string) => call('share_item_equally', { p_check_id: checkId, p_item_id: itemId })
+export const markRemotePayment = (checkId: string, participantId: string, paid: boolean) => call('mark_payment', { p_check_id: checkId, p_participant_id: participantId, p_paid: paid })
 export const deleteRemoteItem = (checkId: string, itemId: string) => call('delete_item', { p_check_id: checkId, p_item_id: itemId })
 export const toggleRemoteUnit = (unitId: string, enabled: boolean) => call('toggle_unit_share', { p_item_unit: unitId, p_enabled: enabled })
 export const addRemoteComment = (checkId: string, itemId: string | null, body: string) => call('add_comment', { p_check_id: checkId, p_item_id: itemId, p_body: body })
@@ -56,7 +60,7 @@ export function isRemoteCheckGone(error: unknown) {
 }
 
 type Snapshot = {
-  id: string; public_id: string; title: string; service_percent: number; created_at: string; me: string; is_owner: boolean
+  id: string; public_id: string; title: string; service_percent: number; payment_details: string | null; created_at: string; me: string; owner_id: string | null; is_owner: boolean
   participants: { id: string; name: string; paid: number; proof_url: string | null; status: PaymentStatus }[]
   items: { id: string; name: string; quantity: number; unit_price: number; units: { id: string; shares: { participant_id: string; amount: number; mode: ShareMode }[] }[] }[]
   comments: { id: string; item_id: string | null; participant_id: string; body: string; created_at: string }[]
@@ -82,7 +86,7 @@ export async function loadRemoteCheck(publicId: string): Promise<RemoteBill> {
     return next
   })
   const comments: CommentMessage[] = row.comments.map(comment => ({ id: comment.id, itemId: comment.item_id ?? undefined, participantId: comment.participant_id, body: comment.body, createdAt: comment.created_at }))
-  return { id: row.public_id, dbId: row.id, title: row.title, servicePercent: Number(row.service_percent), participants, items, comments, createdAt: row.created_at, ownerToken: '', me: row.me, isOwner: row.is_owner }
+  return { id: row.public_id, dbId: row.id, title: row.title, servicePercent: Number(row.service_percent), paymentDetails: row.payment_details ?? undefined, ownerId: row.owner_id ?? undefined, participants, items, comments, createdAt: row.created_at, ownerToken: '', me: row.me, isOwner: row.is_owner }
 }
 
 export type PresenceUser = { participantId: string | null; name: string; activity: string }

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { formatUzs, type Participant } from '../lib/calculations'
+  import { formatUzs, hasUnassignedUnit, itemShares, type Participant } from '../lib/calculations'
   import { createdDate, initial, plural } from '../lib/format'
   import { app } from '../lib/store.svelte'
   import ItemCard from './ItemCard.svelte'
@@ -7,6 +7,11 @@
   import Comments from './Comments.svelte'
 
   const bill = $derived(app.bill!)
+  const mine = $derived(new Set(app.selectedPerson ? bill.items.filter(item => itemShares(item, bill.participants)[app.selectedPerson!] > 0).map(item => item.id) : []))
+  const open = $derived(new Set(bill.items.filter(hasUnassignedUnit).map(item => item.id)))
+  const shown = $derived(app.itemFilter === 'mine' ? bill.items.filter(item => mine.has(item.id)) : app.itemFilter === 'open' ? bill.items.filter(item => open.has(item.id)) : bill.items)
+  // Long receipts get filters; a filter picked from the warning stays visible on a short one too.
+  const showFilters = $derived(bill.items.length > 3 || app.itemFilter !== 'all')
 
   function copyLink() {
     void app.copy(app.publicLink(), bill.dbId ? 'Ссылка скопирована — гости могут открыть чек' : 'Демо-ссылка скопирована · доступна только в этом браузере')
@@ -16,6 +21,10 @@
   }
   function removeBill() {
     if (window.confirm(`Удалить чек «${bill.title}» для всех участников? Это действие нельзя отменить.`)) void app.removeBill()
+  }
+  function showUnassigned() {
+    app.activeTab = 'order'; app.itemFilter = 'open'
+    document.getElementById('panel-order')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
   function switchTab() {
     app.activeTab = app.activeTab === 'order' ? 'summary' : 'order'
@@ -28,8 +37,11 @@
     <div>
       <button class="back-link" onclick={() => app.goHome()}>← Все чеки</button>
       <div class="eyebrow check-kicker">Совместный чек <span class="live-dot" class:offline={!bill.dbId}></span> {bill.dbId ? 'обновляется в реальном времени' : 'хранится на этом устройстве'}</div>
-      <h1>{bill.title}</h1>
-      <p class="muted">Создан {createdDate.format(new Date(bill.createdAt))} · {plural(bill.participants.length, 'участник', 'участника', 'участников')} · {formatUzs(app.billTotal)}</p>
+      <div class="title-row">
+        <h1>{bill.title}</h1>
+        {#if app.isOwner}<button class="icon-button" aria-label="Изменить название и обслуживание" title="Изменить чек" onclick={() => app.checkEditOpen = true}>✎</button>{/if}
+      </div>
+      <p class="muted">Создан {createdDate.format(new Date(bill.createdAt))} · {plural(bill.participants.length, 'участник', 'участника', 'участников')} · {formatUzs(app.billTotal)}{bill.servicePercent ? ` · обслуживание ${bill.servicePercent}%` : ''}</p>
     </div>
   </div>
 
@@ -77,7 +89,7 @@
     </div>
 
     {#if app.unassignedTotal > 0}
-      <div class="notice warning"><span aria-hidden="true">◌</span><div><b>{formatUzs(app.unassignedTotal)} ещё не распределено</b><small>{app.activeTab === 'order' ? 'Отметьте, кто ел оставшиеся позиции, чтобы итог сошёлся с чеком.' : 'Распределите все позиции, прежде чем закрывать чек.'}</small></div></div>
+      <button class="notice warning" onclick={showUnassigned}><span aria-hidden="true">◌</span><div><b>{formatUzs(app.unassignedTotal)} ещё не распределено</b><small>{app.activeTab === 'order' ? 'Отметьте, кто ел оставшиеся позиции, чтобы итог сошёлся с чеком.' : 'Распределите все позиции, прежде чем закрывать чек.'}</small></div><span class="notice-action">Показать →</span></button>
     {/if}
 
     {#if app.activeTab === 'order'}
@@ -91,8 +103,20 @@
             </div>
           {/if}
         </div>
+        {#if showFilters}
+          <div class="chip-row item-filter" role="group" aria-label="Какие позиции показать">
+            <button class="chip" class:active={app.itemFilter === 'all'} aria-pressed={app.itemFilter === 'all'} onclick={() => app.itemFilter = 'all'}>Все <span class="chip-count">{bill.items.length}</span></button>
+            {#if app.selectedPerson}<button class="chip" class:active={app.itemFilter === 'mine'} aria-pressed={app.itemFilter === 'mine'} onclick={() => app.itemFilter = 'mine'}>Мои <span class="chip-count">{mine.size}</span></button>{/if}
+            <button class="chip" class:active={app.itemFilter === 'open'} aria-pressed={app.itemFilter === 'open'} onclick={() => app.itemFilter = 'open'}>Не распределено <span class="chip-count">{open.size}</span></button>
+          </div>
+        {/if}
         <div class="item-list">
-          {#each bill.items as item (item.id)}<ItemCard {item} />{/each}
+          {#each shown as item (item.id)}<ItemCard {item} />{:else}
+            <div class="filter-empty">
+              <p>{app.itemFilter === 'open' ? '✓ Все позиции распределены' : 'Вы пока ничего не отметили'}</p>
+              <button class="ghost-button" onclick={() => app.itemFilter = 'all'}>Показать все позиции</button>
+            </div>
+          {/each}
         </div>
         {#if app.isOwner}<button class="add-more" onclick={() => app.addItemOpen = true}>＋ Добавить ещё позицию</button>{/if}
       </div>
