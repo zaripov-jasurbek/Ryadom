@@ -34,9 +34,8 @@
   --inset-sm: inset 2px 2px 5px var(--sd), inset -2px -2px 5px var(--sl);
   --inset: inset 4px 4px 9px var(--sd), inset -4px -4px 9px var(--sl);
   --focus: 0 0 0 3px color-mix(in srgb, var(--brand) 45%, transparent);
-  /* "Это моё": a hint of the brand colour over the page and a thin ring, so it reads in both themes without muddying the card. */
-  --mine-tint: color-mix(in srgb, var(--brand) 6%, var(--bg));
-  --mine-ring: color-mix(in srgb, var(--brand) 55%, var(--bg));
+  /* "Это моё": a surface of its own per theme, a soft sage close to the page so the raised shadows still fit. */
+  --mine-bg: #dfe9d0;
   --radius: 18px;
   --radius-sm: 12px;
   --serif: Georgia, 'Times New Roman', serif;
@@ -53,6 +52,7 @@
     --tone-0: #5a4636; --tone-0-ink: #f2d7bf; --tone-1: #435032; --tone-1-ink: #dce9bd;
     --tone-2: #4a4059; --tone-2-ink: #e4d8f2; --tone-3: #5a4038; --tone-3-ink: #f4d6ca;
     --tone-4: #35504d; --tone-4-ink: #cfeae6;
+    --mine-bg: #30382d;
   }
 }
 :root[data-theme="dark"] {
@@ -65,6 +65,7 @@
   --tone-0: #5a4636; --tone-0-ink: #f2d7bf; --tone-1: #435032; --tone-1-ink: #dce9bd;
   --tone-2: #4a4059; --tone-2-ink: #e4d8f2; --tone-3: #5a4038; --tone-3-ink: #f4d6ca;
   --tone-4: #35504d; --tone-4-ink: #cfeae6;
+  --mine-bg: #30382d;
 }
 
 /* ─── Base ─────────────────────────────────────────────────── */
@@ -305,7 +306,8 @@ button.notice:active { transform: translateY(1px); }
 .item-card.single .item-menu { grid-area: menu; align-self: center; }
 .item-card.single .item-menu .icon-button { width: 32px; height: 38px; border-radius: 10px; }
 .item-action { grid-area: action; align-self: center; }
-.item-card.unit-mine { background: var(--mine-tint); box-shadow: var(--raise), inset 0 0 0 2px var(--mine-ring); }
+/* The marked card becomes its own surface: everything inside that paints the page colour follows it. */
+.item-card.unit-mine { --bg: var(--mine-bg); background: var(--bg); }
 .item-menu { position: relative; }
 .menu-popover { position: absolute; z-index: 4; right: 0; top: calc(100% + 8px); min-width: 210px; display: grid; gap: 2px; padding: 6px; border-radius: 14px; background: var(--bg); box-shadow: var(--raise-lg); animation: fade .12s ease-out; }
 .menu-popover button { display: flex; align-items: center; gap: 10px; min-height: 42px; padding: 0 12px; border: 0; border-radius: 10px; background: transparent; font-size: 14px; font-weight: 550; color: var(--ink-soft); text-align: left; white-space: nowrap; }
@@ -313,7 +315,7 @@ button.notice:active { transform: translateY(1px); }
 .menu-popover button.danger { color: var(--danger); }
 .unit-list { display: grid; gap: 10px; }
 .unit-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 12px; border-radius: 14px; box-shadow: var(--inset-sm); transition: background-color .2s; }
-.unit-row.unit-mine { background: var(--mine-tint); box-shadow: var(--inset-sm), inset 0 0 0 1.5px var(--mine-ring); }
+.unit-row.unit-mine { --bg: var(--mine-bg); background: var(--bg); }
 .unit-label { font-size: 12px; font-weight: 700; color: var(--muted); min-width: 26px; }
 .unit-consumers { flex: 1; min-width: 150px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .consumer-pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px 3px 3px; border-radius: 999px; font-size: 13px; background: var(--bg); box-shadow: var(--raise-sm); }
@@ -337,7 +339,7 @@ button.notice:active { transform: translateY(1px); }
 .danger-button.confirm-danger { background: var(--danger-bg); }
 .portion-summary { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 12px; border-radius: 14px; box-shadow: var(--inset-sm); transition: background-color .2s; }
 .portion-summary .unit-consumers { min-width: 0; }
-.portion-summary.unit-mine { background: var(--mine-tint); box-shadow: var(--inset-sm), inset 0 0 0 1.5px var(--mine-ring); }
+.portion-summary.unit-mine { --bg: var(--mine-bg); background: var(--bg); }
 .portion-stepper { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; padding: 4px; border-radius: 13px; background: var(--bg); box-shadow: var(--raise-sm); }
 .portion-stepper button { width: 38px; height: 38px; border: 0; border-radius: 10px; background: transparent; font-size: 20px; font-weight: 600; color: var(--ink-soft); }
 .portion-stepper button:not(:disabled):active { box-shadow: var(--inset-sm); }
