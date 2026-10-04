@@ -58,7 +58,7 @@
   {/if}
 
   <!-- One block for the whole table: how much is paid overall, then each person with their own progress. -->
-  <div class="panel summary-card" class:settled={app.isOwner && app.allConfirmed}>
+  <div class="panel summary-card">
     <div class="summary-title">
       <div>
         <span class="eyebrow">Оплаты</span>

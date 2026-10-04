@@ -353,8 +353,7 @@ button.notice:active { transform: translateY(1px); }
 .editor-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 
 /* ─── Summary ──────────────────────────────────────────────── */
-.summary-card { padding: 22px; display: grid; gap: 10px; }
-.summary-card.settled { background: var(--ok-bg); }
+.summary-card { position: relative; padding: 22px; display: grid; gap: 10px; }
 .summary-paid { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); margin-bottom: 4px; }
 .person-progress { width: 100%; padding-left: 44px; display: grid; gap: 4px; }
 .person-progress small { font-size: 12px; color: var(--muted); }
@@ -367,9 +366,8 @@ button.notice:active { transform: translateY(1px); }
 .summary-grand { text-align: right; display: grid; }
 .summary-grand small { font-size: 12px; color: var(--muted); }
 .summary-grand b { font-size: 20px; }
-.summary-person { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 14px 10px; border-top: 1px solid var(--line); }
-.summary-person.is-me { border-radius: 14px; border-color: transparent; box-shadow: var(--inset-sm); margin: 4px 0; }
-.summary-person.is-me + .summary-person { border-top-color: transparent; }
+.summary-person { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 14px 10px; border-top: 1px solid var(--line); }
+
 .summary-person-name { flex: 1; min-width: 0; display: grid; gap: 2px; }
 .summary-person-name b { font-size: 15px; }
 .summary-person-name small, .summary-person-total small { font-size: 12px; color: var(--muted); }
@@ -398,8 +396,7 @@ button.notice:active { transform: translateY(1px); }
 .pay-text b { font-size: 17px; letter-spacing: .02em; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
 .pay-text b.card-number { white-space: nowrap; }
 .added-note { margin-top: 10px; padding: 10px 14px; border-radius: var(--radius-sm); background: var(--ok-bg); color: var(--ok); font-size: 13px; font-weight: 600; }
-.my-pay-card { padding: 20px; display: grid; gap: 14px; }
-.my-pay-card.settled { background: var(--ok-bg); }
+.my-pay-card { position: relative; padding: 20px; display: grid; gap: 14px; }
 .my-pay-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .my-pay-head > div { display: grid; gap: 4px; }
 .my-pay-amount { font: 500 30px/1.15 var(--serif); letter-spacing: -.02em; }
@@ -408,8 +405,12 @@ button.notice:active { transform: translateY(1px); }
 .my-pay-card .pay-part { justify-self: center; margin-top: -6px; }
 .progress-track { height: 12px; border-radius: 999px; box-shadow: var(--inset-sm); overflow: hidden; padding: 2px; }
 .progress-track i { display: block; height: 100%; border-radius: 999px; background: var(--accent); transition: width .4s; }
-.export-card { padding: 18px 20px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px; }
-.export-card.all-paid { background: var(--ok-bg); }
+.export-card { position: relative; padding: 18px 20px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px; }
+/* The payment tab speaks the same way as the dishes: no coloured fills, a stripe at the left edge.
+   Brand green marks your own row, the calmer "paid" green marks what is settled. */
+.summary-person.is-me::before, .my-pay-card.settled::before, .export-card.all-paid::before { content: ""; position: absolute; left: 0; top: 14px; bottom: 14px; width: 4px; border-radius: 0 4px 4px 0; background: var(--brand); }
+.summary-person.is-me::before { left: -22px; top: 12px; bottom: 12px; }
+.my-pay-card.settled::before, .export-card.all-paid::before { background: var(--ok); }
 .export-text { display: flex; align-items: center; gap: 12px; }
 .export-text > div { display: grid; gap: 2px; }
 .export-text b { font-size: 15px; }
@@ -551,6 +552,7 @@ body:has(.comment-form textarea:focus) .tab-bar { display: none; }
   .editor-row .suffix-input { width: 150px; }
   .summary-card { padding: 18px 16px; }
   .summary-person { padding: 12px 6px; }
+  .summary-person.is-me::before { left: -16px; }
   .person-items, .person-progress { padding-left: 0; }
   .export-card .chip-row { width: 100%; display: grid; grid-template-columns: 1fr 1fr; }
   .modal-backdrop { place-items: end center; padding: 0; }
