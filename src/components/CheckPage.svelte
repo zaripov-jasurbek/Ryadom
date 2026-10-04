@@ -6,6 +6,7 @@
   import ItemCard from './ItemCard.svelte'
   import SummaryPanel from './SummaryPanel.svelte'
   import Comments from './Comments.svelte'
+  import Amount from './Amount.svelte'
 
   const bill = $derived(app.bill!)
   const mine = $derived(new Set(app.selectedPerson ? bill.items.filter(item => itemShares(item, bill.participants)[app.selectedPerson!] > 0).map(item => item.id) : []))
@@ -18,10 +19,10 @@
   const sticky = $derived.by(() => {
     const me = app.currentTotal
     if (!me) return null
-    if (me.id === app.ownerId || !me.due) return { label: 'Ваша часть', value: formatUzs(me.due) }
-    if (me.status === 'paid') return { label: 'Оплата', value: '✓ Рассчитались' }
-    if (me.paid > 0 && me.remaining > 0) return { label: 'Осталось отдать', value: formatUzs(me.remaining) }
-    return { label: 'Ваша часть', value: formatUzs(me.due) }
+    if (me.id === app.ownerId || !me.due) return { label: 'Ваша часть', amount: me.due }
+    if (me.status === 'paid') return { label: 'Оплата', text: '✓ Рассчитались' }
+    if (me.paid > 0 && me.remaining > 0) return { label: 'Осталось отдать', amount: me.remaining }
+    return { label: 'Ваша часть', amount: me.due }
   })
   // Payments the creator still has to look at, shown on the summary tab.
   const toConfirm = $derived(app.isOwner ? app.totals.filter(person => person.id !== app.ownerId && person.status === 'proof_submitted').length : 0)
@@ -165,7 +166,7 @@
 
   {#if bill.items.length && app.currentParticipant}
     <div class="sticky-total">
-      <div><small>{sticky?.label}</small><b>{sticky?.value}</b></div>
+      <div><small>{sticky?.label}</small><b>{#if sticky?.text}{sticky.text}{:else}<Amount value={sticky?.amount ?? 0} />{/if}</b></div>
       <button class="accent-button" onclick={switchTab}>{app.activeTab === 'order' ? 'Итоги и оплата →' : '← К позициям'}</button>
     </div>
   {/if}

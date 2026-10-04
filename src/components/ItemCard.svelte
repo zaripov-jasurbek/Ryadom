@@ -28,6 +28,15 @@
   const giveBack = $derived(myUnits.filter(unit => !isCustom(unit)).sort((a, b) => consumers(a).length - consumers(b).length || b - a)[0])
   const tally = $derived(everyone.map(person => ({ person, count: units.filter(unit => consumers(unit).some(entry => entry.id === person.id)).length })).filter(entry => entry.count))
 
+  // Which control was just tapped: only that one answers with motion, not everything already marked on load.
+  let tapped = $state('')
+  let tapTimer: ReturnType<typeof setTimeout> | undefined
+  function tap(control: string, unit: number) {
+    tapped = control
+    clearTimeout(tapTimer); tapTimer = setTimeout(() => tapped = '', 320)
+    void app.toggleUnit(item, unit)
+  }
+
   function toggleUnits() {
     if (!showUnits) { expanded = true; return }
     expanded = false
@@ -85,9 +94,9 @@
       </div>
       {#if me}
         <div class="portion-stepper" role="group" aria-label={`Ваши порции: ${item.name}`}>
-          <button type="button" aria-label="Убрать одну порцию" disabled={giveBack === undefined} onclick={() => app.toggleUnit(item, giveBack!)}>−</button>
-          <span aria-live="polite"><b>{myUnits.length}</b> из {item.quantity}</span>
-          <button type="button" aria-label="Взять ещё порцию" title={nextFree === undefined ? 'Свободных порций нет — поделить порцию можно в списке по порциям' : ''} disabled={nextFree === undefined} onclick={() => app.toggleUnit(item, nextFree!)}>+</button>
+          <button type="button" aria-label="Убрать одну порцию" disabled={giveBack === undefined} onclick={() => tap('stepper', giveBack!)}>−</button>
+          <span aria-live="polite">{#key myUnits.length}<b class:bump={tapped === 'stepper'}>{myUnits.length}</b>{/key} из {item.quantity}</span>
+          <button type="button" aria-label="Взять ещё порцию" title={nextFree === undefined ? 'Свободных порций нет — поделить порцию можно в списке по порциям' : ''} disabled={nextFree === undefined} onclick={() => tap('stepper', nextFree!)}>+</button>
         </div>
       {/if}
     </div>
@@ -115,7 +124,7 @@
           {#if custom}
             <span class="unit-note">Доли вручную</span>
           {:else if app.selectedPerson}
-            <button class="mine-toggle" class:active={mine} aria-pressed={mine} aria-busy={pending} disabled={pending} onclick={() => app.toggleUnit(item, unit)}>{mine ? '✓ Моё' : 'Это моё'}</button>
+            <button class="mine-toggle" class:active={mine} class:pop={tapped === `unit:${unit}`} aria-pressed={mine} aria-busy={pending} disabled={pending} onclick={() => tap(`unit:${unit}`, unit)}>{mine ? '✓ Моё' : 'Это моё'}</button>
           {/if}
           {#if app.isOwner}<button class="ghost-button" aria-expanded={app.editingUnit === `${item.id}:${key}`} onclick={() => toggleEditor(key)}>Доли</button>{/if}
         </div>

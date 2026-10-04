@@ -5,6 +5,7 @@
   import { expiresAt } from '../lib/limits'
   import { app } from '../lib/store.svelte'
   import PaymentDetails from './PaymentDetails.svelte'
+  import Amount from './Amount.svelte'
 
   const bill = $derived(app.bill!)
   const paidPercent = $derived(app.billTotal ? Math.min(100, app.paidAll / app.billTotal * 100) : 0)
@@ -33,7 +34,7 @@
   {#if mine}
     <div class="panel my-pay-card" class:settled={mine.status === 'paid'}>
       <div class="my-pay-head">
-        <div><span class="eyebrow">Ваша часть</span><b class="my-pay-amount">{formatUzs(mine.due)}</b></div>
+        <div><span class="eyebrow">Ваша часть</span><b class="my-pay-amount"><Amount value={mine.due} /></b></div>
         {#if mine.due}<span class="status-badge status-{mine.status}">{statusLabels[mine.status]}</span>{/if}
       </div>
       <p class="my-pay-note">{myNote}</p>
@@ -45,7 +46,7 @@
   {:else if app.isOwner}
     <div class="panel my-pay-card" class:settled={app.allConfirmed}>
       <div class="my-pay-head">
-        <div><span class="eyebrow">{owed ? 'Вам должны' : 'Оплаты'}</span><b class="my-pay-amount">{owed ? formatUzs(owed) : app.allConfirmed ? '✓ Все рассчитались' : 'Пока никто не должен'}</b></div>
+        <div><span class="eyebrow">{owed ? 'Вам должны' : 'Оплаты'}</span><b class="my-pay-amount">{#if owed}<Amount value={owed} />{:else}{app.allConfirmed ? '✓ Все рассчитались' : 'Пока никто не должен'}{/if}</b></div>
         {#if toConfirm}<span class="status-badge status-proof_submitted">{plural(toConfirm, 'ждёт', 'ждут', 'ждут')} проверки</span>{/if}
       </div>
       <div class="progress-track" role="progressbar" aria-label="Уже оплачено" aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(paidPercent)}><i style={`width:${paidPercent}%`}></i></div>
@@ -54,7 +55,7 @@
   {/if}
 
   <div class="panel summary-card">
-    <div class="summary-title"><div><span class="eyebrow">Кто сколько должен</span><h2>Итоги</h2></div><div class="summary-grand"><small>Общий счёт</small><b>{formatUzs(app.billTotal)}</b></div></div>
+    <div class="summary-title"><div><span class="eyebrow">Кто сколько должен</span><h2>Итоги</h2></div><div class="summary-grand"><small>Общий счёт</small><b><Amount value={app.billTotal} /></b></div></div>
     {#each app.totals as person (person.id)}
       {@const lines = personItems(bill, person.id)}
       {@const payer = person.id === app.ownerId}
