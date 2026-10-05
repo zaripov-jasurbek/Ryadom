@@ -76,6 +76,10 @@ describe('error messages', () => {
     assert.equal(errorMessage(new TypeError('Failed to fetch'), 'x'), 'Нет интернета — проверьте подключение и попробуйте ещё раз')
     assert.equal(errorMessage(new Error('something odd'), 'Не удалось'), 'Не удалось')
   })
+  it('says the server did not answer when a request times out', () => {
+    for (const error of [{ message: 'TimeoutError: Request timed out' }, new Error('Request timed out'), { message: 'AbortError: Fetch is aborted' }])
+      assert.equal(errorMessage(error, 'x'), 'Сервер не ответил — попробуйте ещё раз')
+  })
   it('never shows a guest the names of the services behind the app', () => {
     for (const message of ['Supabase is not configured. Add VITE_SUPABASE_URL', 'Anonymous sign-ins are disabled'])
       assert.doesNotMatch(errorMessage(new Error(message), 'x'), /supabase|анонимн/i)

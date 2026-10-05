@@ -31,16 +31,25 @@ self.addEventListener('fetch', event => {
   if (request.method !== 'GET') return
   const url = new URL(request.url)
   if (url.origin !== scope.origin || !url.pathname.startsWith(scope.pathname)) return
-  if (request.mode === 'navigate') event.respondWith(page(request))
+  if (request.mode === 'navigate') event.respondWith(page(request, event))
   else if (isCachedAsset(url.pathname.slice(scope.pathname.length))) event.respondWith(asset(request))
 })
 
-async function page(request) {
-  try {
-    const response = await fetch(request)
+// On a weak network the page would stay blank until the request gives up; the saved shell opens the app instead.
+const PAGE_TIMEOUT_MS = 3000
+
+async function page(request, event) {
+  const network = fetch(request).then(async response => {
     // GitHub Pages answers /check/<id> with 404.html, the same app; only real 200 pages refresh the shell.
     if (response.ok && response.headers.get('content-type')?.includes('text/html')) await (await caches.open(SHELL)).put(shellUrl, response.clone())
     return response
+  })
+  // The network answer still refreshes the shell for the next visit after the saved one was shown.
+  event.waitUntil(network.catch(() => {}))
+  try {
+    const answered = await Promise.race([network, new Promise(resolve => setTimeout(resolve, PAGE_TIMEOUT_MS))])
+    if (answered) return answered
+    return await caches.match(shellUrl, { ignoreVary: true }) ?? await network
   } catch (error) {
     const cached = await caches.match(shellUrl, { ignoreVary: true })
     if (cached) return cached

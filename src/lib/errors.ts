@@ -26,6 +26,8 @@ const messages: [RegExp, string][] = [
   [/Invalid comment/, 'Комментарий пустой или слишком длинный'],
   [/Invalid title or participant name|Invalid participant session/, 'Проверьте название и имя'],
   [/Anonymous sign-ins are disabled/i, 'Сервис временно недоступен — попробуйте позже'],
+  // A request past the timeout in supabase.ts; older Safari reports it as a plain abort.
+  [/TimeoutError|timed out|AbortError|aborted/i, 'Сервер не ответил — попробуйте ещё раз'],
   [/Failed to fetch|NetworkError|Load failed|fetch failed/i, 'Нет интернета — проверьте подключение и попробуйте ещё раз'],
   [/Supabase is not configured/, 'Сервис временно недоступен — попробуйте позже'],
 ]
