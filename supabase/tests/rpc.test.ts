@@ -19,7 +19,7 @@ async function shares(db: Db, unitId: string) {
 }
 
 async function canRead(db: Db, userId: string, checkId: string) {
-  return db.as(userId, async () => (await db.query('select id from public.checks where id = $1', [checkId])).rows.length === 1)
+  return db.as(userId, async () => (await db.query<{ member: boolean }>('select public.is_check_member($1) as member', [checkId])).rows[0].member)
 }
 
 describe('upgrade to participant devices', () => {
@@ -272,6 +272,36 @@ describe('limits and expiry', () => {
     await assert.rejects(db.rpc(s.owner, 'add_comment', { p_check_id: s.check.id, p_item_id: null, p_body: 'Ещё' }), /Comment limit reached/)
   })
 
+  it('keeps at most 100 items per check', async () => {
+    const s = await setup(db)
+    for (let i = 1; i < 100; i++) await db.rpc(s.owner, 'add_item', { p_check_id: s.check.id, p_name: `#${i}`, p_quantity: 1, p_unit_price: 1_000 })
+    await assert.rejects(db.rpc(s.owner, 'add_item', { p_check_id: s.check.id, p_name: 'Ещё', p_quantity: 1, p_unit_price: 1_000 }), /Item limit reached/)
+  })
+
+  it('keeps at most 1000 portions per check, also when an item grows', async () => {
+    const s = await setup(db)
+    const tea = await db.rpc<string>(s.owner, 'add_item', { p_check_id: s.check.id, p_name: 'Чай', p_quantity: 998, p_unit_price: 1_000 })
+    await assert.rejects(db.rpc(s.owner, 'add_item', { p_check_id: s.check.id, p_name: 'Ещё', p_quantity: 1, p_unit_price: 1_000 }), /Portion limit reached/)
+    await assert.rejects(db.rpc(s.owner, 'update_item', { p_check_id: s.check.id, p_item_id: s.itemId, p_name: 'Хлеб', p_quantity: 3, p_unit_price: 20_000 }), /Portion limit reached/)
+    await db.rpc(s.owner, 'update_item', { p_check_id: s.check.id, p_item_id: tea, p_name: 'Чай', p_quantity: 990, p_unit_price: 1_000 })
+    await db.rpc(s.owner, 'update_item', { p_check_id: s.check.id, p_item_id: s.itemId, p_name: 'Хлеб', p_quantity: 10, p_unit_price: 20_000 })
+  })
+
+  it('lets one account create at most 20 checks a day', async () => {
+    const owner = await db.newUser()
+    const create = () => db.rpc(owner, 'create_check', { p_title: 'Ужин', p_service_percent: 0, p_owner_name: 'Jasur', p_owner_token: token() })
+    for (let i = 0; i < 20; i++) await create()
+    await assert.rejects(create(), /Check limit reached/)
+    await db.query("update public.checks c set created_at = now() - interval '1 day 1 minute' from public.participant_devices d where d.participant_id = c.owner_participant_id and d.user_id = $1", [owner])
+    await create()
+  })
+
+  it('gives clients no direct access to the tables', async () => {
+    const s = await setup(db)
+    await assert.rejects(db.as(s.guest, () => db.query('select owner_token_hash from public.checks where id = $1', [s.check.id])), /permission denied/)
+    await assert.rejects(db.as(s.guest, () => db.query('select session_token_hash from public.participants where check_id = $1', [s.check.id])), /permission denied/)
+  })
+
   it('hides a check after 3 days and deletes it when the next check is created', async () => {
     const s = await setup(db)
     await db.query("update public.checks set created_at = now() - interval '3 days 1 minute' where id = $1", [s.check.id])
@@ -389,6 +419,25 @@ describe('check snapshot and broadcasts', () => {
     assert.equal(sent.length, 3)
     assert.ok(sent.every(m => m.topic === `check:${s.check.public_id}`))
     assert.deepEqual(sent.map(m => m.payload.by), [s.owner, s.guest, s.owner])
+  })
+
+  it('lets members read and track presence on their check channel but not broadcast', async () => {
+    const s = await setup(db)
+    const topic = `check:${s.check.public_id}`
+    const onChannel = <T>(userId: string, fn: () => Promise<T>) => db.as(userId, async () => {
+      await db.query("select set_config('realtime.topic', $1, false)", [topic])
+      return fn()
+    })
+    const send = (userId: string, extension: string) => onChannel(userId, () =>
+      db.query("insert into realtime.messages(topic, extension, event, payload, private) values ($1, $2, 'changed', '{}', true)", [topic, extension]))
+    const visible = async (userId: string) => (await onChannel(userId, () => db.query('select 1 from realtime.messages where topic = $1', [topic]))).rows.length
+    await clearMessages()
+    await db.rpc(s.owner, 'add_comment', { p_check_id: s.check.id, p_item_id: null, p_body: 'Привет' })
+    assert.equal(await visible(s.guest), 1)
+    assert.equal(await visible(await db.newUser()), 0)
+    await send(s.guest, 'presence')
+    await assert.rejects(send(s.guest, 'broadcast'), /row-level security/)
+    await assert.rejects(send(await db.newUser(), 'presence'), /row-level security/)
   })
 
   it('announces deletions of comments, participants and the check itself', async () => {

@@ -18,13 +18,14 @@ const platformStubs = `
   create extension pgcrypto with schema extensions;
   grant usage on schema extensions to anon, authenticated;
   create schema realtime;
-  create table realtime.messages (id bigint generated always as identity primary key, topic text not null, event text, payload jsonb, private boolean);
+  create table realtime.messages (id bigint generated always as identity primary key, topic text not null, extension text not null default 'broadcast', event text, payload jsonb, private boolean);
   create function realtime.topic() returns text language sql stable as $$ select current_setting('realtime.topic', true) $$;
   create function realtime.send(payload jsonb, event text, topic text, private boolean default true) returns void language sql as $$
     insert into realtime.messages(topic, event, payload, private) values (topic, event, payload, private)
   $$;
   alter table realtime.messages enable row level security;
   grant usage on schema realtime to authenticated;
+  grant select, insert on realtime.messages to authenticated;
   create publication supabase_realtime;
 `
 
