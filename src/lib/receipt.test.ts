@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { parseAmount, parseReceipt } from './receipt.ts'
+import { bestReading, isComplete, parseAmount, parseReceipt } from './receipt.ts'
 
 describe('receipt amounts', () => {
   it('reads thousands separators and drops tiyin', () => {
@@ -225,5 +225,221 @@ BANAN
   it('leaves rows checked when the total cannot tell which one is extra', () => {
     const { items } = parseReceipt(`Чай 1 5 000\nЧай 1 5 000\nСамса 1 6 000\nИтого: 11 000`)
     assert.ok(items.every(entry => !entry.unsure))
+  })
+})
+
+// Readings of restaurant bills, a shop app and a fiscal receipt by the current OCR: tabs mark wide gaps between columns.
+const restaurant = `olo Hovuz -———- Bolo Hovuz
+g\tИНН
+:\tГОСТЕВОЙ СЧЕТ
+@\t‚ал:\tТерасса\tСтол; 20
+B\t16.09.2026 12:44\tЗаказ № 54
+a\t('фициант: МИРШОД
+@ — Наименование\tКол-во\tСумма
+Ш — Чай чёрный с лимоном\t1\t15 000
+E\txneb ЛЕПЕШКА\t2\t16 000
+B\tUyn БАЛАЗА\t1\t42 000
+G\tЧЕБУРЕК ГОВЯЖИЙ 4 шт\t1\t35 000
+(ЛОТ САМСА С МЯСОМ\t2\t28 000
+| ИЖДУВОН ЖИЗ С КАРТОФЕЛЕ\t1\t105 000
+B\tМИ ЛУКОМ порц (250гр)
+(Ш САМАРКАНД\t1\t55 000
+(Ш ПОСУДА\t1\t2 000
+Ш\t— АЧИЧУК\t1\t25 000
+5\t1\t2 000
+Полная сумма:\t325 000
+Надбавка "15%" (+15%):\t+48 750
+ИТОГО К ОПЛАТЕ:\t373 750
+СПАСИБО! ЖДЕМ ВАС СНОВА!`
+
+const brasserie = `Ш\tPASTRIE & САЕЕ —
+MINOR
+ara;\t08.09.2026 14:31
+Офищиант:\tХасан
+Счет №:\tАб8
+Стол №:\t31, Дополнительный
+Кол-во гостей:\t2
+Наименование\tКол-во\tСумма
+Самса
+Самса Слоеная с Ma\t2\t22 000
+сом
+Кальяны
+Кальян до 17:00\tab\t99 000
+Кухня
+Куриная грудка в г\t1\t75 000
+рибном соусе
+*Чикен карри Brass\t2\t120 000
+'Бефстроганов Вхаз\tШ\t85 000
+Сумма:\t401-000
+Обслуживание : 16%\t64 160
+Скидка: 10%\t40 100
+425 060`
+
+const korzinka = `16:04\t18
+м — Готово
+SAVDO СНЕК! № 160\t05/10/2026 15:22:15
+ED 1из 2\tto'r
+1. Huzurb.obaki Halls asl 33g
+2donat4 990,00 = 9 980,00
+Освеж. леденцы Halls оригинальный ЗЗг
+Shu jumladan QQS 12%: 1 069,29
+Sh.k./MXIK 7622202051234/01704001016135014
+2. Ichimlik energ.Gorilla t/i
+450ml
+11 990,00
+Напиток энергетик Gorilla ж/б 450mn
+Shu jumladan QQS 12%: 1 284,64
+Sh.k./MXIK 4870022003305/02202003001006014
+3. Ener.ichim.Adrenaline mango
+t/i 449ml
+15 990,00
+с вк.манго ж/б 449мл
+Shu jumladan QQS 12%: 1 713,21
+Sh.k./MXIK 4780022622270/02202003001091001
+MK\t01047800226222702171d9XCj;C9"jf
+TO'LOV UCHUN:\t37 960,00
+Shu jumladan QQS\t4 067,14
+To'landi (Korzinka):\t37 960,00
+С\t©!`
+
+const fiscalFirst = `STIR: 312534214\tС-№: 68891
+Chek №:\t49428\t05 10.2026\tA
+KASSA:\tKassa-1\t16:37\t3
+Sotuvchi: Narimov To'lagan\ti
+Samsa\tA\t1*5,000=5,000
+sh.j qqs 0%\t9\t3
+Sh.k / SKU\t110244
+MXIK\t02106999999000000
+Qadaq kadi\t1632942
+Шакар кушилмаган\t1*12,000=12,000\t|
+сакич Cools Пластинка
+формадаги сакич ялпиз
+таъмли, Пластик\t;
+футляр 95 г.\ti
+sh.j 995 0%\t0\t:
+Sh.k / SKU\t4780050330017 /
+MXIK\t02106999018019002
+Qadaq kadi\t1329158
+Печенье Юбилейное\t1*8,000=8,000
+традиционное 112гр
+sh.j aqs 0%\t0
+Sh.k / SKU\t7622210457554 / 13106
+:\tMXIK\t02106999999000000
+Qadaoq kadi\t1514409
+Кефир Доброе Био\t1*17,000=17,000
+g\tКефир 1% 1000 гр
+sh.j 995 0%\t0
+Et\tSh.k / SKU\t4780104700797 / 10505
+bi\tMXIK\tP2106999999000000
+3\tQadaq Кой\t1514409
+ЗАМ!\t42,000
+g\tSHU JUMLADAN QQS\t0
+Naad\t42,000
+Bank kartasi turi\tShaxsiy
+я\tJO'LANDI:\t42,000
+р\tел\tГВ: 344038933636
+@\t"Л\tVersiya: 0.2
+bi\t"
+||\tЧ
+| |
+в\tU
+Г] I\tве\tГ)
+=”\to
+ОР
+|`
+
+const fiscalSecond = `С-№: 68891
+05.10.2026
+16:37
+STIR: 312534214
+Chek №:\t49428
+KASSA:\tКа$$а-1
+Sotuvchi: Narimov To'lagan
+-
+.„ -\t*
+„
+sh.j qqs 0%
+Sh к / SKU\t110244
+MXIK\t02106999999000000
+Qadaq kadi\t1632942
+Шакар кушилмаган\t1*12,000=12,000
+сакич Соо!$ Пластинка
+формадаги сакич ялпиз
+таъмли, Пластик
+футляр 95 г.
+sh.j 995 0%\t0
+Sh.k / SKU\t4 78005033001 7 / 1003/
+MXIK\t02106999018019002
+Qadaq kadi\t1329158
+Печенье Юбилейное\t1*8,000=8,000
+традиционное 112гр
+sh.j aqs 0%\t0
+Sh.k / SKU\t7622210457554 / 13106
+MXIK\t02106999999000000
+Qadaoq kadi\t1514409
+Кефир Доброе Био
+Кефир 1% 1000 гр
+1*17,000=17,000
+sh.j 995 0%\t0
+sh.k / SKU\t4780104700797 / 10505
+MXIK\t02106999999000000
+Qadaq Кой\t1514409
+JAMI\t42,000
+SHU JUMLADAN QQS\t0
+Мааса\t42 000
+Bank kartasi turi\tShaxsiy
+JO'LANDI:\t42,000
+FM: 16420211629245\tFB: 344038933636
+S/R: q-1\tVersiya: 0.2`
+
+const lineTotals = (text: string) => parseReceipt(text).items.map(entry => [entry.quantity, entry.unitPrice])
+
+describe('real receipts in columns', () => {
+  it('reads a guest bill with quantity and line sum columns, edge specks and "Надбавка" as service', () => {
+    const result = parseReceipt(restaurant)
+    assert.deepEqual(result.items.map(entry => [entry.quantity, entry.unitPrice]), [
+      [1, 15000], [2, 8000], [1, 42000], [1, 35000], [2, 14000], [1, 105000], [1, 55000], [1, 2000], [1, 25000], [1, 2000],
+    ])
+    // A name printed over two lines is joined; a row whose name OCR lost stays for the owner to name.
+    assert.match(result.items[5].name, /КАРТОФЕЛЕ М ?И ЛУКОМ/)
+    assert.equal(result.items[9].name, '')
+    assert.equal(result.total, 325000)
+    assert.equal(result.servicePercent, 15)
+    assert.ok(isComplete(result))
+  })
+
+  it('keeps "2 ⇥ 120 000" apart, skips menu sections, and adds a discount back to the total', () => {
+    const result = parseReceipt(brasserie)
+    assert.deepEqual(result.items.map(entry => [entry.quantity, entry.unitPrice]), [[2, 11000], [1, 99000], [1, 75000], [2, 60000], [1, 85000]])
+    assert.match(result.items[0].name, /^Самса Слоеная с М. сом$/)
+    assert.match(result.items[1].name, /^Кальян до 17:00/)
+    assert.equal(result.items[2].name, 'Куриная грудка в рибном соусе')
+    // "Сумма: 401-000" is the subtotal; 425 060 = 401 000 + 16% service − 10% discount.
+    assert.equal(result.total, 401000)
+    assert.equal(result.servicePercent, 16)
+  })
+
+  it('takes names from above the price and leaves out the Russian translation below', () => {
+    const result = parseReceipt(korzinka)
+    assert.deepEqual(result.items, [
+      { name: 'Huzurb.obaki Halls asl 33g', quantity: 2, unitPrice: 4990 },
+      { name: 'Ichimlik energ.Gorilla t/i 450ml', quantity: 1, unitPrice: 11990 },
+      { name: 'Ener.ichim.Adrenaline mango t/i 449ml', quantity: 1, unitPrice: 15990 },
+    ])
+    assert.equal(result.total, 37960)
+  })
+
+  it('picks the reading that adds up, borrowing the total another reading found', () => {
+    // The first reading has every dish but misread "JAMI"; the second lost "Samsa" but has the total.
+    assert.equal(parseReceipt(fiscalFirst).total, null)
+    const { text, result } = bestReading([fiscalSecond, fiscalFirst])
+    assert.equal(text, fiscalFirst)
+    assert.deepEqual(result.items.map(entry => entry.unitPrice), [5000, 12000, 8000, 17000])
+    assert.equal(result.total, 42000)
+    assert.ok(isComplete(result))
+  })
+
+  it('keeps the column apart in a line with no OCR tabs but two spaces', () => {
+    assert.deepEqual(lineTotals('*Чикен карри  2  120 000\nИтог: 120 000'), [[2, 60000]])
   })
 })

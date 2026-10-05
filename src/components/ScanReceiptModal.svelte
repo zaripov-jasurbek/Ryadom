@@ -2,7 +2,7 @@
   import { onDestroy } from 'svelte'
   import { formatUzs } from '../lib/calculations'
   import { recognizeReceipt } from '../lib/ocr'
-  import { parseReceipt, scanLimits } from '../lib/receipt'
+  import { bestReading, isComplete, parseReceipt, scanLimits } from '../lib/receipt'
   import { plural } from '../lib/format'
   import { limits } from '../lib/limits'
   import { app } from '../lib/store.svelte'
@@ -46,9 +46,9 @@
     const current = controller = new AbortController()
     setPreview(file); error = ''; status = 'Подготавливаем фото'; progress = 0; step = 'reading'
     try {
-      const text = await recognizeReceipt(file, (stage, value) => { if (controller === current) { status = stage; progress = value } }, current.signal)
+      const readings = await recognizeReceipt(file, (stage, value) => { if (controller === current) { status = stage; progress = value } }, current.signal, text => isComplete(parseReceipt(text)))
       if (controller !== current) return
-      const result = parseReceipt(text)
+      const { text, result } = bestReading(readings)
       rawText = text; receiptTotal = result.total; receiptService = result.servicePercent
       rows = result.items.map(entry => ({ id: nextId++, include: !entry.unsure, name: entry.name, quantity: entry.quantity, price: entry.unitPrice }))
       step = 'review'

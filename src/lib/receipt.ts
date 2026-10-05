@@ -10,35 +10,38 @@ export type ScanResult = { items: ScannedItem[]; total: number | null; servicePe
 export const scanLimits = { nameLength: limits.itemNameLength, maxQuantity: 99, minPrice: 100 }
 
 // "25 000,00", "25.000", "25000", "1,5": thousands groups of exactly three digits, then optional decimals.
-const amount = String.raw`\d{1,3}(?:[  .,']\d{3})+(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?`
+// OCR sometimes reads the space in "401 000" as a dash.
+const amount = String.raw`\d{1,3}(?:[  .,'-]\d{3})+(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?`
 const amountPattern = new RegExp(String.raw`(?<!\d)(${amount})(?!\d)`, 'g')
 // "2 x 25 000", "1,000*39000,00 39000,00", "0,35 x 16675,00 = 5802,90": a quantity, a unit price and maybe the line total.
-// The quantity's comma is a decimal one ("1,000" is one piece); OCR sometimes reads the "*" as "+".
-const timesPattern = new RegExp(String.raw`(?<!\d)(\d+(?:[.,]\d{1,3})?)\s*(?:шт\.?|pcs|dona|kg|кг)?\s*[xх×*+]\s*(${amount})(?!\d)(?:\s*(=)?\s*(${amount})(?!\d))?`, 'iu')
+// The quantity's comma is a decimal one ("1,000" is one piece) and may carry a unit ("2dona", "3 шт"); OCR sometimes reads the "*" as "+".
+const timesPattern = new RegExp(String.raw`(?<!\d)(\d+(?:[.,]\d{1,3})?)\s*(?:\p{L}{1,5}\.?)?\s*[xх×*+]\s*(${amount})(?!\d)(?:\s*(=)?\s*(${amount})(?!\d))?`, 'iu')
 
 // Lines that are totals, payments, taxes or receipt metadata rather than dishes.
-const totalWords = String.raw`итог\p{L}*|всего|к\s+оплате|jami|total|subtotal`
+const totalWords = String.raw`итог\p{L}*|всего|к\s+оплате|jami|to.?lov\s+uchun|total|subtotal`
 const skipWords = [
   totalWords,
   String.raw`оплат\p{L}*|наличн\p{L}*|безнал\p{L}*|карт(?:а|ой|е|ы)|сдача|ндс|qqs|naqd\p{L}*|karta|plastik|qaytim|t[o0]'?landi|tax|vat|sh\.?\s?j|jumladan`,
-  String.raw`обслуживан\p{L}*|xizmat\p{L}*|service|скидк\p{L}*|chegirma|discount|бонус\p{L}*|чаев\p{L}*|tips?`,
-  String.raw`инн|stir|чек|chek|check|касс\p{L}*|kass\p{L}*|смен\p{L}*|продаж\p{L}*|sotuv\p{L}*|фискал\p{L}*|fiskal\p{L}*|терминал\p{L}*|terminal`,
-  String.raw`mxik|икпу|ikpu|штрих\p{L}*|shtrix\p{L}*|sku|sh\.?\s?k|qad[aoq]{1,4}|k[ao]d\p{L}?|код`,
+  String.raw`обслуживан\p{L}*|надбавк\p{L}*|xizmat\p{L}*|service|скидк\p{L}*|chegirma|discount|бонус\p{L}*|чаев\p{L}*|tips?`,
+  String.raw`инн|stir|чек|chek\p{L}*|check|savdo|сч[её]т\p{L}*|гостев\p{L}*|открыт\p{L}*|заказ\p{L}*|зал|касс\p{L}*|kass\p{L}*|смен\p{L}*|продаж\p{L}*|sotuv\p{L}*|фискал\p{L}*|fiskal\p{L}*|терминал\p{L}*|terminal`,
+  String.raw`mxik|mk|мк|икпу|ikpu|штрих\p{L}*|shtrix\p{L}*|sku|sh\.?\s?k|qad[aoq]{1,4}|k[ao]d\p{L}?|код`,
   String.raw`дата|sana|время|vaqt|официант\p{L}*|ofitsiant|стол|stol|гост(?:ь|ей|и)|mehmon\p{L}*|спасибо|rahmat|телефон|tel|адрес|manzil`,
-  String.raw`наименован\p{L}*|кол-?во|цена|сумма|nomi|soni|narxi|summa|позици\p{L}*|покуп\p{L}*`,
+  String.raw`наименован\p{L}*|кол-?во|цена|сумма|полная|nomi|soni|narxi|summa|позици\p{L}*|покуп\p{L}*`,
 ].join('|')
 const skipPattern = new RegExp(String.raw`(?<!\p{L})(?:${skipWords})(?!\p{L})`, 'iu')
 const totalPattern = new RegExp(String.raw`(?<!\p{L})(?:${totalWords})(?!\p{L})`, 'iu')
-const servicePattern = /(?<!\p{L})(?:обслуживан\p{L}*|xizmat\p{L}*|service)(?!\p{L})/iu
-// Dates, times and phone numbers are full of digits that would otherwise look like prices.
-const metaPattern = /\d{1,2}[./-]\d{1,2}[./-]\d{2,4}|(?<!\d)\d{1,2}:\d{2}(?!\d)|\+\s?\d{3}/
-// Numbers that are never prices: receipt and article numbers, codes after a slash, weights and volumes in names.
+const servicePattern = /(?<!\p{L})(?:обслуживан\p{L}*|надбавк\p{L}*|xizmat\p{L}*|service)(?!\p{L})/iu
+const discountPattern = /(?<!\p{L})(?:скидк\p{L}*|chegirma|discount)(?!\p{L})/iu
+// Numbers that are never prices: dates, times and phone numbers ("Кальян до 17:00" is still a dish), receipt and
+// article numbers, codes after a slash, weights, volumes and pieces in names, and numbers glued to a word ("1кишилик").
 const notPricePattern = new RegExp([
+  String.raw`\d{1,2}[./-]\d{1,2}[./-]\d{2,4}|(?<!\d)\d{1,2}:\d{2}(?::\d{2})?(?!\d)|\+\s?\d[\d\s()-]{7,}\d`,
   String.raw`[№#]\s*:?\s*\d+`,
   String.raw`\[[^\]]*\]`,
   String.raw`\(\s*\d[\d\s.,]*\)`,
   String.raw`\/\s*\d+`,
-  String.raw`(?<![\d.,])\d+(?:[.,]\d+)?\s?(?:кг|kg|гр?|gr?|мл|ml|л|l|%)(?!\p{L})`,
+  String.raw`(?<![\d.,])\d+(?:[.,]\d+)?\s?(?:кг|kg|гр?|gr?|мл|ml|л|l|шт|pcs|dona|%)(?!\p{L})`,
+  String.raw`(?<![\d.,])\d+(?:[.,]\d+)?(?=\p{L}{2})(?!сум|so'?m|sum|uzs)`,
   String.raw`(?<!\S)0\d{4,}`,
 ].join('|'), 'giu')
 const currencyPattern = /(?<!\p{L})(?:сум|so'?m|sum|uzs)(?!\p{L})/giu
@@ -83,13 +86,17 @@ const close = (a: number, b: number) => Math.abs(a - b) <= Math.max(1, b * 0.01)
 function cleanName(text: string) {
   let name = text.replace(/\[[^\]]*\]|\(\s*\d{3,}[\d\s.,]*\)/g, ' ').replace(/["«»“”„]/g, ' ')
   if ((name.match(/\(/g) ?? []).length !== (name.match(/\)/g) ?? []).length) name = name.replace(/[()]/g, ' ')
-  name = name.replace(/[|_=~•·…:;—–]+/g, ' ').replace(/\.{2,}/g, ' ').replace(/^[^\p{L}\d(]+|[^\p{L}\d)%]+$/gu, '')
+  name = name.replace(/[|_=~•·…;—–]+|(?<!\d):|:(?!\d)/g, ' ').replace(/\.{2,}/g, ' ').replace(/^[^\p{L}\d(]+|[^\p{L}\d)%]+$/gu, '')
   if (/^\(.*\)$/.test(name)) name = name.slice(1, -1)
   name = name.replace(/\s(?:kg|кг|шт|pcs|dona)$/iu, '').replace(/(?<=\p{L}{2}.*)\s\p{L}$/u, '').replace(/\s+/g, ' ').trim()
   // A long name is cut at a word boundary.
   return name.length <= scanLimits.nameLength ? name : name.slice(0, scanLimits.nameLength + 1).replace(/\s+\S*$/, '')
 }
-const nameOrEmpty = (text: string) => { const name = cleanName(text); return letters(name) >= 2 ? name : '' }
+/** A name needs two letters besides currency; on a price line, also besides units glued to numbers ("2dona", "33g"). */
+const nameOrEmpty = (text: string, priceLine = false) => {
+  const name = cleanName(text), words = name.replace(currencyPattern, '')
+  return letters(priceLine ? words.replace(/\d+(?:[.,]\d+)?\p{L}*/gu, '') : words) >= 2 ? name : ''
+}
 
 /** Whole pieces stay as quantity; weights and fractions become one piece at the line total. */
 function item(name: string, quantity: number, unitPrice: number): ScannedItem | null {
@@ -116,19 +123,19 @@ function timesItem(name: string, match: RegExpExecArray): ScannedItem | null {
 function parseLine(line: string): (ScannedItem & { certain: boolean }) | null {
   const times = timesPattern.exec(line)
   if (times) {
-    const parsed = timesItem(nameOrEmpty(line.slice(0, times.index)), times)
+    const parsed = timesItem(nameOrEmpty(line.slice(0, times.index), true), times)
     return parsed && { ...parsed, certain: Boolean(times[3] || times[4]) }
   }
   const found = amounts(line)
   if (!found.length) return null
   // Text after the price, as in "100135 Республика Узбекистан", means the number is not a price.
   if (letters(line.slice(found.at(-1)!.index).replace(currencyPattern, '')) >= 3) return null
-  const name = nameOrEmpty(line.slice(0, found[0].index))
+  const name = nameOrEmpty(line.slice(0, found[0].index), true)
   const values = found.map(entry => entry.value)
   // A small fraction first, as in "Cola 0,5 12 000", is part of the name rather than a quantity.
   if (values.length >= 2 && !Number.isInteger(values[0]) && values[0] < 10) {
     const rest = parseLine(line.slice(found[1].index))
-    return rest && { ...rest, name: nameOrEmpty(line.slice(0, found[1].index)) }
+    return rest && { ...rest, name: nameOrEmpty(line.slice(0, found[1].index), true) }
   }
   const result = (entry: ScannedItem | null) => entry && { ...entry, certain: false }
   const [a, b, c] = values.slice(-3)
@@ -167,55 +174,109 @@ function markExtras(items: ScannedItem[], total: number | null) {
   }
 }
 
-/** `total` is the receipt's total without its service charge, since the bill adds service itself. */
-export function parseReceipt(text: string): ScanResult {
+/** "Сумма: 401 000" before service and discounts: what the dishes add up to. */
+const subtotalPattern = /^полная(?!\p{L})|^сумма(?!\s+\p{L})|(?<!\p{L})(?:subtotal|подытог)(?!\p{L})/iu
+const currencyLine = /^[^\p{L}\d]*(?:сум|so'?m|sum|uzs)[^\p{L}\d]*$/iu
+
+/**
+ * `total` is what the dishes add up to on the receipt: its total without service charge and before discounts, since the bill
+ * adds service itself. `known` gives the total and service read from another reading of the same photo, for when this one missed them.
+ */
+export function parseReceipt(text: string, known?: Pick<ScanResult, 'total' | 'servicePercent'>): ScanResult {
   const items: ScannedItem[] = []
-  let total: number | null = null, service = 0, ended = false
+  let total: number | null = null, subtotal: number | null = null, service = 0, discount = 0, ended = false
   // Lines with letters and no price: a name for the price line below, or the rest of a long name above.
-  let names: string[] = []
-  let last: ScannedItem | null = null
+  // `numbered` lines started with a row number, so a name begins there.
+  let names: { text: string; numbered: boolean }[] = []
+  // The last item, and whether its name was on its own price line: only then do lines below continue the name.
+  // Fiscal receipts print the name above the price and a translation below it.
+  let last: ScannedItem | null = null, lastNamedInline = false
   const settle = () => {
-    if (last && names.length) last.name = cleanName(`${last.name} ${names.join(' ')}`)
+    if (last && lastNamedInline && names.length) last.name = cleanName(`${last.name} ${names.map(entry => entry.text).join(' ')}`)
     names = []; last = null
   }
   for (const raw of text.split(/\r?\n/)) {
+    // A tab or a run of spaces separates columns; it is kept, so numbers in two columns never merge into one.
+    const cells = raw.replace(/ {2,}/g, '\t').replace(/[^\S\t]+/g, ' ').trim().split(/ *\t[\t ]*/)
+    // Specks at the paper's edge come out as a short first or last column: "2 ⇥ Суп ⇥ 1 ⇥ 42 000 ⇥ 3".
+    if (cells.length >= 2 && cells[0].length <= 4 && letters(cells[0]) < 2 && letters(cells[1]) >= 2) cells.shift()
+    if (cells.length >= 3 && cells.at(-1)!.length <= 2 && amounts(cells.at(-2)!).some(entry => entry.value >= scanLimits.minPrice)) cells.pop()
+    const spaced = cells.join('\t')
     // Row numbers such as "1." or "2)" come before the dish name; OCR may lose the dot before a name in capitals.
-    const line = fixDigits(raw.replace(/\s+/g, ' ').trim()).replace(/^(?:(?:\d{1,3}|[|!lI])\s?[.)]\s*(?=[\p{L}[("«“])|\d{1,3}\s+(?=\p{Lu}{3}))/u, '')
-    if (!line) continue
-    if (skipPattern.test(line) || metaPattern.test(line)) {
+    const fixed = fixDigits(spaced)
+    const line = fixed.replace(/^(?:(?:\d{1,3}|[|!lI])\s?[.)]\s*(?=[\p{L}[("«“])|\d{1,3}\s+(?=\p{Lu}{3}))/u, '')
+    if (!line || currencyLine.test(line)) continue
+    if (skipPattern.test(line)) {
       settle()
       const value = amounts(line).filter(entry => entry.value >= scanLimits.minPrice).at(-1)?.value
-      if (totalPattern.test(line)) {
-        total = value ?? total
-        // Whatever follows the total is payment, change and fiscal data.
-        if (value !== undefined) ended = true
-      } else if (servicePattern.test(line)) service = value ?? service
+      if (totalPattern.test(line)) total = value ?? total
+      else if (servicePattern.test(line)) service = value ?? service
+      else if (discountPattern.test(line)) discount = value ?? discount
+      else if (subtotalPattern.test(line)) subtotal = value ?? subtotal
+      // Whatever follows the totals is service, payment, change and fiscal data.
+      if (value !== undefined && (totalPattern.test(line) || subtotalPattern.test(line))) ended = true
       continue
     }
     if (ended) continue
     const parsed = parseLine(line)
-    if (parsed && (parsed.name || names.length || parsed.certain)) {
+    // Among the dishes, a price line whose name OCR lost is kept for the owner to name.
+    if (parsed && (parsed.name || names.length || parsed.certain || items.length)) {
       const { certain: _, ...entry } = parsed
-      if (entry.name) settle()
-      else if (last) { entry.name = names.pop() ?? ''; settle() }
-      else { entry.name = cleanName(names.join(' ')); names = [] }
-      items.push(entry); last = entry
+      // A line for exactly the total borrowed from another reading is the total line misread ("ЗАМ!" for "JAMI").
+      if (items.length && known?.total === entry.quantity * entry.unitPrice) { settle(); ended = true; continue }
+      if (entry.name) {
+        // A short line in title case right above a dish, such as "Кухня" or "Напитки", is a menu section.
+        if (/^\p{Lu}\p{Ll}/u.test(names.at(-1)?.text ?? '')) names.pop()
+        settle()
+      } else if (last) {
+        entry.name = names.pop()?.text ?? ''
+        settle()
+      } else {
+        const from = names.findLastIndex(name => name.numbered)
+        entry.name = cleanName(names.slice(Math.max(0, from)).map(name => name.text).join(' '))
+        names = []
+      }
+      items.push(entry); last = entry; lastNamedInline = Boolean(parsed.name)
       continue
     }
     const name = nameOrEmpty(line)
-    if (name && !amounts(line).some(entry => entry.value >= scanLimits.minPrice)) names.push(name)
+    if (name && !amounts(line).some(entry => entry.value >= scanLimits.minPrice)) names.push({ text: name, numbered: fixed !== line })
     else settle()
   }
   settle()
   // Only letters without a twin in the other alphabet tell which one the receipt is printed in.
   const distinct = (script: RegExp, twins: Map<string, string>) => (text.match(script) ?? []).filter(char => !twins.has(char)).length
   const cyrillicReceipt = distinct(/\p{Script=Cyrillic}/gu, toLatin) > distinct(/\p{Script=Latin}/gu, toCyrillic)
-  const food = total === null ? null : Math.round(total - (service < total ? service : 0))
+  // A total below the dearest line is a misread, as "401-000" read as 401.
+  const dearest = Math.max(0, ...items.map(entry => entry.quantity * entry.unitPrice))
+  const plausible = (value: number | null) => value !== null && value >= dearest ? value : null
+  const food = plausible(total !== null && service < total ? Math.round(total - service + discount) : null) ?? plausible(subtotal) ?? plausible(known?.total ?? null)
   markExtras(items, food)
   const base = food ?? items.reduce((sum, entry) => sum + entry.quantity * entry.unitPrice, 0)
   return {
     items: items.map(entry => ({ ...entry, name: unifyScript(entry.name, cyrillicReceipt) })),
     total: food,
-    servicePercent: service && base ? Math.round(service / base * 100) : null,
+    // Service above half the food is a misread number.
+    servicePercent: service && base && service < base / 2 ? Math.round(service / base * 100) : known?.servicePercent ?? null,
   }
+}
+
+/** The checked dishes add up to the receipt's total. */
+export function isComplete(result: ScanResult) {
+  if (result.total === null || !result.items.length) return false
+  const sum = result.items.reduce((acc, entry) => acc + (entry.unsure ? 0 : entry.quantity * entry.unitPrice), 0)
+  return Math.abs(sum - result.total) <= result.items.length
+}
+
+/**
+ * Of several readings of one photo: the one that adds up to its total, else one that found a total, else the one with most
+ * dishes. A reading that missed the total line borrows it from another, since each pass loses different lines.
+ */
+export function bestReading(texts: string[]) {
+  const rank = (result: ScanResult) => (isComplete(result) ? 2000 : 0) + (result.total === null ? 0 : 1000) + result.items.length
+  const readings = texts.map(text => ({ text, result: parseReceipt(text) }))
+  const known = readings.map(reading => reading.result).filter(result => result.total !== null).sort((a, b) => rank(b) - rank(a))[0]
+  return readings
+    .map(reading => reading.result.total === null && known ? { text: reading.text, result: parseReceipt(reading.text, known) } : reading)
+    .reduce((best, next) => rank(next.result) > rank(best.result) ? next : best)
 }
