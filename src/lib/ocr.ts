@@ -97,8 +97,10 @@ function evenLight(px: Uint8ClampedArray, width: number, height: number) {
   const step = 4, w = Math.ceil(width / step), h = Math.ceil(height / step)
   const small = new Float32Array(w * h), counts = new Uint16Array(w * h)
   for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+    // The gray level goes into the red channel, read again below.
     const i = (y * width + x) * 4, cell = Math.floor(y / step) * w + Math.floor(x / step)
-    small[cell] += px[i] * .299 + px[i + 1] * .587 + px[i + 2] * .114; counts[cell]++
+    px[i] = px[i] * .299 + px[i + 1] * .587 + px[i + 2] * .114
+    small[cell] += px[i]; counts[cell]++
   }
   // Summed-area table of the quarter-size image, for constant-time box means.
   const sums = new Float64Array((w + 1) * (h + 1))
@@ -113,7 +115,7 @@ function evenLight(px: Uint8ClampedArray, width: number, height: number) {
       const cx = Math.floor(x / step), x0 = Math.max(0, cx - radius), x1 = Math.min(w, cx + radius + 1)
       const mean = (sums[y1 * (w + 1) + x1] - sums[y0 * (w + 1) + x1] - sums[y1 * (w + 1) + x0] + sums[y0 * (w + 1) + x0]) / ((x1 - x0) * (y1 - y0))
       const i = (y * width + x) * 4
-      px[i] = px[i + 1] = px[i + 2] = Math.min(255, (px[i] * .299 + px[i + 1] * .587 + px[i + 2] * .114) / Math.max(1, mean) * 235)
+      px[i] = px[i + 1] = px[i + 2] = px[i] / Math.max(1, mean) * 235
     }
   }
 }

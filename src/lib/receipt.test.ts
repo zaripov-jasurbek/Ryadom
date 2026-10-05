@@ -443,3 +443,45 @@ describe('real receipts in columns', () => {
     assert.deepEqual(lineTotals('*Чикен карри  2  120 000\nИтог: 120 000'), [[2, 60000]])
   })
 })
+
+describe('receipt columns and totals', () => {
+  it('reads "Кол-во ⇥ Цена" as the price of one piece', () => {
+    assert.deepEqual(lineTotals('Наименование\tКол-во\tЦена\nСамса\t2\t11 000\nЧай\t2\t5 000'), [[2, 11000], [2, 5000]])
+  })
+
+  it('reads the last column as a line sum by default, and as a unit price when only that adds up to the total', () => {
+    assert.deepEqual(lineTotals('Самса\t2\t22 000\nЧай\t2\t10 000\nИтого: 32 000'), [[2, 11000], [2, 5000]])
+    assert.deepEqual(lineTotals('Самса\t2\t11 000\nЧай\t2\t5 000\nИтого: 32 000'), [[2, 11000], [2, 5000]])
+  })
+
+  it('does not take service printed after the total out of it', () => {
+    assert.deepEqual(parseReceipt('Плов\t1\t100 000\nИтого: 100 000\nОбслуживание 10%: 10 000'), {
+      items: [{ name: 'Плов', quantity: 1, unitPrice: 100000 }], total: 100000, servicePercent: 10,
+    })
+  })
+
+  it('takes the service percent printed without an amount out of the total', () => {
+    const result = parseReceipt('Плов\t1\t100 000\nОбслуживание 10%\nИтого к оплате: 110 000')
+    assert.equal(result.total, 100000)
+    assert.equal(result.servicePercent, 10)
+  })
+
+  it('keeps dishes that start like receipt words', () => {
+    assert.deepEqual(lineTotals('Открытый пирог\t1\t30 000\nКассата\t1\t25 000\nСменный гарнир\t1\t8 000'), [[1, 30000], [1, 25000], [1, 8000]])
+  })
+
+  it('takes a name over several lines above the price from its row number', () => {
+    const { items } = parseReceipt(`1. Lavash tovuqli
+katta
+2 x 25 000,00 = 50 000,00
+2. Coca-Cola
+0,5 l
+1 x 12 000,00 = 12 000,00
+Jami: 62 000,00`)
+    assert.deepEqual(items.map(entry => entry.name), ['Lavash tovuqli katta', 'Coca-Cola 0,5 l'])
+  })
+
+  it('reads the price before the pieces', () => {
+    assert.deepEqual(lineTotals('Шашлык 45 000 x 2'), [[2, 45000]])
+  })
+})
