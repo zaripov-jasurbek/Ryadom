@@ -110,3 +110,120 @@ Cola 0,5 12 000
 ~~~ ---`), { items: [], total: null, servicePercent: null })
   })
 })
+
+// Text that Tesseract returned for real receipts photographed on a phone.
+describe('real receipts', () => {
+  it('reads a shop receipt with "1,000*39000,00" and stops at the total', () => {
+    const text = `"КМОКА"
+Старший кассир 2
+ПРОДАЖА Смена №197
+05.10.2026
+1 ДОМАШНИЕ ТАПОЧКИ (39000) —
+1,000*39000,00 39000,00
+17:43:02
+Позиций: Е Покупок: 1
+Сумма: 39000,00
+Сумма скидки: 0,00
+Итоговая сумма: 39000,00
+Место расчетов: Магазин "KIVORA"
+100135 Республика Узбикистан, г. Ташкент,
+пр-кт Бунёдкор, д.52
+Biz sizni har doim
+ko'rishdan xursandmiz!!!`
+    assert.deepEqual(parseReceipt(text), {
+      items: [{ name: 'ДОМАШНИЕ ТАПОЧКИ', quantity: 1, unitPrice: 39000 }],
+      total: 39000,
+      servicePercent: null,
+    })
+  })
+
+  it('reads weighed goods at their line total and skips article and receipt numbers', () => {
+    const text = `ус:
+(< SIFAT VA QULAY NARX
+Касса №6 Кассир
+ПРОДАЖА №00944772 XUDOYOROVA MOXIRA
+Дата: 05.10.26 Время: 17:49:26
+|. [59694] (Р- -R "OLMA GOLDEN” KG)
+0,35 x 16675,00 = 5802,90 сум
+2.[59750] "BANAN" Кб)
+1,80 х 16850,00 = 30363,70 сум
+ИТОГО: 36 167
+Оплата
+Сдача
+313226708
+Terminal IDE
+Fiskal Belgi 182096430004`
+    const { items, total } = parseReceipt(text)
+    assert.deepEqual(items.map(entry => [entry.quantity, entry.unitPrice]), [[1, 5803], [1, 30364]])
+    assert.match(items[0].name, /OLMA GOLDEN$/)
+    assert.match(items[1].name, /^BANAN/)
+    assert.equal(total, 36167)
+  })
+
+  it('joins names printed over several lines and ignores SKU, codes and weights', () => {
+    const text = `С-№: 68891
+05.10.2026
+16:37
+STIR: 312534214
+Спек №: 49428
+KASSA: Kassa-1
+Sotuvchi: Narimov To'lagan
+...
+o 1+6.000=5,000
+sh.j qas 0%
+hi / 10244
+02106999999000000
+Qadaq kadi 1632942
+Шакар кушилмаган 1*12,000=12,000
+сакич Соо!$ Пластинка
+формадаги сакич ялпиз
+таъмли, Пластик
+футляр 95 г.
+sh.j 995 0% 0
+Sh.k /SKU 4780050330017 / 1003/
+MXIK 02106999018019002
+Qadaoq kadi 1329158
+Печенье Юбилейное 1*8,000=8,000
+градиционное 112гр
+sh.j aqs 0% 0
+Sh.k / SKU 762221045 7554 / 13106
+МЖК 021069999990000009
+Qadaoq kadi 1514409
+Кефир Доброе Био 1*17,000=17,000
+Кефир 1% 1000 гр
+sh.j aqs 0% 0
+Sh.k / SKU 4780104700797 / 10505
+MXIK 02106999999000000
+Qadaq kodi 1514409
+JAMI 42,000
+SHU JUMLADAN QQS 0
+Naad 42,000
+Bank kartasi turi Shaxsiy
+JO'LANDI: 42,000
+ГМ: 16420211623245 ГВ: 344038933636
+S/R: 4-2 Versiya: 0.2`
+    const { items, total } = parseReceipt(text)
+    assert.deepEqual(items.map(entry => [entry.quantity, entry.unitPrice]), [[1, 5000], [1, 12000], [1, 8000], [1, 17000]])
+    // The name of the first one was unreadable; the line "1 x 5 000 = 5 000" is kept for the owner to name.
+    assert.equal(items[0].name, '')
+    assert.match(items[1].name, /^Шакар кушилмаган сакич .* Пластик$/)
+    assert.equal(items[2].name, 'Печенье Юбилейное градиционное 112гр')
+    assert.equal(items[3].name, 'Кефир Доброе Био Кефир 1% 1000 гр')
+    assert.equal(total, 42000)
+  })
+
+  it('unchecks the one row without which the dishes add up to the total', () => {
+    const { items } = parseReceipt(`OLMA GOLDEN
+0,35 x 16675,00 = 5802,90 сум
+BANAN
+1,80 x 16850,00 = 30363,70 сум
+Оби a a AAA3253,25
+ИТОГО: 36 167`)
+    assert.deepEqual(items.map(entry => [entry.unitPrice, Boolean(entry.unsure)]), [[5803, false], [30364, false], [3253, true]])
+  })
+
+  it('leaves rows checked when the total cannot tell which one is extra', () => {
+    const { items } = parseReceipt(`Чай 1 5 000\nЧай 1 5 000\nСамса 1 6 000\nИтого: 11 000`)
+    assert.ok(items.every(entry => !entry.unsure))
+  })
+})

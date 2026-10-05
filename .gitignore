@@ -28,3 +28,6 @@ dist-ssr
 .env.*
 !.env.example
 .claude/
+
+# Real receipt photos for tuning the scanner; private
+receipts/

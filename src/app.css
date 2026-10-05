@@ -501,6 +501,7 @@ body:has(.comment-form textarea:focus) .tab-bar { display: none; }
 .scan-row .scan-qty input, .scan-row .scan-price input { text-align: right; padding-right: 40px; }
 .scan-qty > span, .scan-price > span { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); font-size: 12px; color: var(--muted); pointer-events: none; }
 .modal-total small { font-size: 13px; }
+.modal-total small.off-total { color: var(--danger); }
 .scan-service { margin-top: 10px; align-items: center; }
 .scan-service .chip { margin-left: auto; flex: none; background: var(--bg); }
 .scan-raw { margin-top: 10px; font-size: 13px; color: var(--muted); }

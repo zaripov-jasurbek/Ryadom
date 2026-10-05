@@ -33,6 +33,8 @@
   const chosen = $derived(rows.filter(row => row.include))
   const ready = $derived(chosen.length > 0 && chosen.every(valid))
   const chosenTotal = $derived(chosen.reduce((sum, row) => sum + (valid(row) ? row.quantity! * row.price! : 0), 0))
+  // Weighed goods are rounded to whole sums, so each row may be off by one.
+  const totalOff = $derived(receiptTotal !== null && Math.abs(chosenTotal - receiptTotal) > chosen.length)
 
   function setPreview(file: File | null) {
     if (preview) URL.revokeObjectURL(preview)
@@ -48,7 +50,7 @@
       if (controller !== current) return
       const result = parseReceipt(text)
       rawText = text; receiptTotal = result.total; receiptService = result.servicePercent
-      rows = result.items.map(entry => ({ id: nextId++, include: true, name: entry.name, quantity: entry.quantity, price: entry.unitPrice }))
+      rows = result.items.map(entry => ({ id: nextId++, include: !entry.unsure, name: entry.name, quantity: entry.quantity, price: entry.unitPrice }))
       step = 'review'
     } catch (failure) {
       if (current.signal.aborted) return
@@ -124,7 +126,7 @@
     </div>
     <button type="button" class="add-more" onclick={addRow}>＋ Добавить строку</button>
     <div class="modal-total">
-      <span>Выбрано {plural(chosen.length, 'позиция', 'позиции', 'позиций')}{#if receiptTotal}<small>{` · в чеке ${formatUzs(receiptTotal)}`}</small>{/if}</span>
+      <span>Выбрано {plural(chosen.length, 'позиция', 'позиции', 'позиций')}{#if receiptTotal}<small class:off-total={totalOff}>{` · в чеке ${formatUzs(receiptTotal)}`}</small>{/if}</span>
       <b>{formatUzs(chosenTotal)}</b>
     </div>
     {#if serviceMismatch}
