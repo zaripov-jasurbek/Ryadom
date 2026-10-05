@@ -10,13 +10,22 @@
   import AddItemModal from './components/AddItemModal.svelte'
   import EditCheckModal from './components/EditCheckModal.svelte'
   import PaymentModal from './components/PaymentModal.svelte'
-  import ScanReceiptModal from './components/ScanReceiptModal.svelte'
   import ShareQrModal from './components/ShareQrModal.svelte'
   import ConfirmSheet from './components/ConfirmSheet.svelte'
   import PeopleModal from './components/PeopleModal.svelte'
   import PayDetailsModal from './components/PayDetailsModal.svelte'
 
   onMount(() => { restoreTheme(); return app.init() })
+
+  // The scanner (its window, OCR and receipt parser) loads only once someone opens it; Tesseract and its models
+  // load later still, when a photo is chosen.
+  let ScanReceiptModal = $state<typeof import('./components/ScanReceiptModal.svelte').default | null>(null)
+  $effect(() => {
+    if (!app.scanOpen || ScanReceiptModal) return
+    import('./components/ScanReceiptModal.svelte')
+      .then(module => { ScanReceiptModal = module.default })
+      .catch(() => { app.scanOpen = false; app.notify('Не удалось открыть сканер — нет интернета') })
+  })
   // Each screen starts at the top instead of inheriting the previous screen's scroll position.
   $effect(() => { void app.mode; window.scrollTo(0, 0) })
 </script>
@@ -46,7 +55,7 @@
   {#if app.addItemOpen && app.bill}<AddItemModal />{/if}
   {#if app.editingItem && app.bill}{#key app.editingItem.id}<AddItemModal item={app.editingItem} />{/key}{/if}
   {#if app.checkEditOpen && app.bill}<EditCheckModal />{/if}
-  {#if app.scanOpen && app.bill}<ScanReceiptModal />{/if}
+  {#if app.scanOpen && app.bill && ScanReceiptModal}<ScanReceiptModal />{/if}
   {#if app.qrOpen && app.bill}<ShareQrModal />{/if}
   {#if app.peopleOpen && app.bill}<PeopleModal />{/if}
   {#if app.payDetailsOpen && app.bill}<PayDetailsModal />{/if}
