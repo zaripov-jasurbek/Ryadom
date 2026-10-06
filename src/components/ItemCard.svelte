@@ -3,6 +3,7 @@
   import { initial, itemIcon } from '../lib/format'
   import { app } from '../lib/store.svelte'
   import CustomShareEditor from './CustomShareEditor.svelte'
+  import { haptic } from '../lib/haptics'
 
   let { item }: { item: BillItem } = $props()
   const units = $derived(Array.from({ length: item.quantity }, (_, unit) => unit))
@@ -33,12 +34,14 @@
   let tapped = $state('')
   let tapTimer: ReturnType<typeof setTimeout> | undefined
   function tap(control: string, unit: number) {
+    haptic.tap()
     tapped = control
     clearTimeout(tapTimer); tapTimer = setTimeout(() => tapped = '', 320)
     void app.toggleUnit(item, unit)
   }
 
   function toggleUnits() {
+    haptic.tap()
     if (!showUnits) { expanded = true; return }
     expanded = false
     if (app.editingUnit.startsWith(`${item.id}:`)) app.editingUnit = ''
