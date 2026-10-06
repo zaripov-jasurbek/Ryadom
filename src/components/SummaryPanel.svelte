@@ -7,6 +7,7 @@
   import { app } from '../lib/store.svelte'
   import PaymentDetails from './PaymentDetails.svelte'
   import Amount from './Amount.svelte'
+  import { haptic } from '../lib/haptics'
 
   const bill = $derived(app.bill!)
   const percent = (part: number, whole: number) => whole ? Math.min(100, part / whole * 100) : 0
