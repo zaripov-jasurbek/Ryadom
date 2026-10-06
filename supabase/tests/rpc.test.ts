@@ -75,6 +75,20 @@ describe('check RPCs', () => {
     await db.rpc(phone, 'add_item', { p_check_id: s.check.id, p_name: 'Кофе', p_quantity: 1, p_unit_price: 7_000 })
   })
 
+  it('adds scanned rows in one transaction: all of them or none', async () => {
+    const s = await setup(db)
+    const names = async () => (await db.query<{ name: string; units: number }>('select i.name, (select count(*)::int from public.item_units u where u.item_id = i.id) as units from public.items i where i.check_id = $1 order by i.created_at, i.name', [s.check.id])).rows
+    const ids = await db.rpc<string[]>(s.owner, 'add_items', { p_check_id: s.check.id, p_items: [{ name: 'Чай', quantity: 2, unit_price: 5_000 }, { name: ' Самса ', quantity: 1, unit_price: 8_000 }] })
+    assert.equal(ids.length, 2)
+    assert.deepEqual((await names()).map(row => [row.name, row.units]).sort(), [['Самса', 1], ['Хлеб', 2], ['Чай', 2]])
+    // One bad row rolls back the good rows before it.
+    await assert.rejects(db.rpc(s.owner, 'add_items', { p_check_id: s.check.id, p_items: [{ name: 'Кофе', quantity: 1, unit_price: 7_000 }, { name: '', quantity: 1, unit_price: 1_000 }] }), /Invalid item/)
+    await assert.rejects(db.rpc(s.owner, 'add_items', { p_check_id: s.check.id, p_items: [{ name: 'Кофе', quantity: '1', unit_price: 7_000 }] }), /Invalid item/)
+    await assert.rejects(db.rpc(s.owner, 'add_items', { p_check_id: s.check.id, p_items: [] }), /Invalid item/)
+    await assert.rejects(db.rpc(s.guest, 'add_items', { p_check_id: s.check.id, p_items: [{ name: 'Торт', quantity: 1, unit_price: 1_000 }] }), /Owner access required/)
+    assert.equal((await names()).length, 3)
+  })
+
   it('rejects a wrong owner token', async () => {
     const s = await setup(db)
     const stranger = await db.newUser()

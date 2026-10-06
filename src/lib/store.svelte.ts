@@ -1,6 +1,6 @@
 import { assignedSubtotal, calculateTotals, ownerIdOf, serviceFee, withSelection, type Bill, type BillItem, type CommentMessage, type Participant } from './calculations'
 import { errorMessage } from './errors'
-import { addRemoteComment, addRemoteItem, updateRemoteCheck, updateRemoteItem, shareRemoteItemEqually, claimRemoteCheckOwner, confirmRemotePayment, createRemoteCheck, deleteRemoteCheck, deleteRemoteComment, deleteRemoteItem, ensureAnonymousSession, isRemoteCheckGone, joinRemoteCheck, loadRemoteCheck, previewRemoteCheck, removeRemoteParticipant, resetRemoteCustomShares, setRemoteCustomShares, submitRemotePayment, subscribeToRemoteCheck, toggleRemoteUnit, unconfirmRemotePayment, type PresenceUser, type RemoteBill, type RemoteSubscription } from './remote'
+import { addRemoteComment, addRemoteItem, addRemoteItems, updateRemoteCheck, updateRemoteItem, shareRemoteItemEqually, claimRemoteCheckOwner, confirmRemotePayment, createRemoteCheck, deleteRemoteCheck, deleteRemoteComment, deleteRemoteItem, ensureAnonymousSession, isRemoteCheckGone, joinRemoteCheck, loadRemoteCheck, previewRemoteCheck, removeRemoteParticipant, resetRemoteCustomShares, setRemoteCustomShares, submitRemotePayment, subscribeToRemoteCheck, toggleRemoteUnit, unconfirmRemotePayment, type PresenceUser, type RemoteBill, type RemoteSubscription } from './remote'
 import { checkPath, homePath, readOwnerToken, routeCheckId } from './routes'
 import { preloadSupabase } from './supabase'
 import { expiresAt } from './limits'
@@ -356,8 +356,15 @@ class AppStore {
     this.busy = true
     let added = 0
     try {
-      for (const entry of items) { await addRemoteItem(bill.dbId, entry.name, entry.quantity, entry.unitPrice); added++ }
-    } catch (error) { this.fail(error, `Добавлено ${added} из ${items.length} позиций`) }
+      try {
+        await addRemoteItems(bill.dbId, items)
+        added = items.length
+      } catch (error) {
+        // A server without add_items yet (PGRST202: no such function) gets the rows one by one, as before.
+        if ((error as { code?: string } | null)?.code !== 'PGRST202') throw error
+        for (const entry of items) { await addRemoteItem(bill.dbId, entry.name, entry.quantity, entry.unitPrice); added++ }
+      }
+    } catch (error) { this.fail(error, added ? `Добавлено ${added} из ${items.length} позиций` : 'Не удалось добавить позиции') }
     finally { await this.refresh(); this.busy = false }
     return added
   }
