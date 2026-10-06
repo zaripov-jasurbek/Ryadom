@@ -9,7 +9,8 @@
   import Modal from './Modal.svelte'
   import { haptic } from '../lib/haptics'
 
-  type Row = { id: number; include: boolean; name: string; quantity: number | null; price: number | null }
+  /** `suspect` rows were left unchecked because the receipt's total adds up without them. */
+  type Row = { id: number; include: boolean; suspect: boolean; name: string; quantity: number | null; price: number | null }
 
   let step = $state<'pick' | 'reading' | 'review'>('pick')
   let status = $state('')
@@ -26,6 +27,7 @@
     if (bill && receiptService !== null) void app.updateCheck(bill.title, receiptService, bill.paymentDetails ?? '')
   }
   let rows = $state<Row[]>([])
+  let photoZoomed = $state(false)
   let nextId = 0
   let camera: HTMLInputElement, gallery: HTMLInputElement
   let controller: AbortController | null = null
@@ -36,6 +38,7 @@
   const chosenTotal = $derived(chosen.reduce((sum, row) => sum + (valid(row) ? row.quantity! * row.price! : 0), 0))
   // Weighed goods are rounded to whole sums, so each row may be off by one.
   const totalOff = $derived(receiptTotal !== null && Math.abs(chosenTotal - receiptTotal) > chosen.length)
+  const hasSuspects = $derived(rows.some(row => row.suspect))
 
   function setPreview(file: File | null) {
     if (preview) URL.revokeObjectURL(preview)
@@ -51,7 +54,8 @@
       if (controller !== current) return
       const { text, result } = bestReading(readings)
       rawText = text; receiptTotal = result.total; receiptService = result.servicePercent
-      rows = result.items.map(entry => ({ id: nextId++, include: !entry.unsure, name: entry.name, quantity: entry.quantity, price: entry.unitPrice }))
+      rows = result.items.map(entry => ({ id: nextId++, include: !entry.unsure, suspect: Boolean(entry.unsure), name: entry.name, quantity: entry.quantity, price: entry.unitPrice }))
+      photoZoomed = false
       step = 'review'
       haptic.success()
     } catch (failure) {
@@ -70,7 +74,7 @@
     if (file) void read(file)
   }
 
-  function addRow() { rows = [...rows, { id: nextId++, include: true, name: '', quantity: 1, price: null }] }
+  function addRow() { rows = [...rows, { id: nextId++, include: true, suspect: false, name: '', quantity: 1, price: null }] }
   function removeRow(row: Row) { rows = rows.filter(entry => entry.id !== row.id) }
   function restart() { controller?.abort(); controller = null; setPreview(null); rows = []; rawText = ''; receiptTotal = null; receiptService = null; error = ''; step = 'pick' }
 
@@ -112,13 +116,22 @@
     <button type="button" class="soft-button wide" onclick={restart}>Отменить</button>
   {:else}
     {#if rows.length}
-      <p class="lead">Исправьте ошибки и снимите галочку с лишнего.</p>
+      <p class="lead">Исправьте ошибки и снимите галочку с лишнего.{#if hasSuspects} Строки без галочки, скорее всего, распознаны с ошибкой.{/if}</p>
     {:else}
       <div class="notice warning"><span aria-hidden="true">◌</span><div><b>Позиции не найдены</b><small>Переснимите чек ровнее или добавьте строки вручную.</small></div></div>
     {/if}
+    {#if preview}
+      <!-- The photo next to the rows, to check them against; a tap shows it at full width to read small print. -->
+      <details class="scan-photo">
+        <summary>Фото чека</summary>
+        <div class="scan-photo-frame" class:zoomed={photoZoomed}>
+          <button type="button" aria-label={photoZoomed ? 'Уменьшить фото' : 'Увеличить фото'} onclick={() => photoZoomed = !photoZoomed}><img src={preview} alt="Фото чека" /></button>
+        </div>
+      </details>
+    {/if}
     <div class="scan-rows">
       {#each rows as row, i (row.id)}
-        <div class="scan-row" class:off={!row.include} class:invalid={row.include && !valid(row)}>
+        <div class="scan-row" class:off={!row.include} class:suspect={row.suspect} class:invalid={row.include && !valid(row)}>
           <input type="checkbox" bind:checked={row.include} aria-label={`Добавить позицию ${i + 1}`} />
           <input class="scan-name" bind:value={row.name} maxlength={scanLimits.nameLength} placeholder="Название" aria-label="Название" />
           <span class="scan-qty"><input type="number" bind:value={row.quantity} min="1" max={scanLimits.maxQuantity} step="1" inputmode="numeric" aria-label="Количество" /><span>шт</span></span>
@@ -132,6 +145,9 @@
       <span>Выбрано {plural(chosen.length, 'позиция', 'позиции', 'позиций')}{#if receiptTotal}<small class:off-total={totalOff}>{` · в чеке ${formatUzs(receiptTotal)}`}</small>{/if}</span>
       <b>{formatUzs(chosenTotal)}</b>
     </div>
+    {#if totalOff && receiptTotal !== null}
+      <p class="scan-diff" role="status">{chosenTotal < receiptTotal ? `Не хватает ${formatUzs(receiptTotal - chosenTotal)} до суммы чека` : `На ${formatUzs(chosenTotal - receiptTotal)} больше суммы чека`}: сверьте цены и количество с фото.</p>
+    {/if}
     {#if serviceMismatch}
       <div class="notice info scan-service"><span aria-hidden="true">%</span><div><b>В чеке обслуживание {receiptService}%</b><small>Сейчас в расчёте {app.bill?.servicePercent}%.</small></div><button type="button" class="chip" disabled={app.busy} onclick={applyService}>Поставить {receiptService}%</button></div>
     {/if}
