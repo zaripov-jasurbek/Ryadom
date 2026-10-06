@@ -34,7 +34,7 @@
   let tapped = $state('')
   let tapTimer: ReturnType<typeof setTimeout> | undefined
   function tap(control: string, unit: number) {
-    haptic.tap()
+    haptic.selection()
     tapped = control
     clearTimeout(tapTimer); tapTimer = setTimeout(() => tapped = '', 320)
     void app.toggleUnit(item, unit)
