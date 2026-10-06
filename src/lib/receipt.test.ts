@@ -526,6 +526,16 @@ describe('real receipts in columns', () => {
     assert.equal(result.total, 136520)
   })
 
+  it('takes the price from the tax line under it when OCR misread the price and the total agrees', () => {
+    const misread = korzinkaLong.replace('15 990,00', '5 990,00')
+    const price = (text: string) => parseReceipt(text).items.find(entry => entry.name.startsWith('Shokoladli'))!.unitPrice
+    assert.equal(price(misread), 15990)
+    assert.ok(isComplete(parseReceipt(misread)))
+    // Without the total nothing tells which one is right, and a cut-off tax is no evidence.
+    assert.equal(price(misread.replace('UCHUN:\t136 520,00\n', '')), 5990)
+    assert.equal(price(misread.replace('1 713,21', '1 713')), 5990)
+  })
+
   it('stops reading again once a reading adds up, or three readings agree', () => {
     assert.equal(settled([]), false)
     assert.equal(settled([shopApp]), true)

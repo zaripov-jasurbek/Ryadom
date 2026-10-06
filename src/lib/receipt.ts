@@ -139,8 +139,9 @@ function timesItem(name: string, match: RegExpExecArray): ScannedItem | null {
 /**
  * An item while parsing. `certain` lines ("1 x 5 000 = 5 000") are kept even when no name is found. `alt` is the unit price
  * if the line's last number is the price of one piece rather than the line's sum: "Самса 2 22 000" reads either way.
+ * `vat` is the line's sum worked out from the tax printed under it, for when OCR misread the price.
  */
-type Parsed = ScannedItem & { certain: boolean; alt?: number }
+type Parsed = ScannedItem & { certain: boolean; alt?: number; vat?: number }
 
 /** Parses one line into an item. Its name is empty when the line has only numbers: fiscal receipts print the name on the line above. */
 function parseLine(line: string): Parsed | null {
@@ -211,6 +212,28 @@ function fixQuantity<T extends ScannedItem>(items: T[], total: number): T[] | nu
   return fixes.length === 1 ? fixes[0] : null
 }
 
+// "Shu jumladan QQS 12%: 1 713,21" under an item on Uzbek fiscal receipts: the tax included in the line's sum.
+const vatPattern = /(?<!\p{L})(?:qqs|ндс)(?!\p{L})/iu
+const centsPattern = /(?<!\d)(\d{1,3}(?:[  ]\d{3})*[.,]\d{2})\s*$/
+
+/**
+ * The line's sum that the tax in the line comes from: 1 713,21 at 12% is 15 990. Only a tax read to the tiyin that gives
+ * whole sums counts, so a misread or cut-off tax ("1 713") is not taken for a price.
+ */
+function vatSum(line: string) {
+  const percent = percentOf(line), tax = centsPattern.exec(line)
+  if (!percent || percent > 30 || !tax) return null
+  const sum = parseAmount(tax[1]) * (100 + percent) / percent
+  return Math.abs(sum - Math.round(sum)) <= 0.06 && Math.round(sum) >= scanLimits.minPrice ? Math.round(sum) : null
+}
+
+/** The row with the line's sum its tax gives; the pieces stay when they divide it. */
+function withVat<T extends Parsed>(entry: T): T {
+  if (!entry.vat || close(lineSum(entry), entry.vat)) return entry
+  const quantity = Number.isInteger(entry.vat / entry.quantity) ? entry.quantity : 1
+  return { ...entry, quantity, unitPrice: entry.vat / quantity }
+}
+
 /** "Сумма: 401 000" before service and discounts: what the dishes add up to. */
 const subtotalPattern = /^полная(?!\p{L})|^сумма(?!\s+\p{L})|(?<!\p{L})(?:subtotal|подытог)(?!\p{L})/iu
 const currencyLine = /^[^\p{L}\d]*(?:сум|so'?m|sum|uzs)[^\p{L}\d]*$/iu
@@ -251,6 +274,11 @@ export function parseReceipt(text: string, known?: Pick<ScanResult, 'total' | 's
     const line = fixed.replace(/^(?:(?:\d{1,3}|[|!lI])\s?[.)]\s*(?=[\p{L}[("«“])|\d{1,3}\s+(?=\p{Lu}{3}))/u, '')
     if (!line || currencyLine.test(line)) continue
     if (skipPattern.test(line)) {
+      // The tax line under an item, before the next one starts; never the receipt's total tax.
+      if (!ended && last && items.at(-1) === last && vatPattern.test(line) && !totalPattern.test(line)) {
+        const sum = vatSum(line)
+        if (sum) (last as Parsed).vat = sum
+      }
       settle()
       const value = amounts(line).filter(entry => entry.value >= scanLimits.minPrice).at(-1)?.value
       if (headerPattern.test(line) && value === undefined) unitPrices = unitPriceHeader.test(line) && !lineSumHeader.test(line)
@@ -312,6 +340,8 @@ export function parseReceipt(text: string, known?: Pick<ScanResult, 'total' | 's
   // only adds up the other way.
   const asSums = items, asUnits = items.map(entry => entry.alt ? { ...entry, unitPrice: entry.alt } : entry)
   const readings = unitPrices ? [asUnits, asSums] : [asSums, asUnits]
+  // Prices from the tax lines come last: they only win when the receipt's total agrees with them.
+  if (items.some(entry => entry.vat && !close(lineSum(entry), entry.vat))) readings.push(...readings.map(entries => entries.map(withVat)))
   const options = candidates.flatMap(value => readings.map(entries => ({ value, entries })))
   const fit = options.find(({ value, entries }) => addsUp(entries, value))
     ?? options.map(({ value, entries }) => ({ value, entries: fixQuantity(entries, value) })).find(option => option.entries)
