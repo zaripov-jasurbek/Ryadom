@@ -192,12 +192,12 @@ export async function recognizeReceipt(file: Blob, onProgress: OcrProgress, sign
   onProgress('Подготавливаем фото', 0)
   const [{ createWorker, OEM, PSM }, images] = await Promise.all([import('tesseract.js'), prepare(file)])
   signal.throwIfAborted()
-  const root = new URL(`\${import.meta.env.BASE_URL}tesseract/`, location.href).href
+  const root = new URL(`${import.meta.env.BASE_URL}tesseract/`, location.href).href
   let again = false
   const worker = await createWorker(['rus', 'uzb'], OEM.LSTM_ONLY, {
-    workerPath: `\${root}worker.min.js`,
-    corePath: `\${root}core`,
-    langPath: `\${root}lang`,
+    workerPath: `${root}worker.min.js`,
+    corePath: `${root}core`,
+    langPath: `${root}lang`,
     logger: message => onProgress(again ? 'Перечитываем чек' : stages[message.status] ?? 'Читаем чек', message.progress),
   })
   const stop = () => void worker.terminate()
