@@ -120,24 +120,49 @@ function evenLight(px: Uint8ClampedArray, width: number, height: number) {
   }
 }
 
-/** Crops the photo to the receipt, sizes the text for Tesseract and evens out the light. */
-async function prepare(file: Blob) {
-  const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' })
-  const paper = findPaper(bitmap)
+/** Draws a normalized OCR canvas. */
+function drawVariant(bitmap: ImageBitmap, paper: Rect, mode: 'normal' | 'gray' | 'threshold') {
   const scale = Math.min(3, targetWidth / paper.width, Math.sqrt(maxPixels / (paper.width * paper.height)))
   const canvas = document.createElement('canvas')
-  canvas.width = Math.round(paper.width * scale); canvas.height = Math.round(paper.height * scale)
+  canvas.width = Math.max(1, Math.round(paper.width * scale))
+  canvas.height = Math.max(1, Math.round(paper.height * scale))
   const ctx = canvas.getContext('2d', { willReadFrequently: true })
   if (!ctx) throw new Error('Canvas is unavailable')
   ctx.imageSmoothingQuality = 'high'
   ctx.drawImage(bitmap, paper.x, paper.y, paper.width, paper.height, 0, 0, canvas.width, canvas.height)
-  bitmap.close()
   const image = ctx.getImageData(0, 0, canvas.width, canvas.height)
-  evenLight(image.data, canvas.width, canvas.height)
+  if (mode !== 'normal') evenLight(image.data, canvas.width, canvas.height)
+  if (mode === 'gray') {
+    for (let i = 0; i < image.data.length; i += 4) {
+      const value = image.data[i]
+      image.data[i] = image.data[i + 1] = image.data[i + 2] = value
+    }
+  } else if (mode === 'threshold') {
+    for (let i = 0; i < image.data.length; i += 4) {
+      const value = image.data[i] < 150 ? 0 : 255
+      image.data[i] = image.data[i + 1] = image.data[i + 2] = value
+    }
+  }
   ctx.putImageData(image, 0, 0)
   return canvas
 }
 
+/**
+ * Makes several deliberately different views of the same photo. A full-photo view is kept as a fallback because
+ * paper detection is heuristic and can accidentally crop a white table, a pale receipt, or a receipt with a shadow.
+ */
+async function prepare(file: Blob) {
+  const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' })
+  const paper = findPaper(bitmap)
+  const whole: Rect = { x: 0, y: 0, width: bitmap.width, height: bitmap.height }
+  const variants = [
+    drawVariant(bitmap, paper, 'normal'),
+    drawVariant(bitmap, paper, 'gray'),
+    drawVariant(bitmap, whole, 'normal'),
+  ]
+  bitmap.close()
+  return variants
+}
 type Box = { x0: number; x1: number }
 type OcrLine = { confidence: number; words: { text: string; confidence: number; bbox: Box }[] }
 
@@ -165,27 +190,30 @@ export function confidentText(lines: OcrLine[]) {
  */
 export async function recognizeReceipt(file: Blob, onProgress: OcrProgress, signal: AbortSignal, complete: (text: string) => boolean): Promise<string[]> {
   onProgress('Подготавливаем фото', 0)
-  const [{ createWorker, OEM, PSM }, image] = await Promise.all([import('tesseract.js'), prepare(file)])
+  const [{ createWorker, OEM, PSM }, images] = await Promise.all([import('tesseract.js'), prepare(file)])
   signal.throwIfAborted()
-  const root = new URL(`${import.meta.env.BASE_URL}tesseract/`, location.href).href
+  const root = new URL(`\${import.meta.env.BASE_URL}tesseract/`, location.href).href
   let again = false
   const worker = await createWorker(['rus', 'uzb'], OEM.LSTM_ONLY, {
-    workerPath: `${root}worker.min.js`,
-    corePath: `${root}core`,
-    langPath: `${root}lang`,
+    workerPath: `\${root}worker.min.js`,
+    corePath: `\${root}core`,
+    langPath: `\${root}lang`,
     logger: message => onProgress(again ? 'Перечитываем чек' : stages[message.status] ?? 'Читаем чек', message.progress),
   })
   const stop = () => void worker.terminate()
   signal.addEventListener('abort', stop)
   try {
     const readings: string[] = []
-    for (const mode of [PSM.SINGLE_BLOCK, PSM.SINGLE_COLUMN]) {
-      signal.throwIfAborted()
-      await worker.setParameters({ tessedit_pageseg_mode: mode })
-      const { data } = await worker.recognize(image, {}, { blocks: true })
-      readings.push(confidentText((data.blocks ?? []).flatMap(block => block.paragraphs.flatMap(paragraph => paragraph.lines))))
-      if (complete(readings.at(-1)!)) break
-      again = true
+    for (const image of images) {
+      for (const mode of [PSM.SINGLE_BLOCK, PSM.SINGLE_COLUMN]) {
+        signal.throwIfAborted()
+        await worker.setParameters({ tessedit_pageseg_mode: mode })
+        const { data } = await worker.recognize(image, {}, { blocks: true })
+        const text = confidentText((data.blocks ?? []).flatMap(block => block.paragraphs.flatMap(paragraph => paragraph.lines)))
+        if (text) readings.push(text)
+        if (complete(text)) return readings
+        again = true
+      }
     }
     return readings
   } finally {
