@@ -202,22 +202,44 @@ function deskew(canvas: HTMLCanvasElement) {
 }
 
 /**
- * Makes several deliberately different views of the same photo. A full-photo view is kept as a fallback because
- * paper detection is heuristic and can accidentally crop a white table, a pale receipt, or a receipt with a shadow.
+ * Deliberately different views of the same photo, drawn one at a time: most receipts read on the first, and each
+ * canvas takes tens of megabytes. A full-photo view is kept as a fallback because paper detection is heuristic and
+ * can accidentally crop a white table, a pale receipt, or a receipt with a shadow.
  */
-async function prepare(file: Blob) {
-  const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' })
-  const paper = findPaper(bitmap)
-  const whole: Rect = { x: 0, y: 0, width: bitmap.width, height: bitmap.height }
-  const variants = [
-    deskew(drawVariant(bitmap, paper, 'normal')),
-    deskew(drawVariant(bitmap, paper, 'gray')),
-    deskew(drawVariant(bitmap, paper, 'threshold')),
-    deskew(drawVariant(bitmap, paper, 'thresholdStrong')),
-    drawVariant(bitmap, whole, 'normal'),
-  ]
-  bitmap.close()
-  return variants
+const views = [
+  { draw: (bitmap: ImageBitmap, paper: Rect) => deskew(drawVariant(bitmap, paper, 'normal')), column: true },
+  { draw: (bitmap: ImageBitmap, paper: Rect) => deskew(drawVariant(bitmap, paper, 'gray')), column: true },
+  { draw: (bitmap: ImageBitmap, paper: Rect) => deskew(drawVariant(bitmap, paper, 'threshold')), column: false },
+  { draw: (bitmap: ImageBitmap, paper: Rect) => deskew(drawVariant(bitmap, paper, 'thresholdStrong')), column: false },
+  { draw: (bitmap: ImageBitmap) => drawVariant(bitmap, { x: 0, y: 0, width: bitmap.width, height: bitmap.height }, 'normal'), column: true },
+]
+/** Every view is read as one block; most also as a column of lines. */
+const passCount = views.reduce((sum, view) => sum + (view.column ? 2 : 1), 0)
+
+// The worker stays loaded while the scanner is open, so a retake skips loading the engine and its models.
+// Its logger reports to whichever scan is running.
+let engine: Promise<import('tesseract.js').Worker> | null = null
+let report: (status: string, progress: number) => void = () => {}
+
+function startEngine() {
+  if (engine) return engine
+  const root = new URL(`${import.meta.env.BASE_URL}tesseract/`, location.href).href
+  const started = engine = import('tesseract.js').then(({ createWorker, OEM }) => createWorker(['rus', 'uzb'], OEM.LSTM_ONLY, {
+    workerPath: `${root}worker.min.js`,
+    corePath: `${root}core`,
+    langPath: `${root}lang`,
+    logger: message => report(message.status, message.progress),
+  }))
+  // A failed start, such as no network for the models, is retried by the next scan.
+  started.catch(() => { if (engine === started) engine = null })
+  return started
+}
+
+/** Unloads the engine; also stops a reading in progress. */
+export function stopReceiptEngine() {
+  const current = engine
+  engine = null
+  void current?.then(worker => worker.terminate()).catch(() => {})
 }
 type Box = { x0: number; x1: number }
 type OcrLine = { confidence: number; words: { text: string; confidence: number; bbox: Box }[] }
@@ -240,43 +262,48 @@ export function confidentText(lines: OcrLine[]) {
 }
 
 /**
- * Reads the receipt as one block of text, which keeps price columns on their rows. When `complete` rejects that
- * reading, reads it again as a column of lines of varying size, which catches large bold totals.
- * Returns every reading; aborting stops the worker.
+ * Reads the receipt as one block of text, which keeps price columns on their rows; then as a column of lines of
+ * varying size, which catches large bold totals; then the other views, until `enough` accepts the readings so far.
+ * Returns every reading; aborting stops the engine.
  */
-export async function recognizeReceipt(file: Blob, onProgress: OcrProgress, signal: AbortSignal, complete: (text: string) => boolean): Promise<string[]> {
+export async function recognizeReceipt(file: Blob, onProgress: OcrProgress, signal: AbortSignal, enough: (readings: string[]) => boolean): Promise<string[]> {
   onProgress('Подготавливаем фото', 0)
-  const [{ createWorker, OEM, PSM }, images] = await Promise.all([import('tesseract.js'), prepare(file)])
-  signal.throwIfAborted()
-  const root = new URL(`${import.meta.env.BASE_URL}tesseract/`, location.href).href
-  let again = false
-  const worker = await createWorker(['rus', 'uzb'], OEM.LSTM_ONLY, {
-    workerPath: `${root}worker.min.js`,
-    corePath: `${root}core`,
-    langPath: `${root}lang`,
-    logger: message => onProgress(again ? 'Перечитываем чек' : stages[message.status] ?? 'Читаем чек', message.progress),
-  })
-  const stop = () => void worker.terminate()
+  // Rereads show their own count, so a bar that fills again does not look like the scan started over.
+  let pass = 0
+  const mine = report = (status, progress) => {
+    if (status !== 'recognizing text') onProgress(stages[status] ?? 'Читаем чек', progress)
+    else if (!pass) onProgress('Читаем чек', progress)
+    else onProgress(`Перечитываем чек (${pass}/${passCount - 1})`, (pass - 1 + progress) / (passCount - 1))
+  }
+  // A terminated worker never settles its pending job, so the scan stops on this instead and cleans up after itself.
+  const aborted = new Promise<never>((_, reject) => signal.addEventListener('abort', () => reject(signal.reason), { once: true }))
+  aborted.catch(() => {})
+  const stop = () => stopReceiptEngine()
   signal.addEventListener('abort', stop)
+  const decoding = createImageBitmap(file, { imageOrientation: 'from-image' })
   try {
+    const [{ PSM }, worker] = await Promise.race([Promise.all([import('tesseract.js'), startEngine()]), aborted])
+    const bitmap = await decoding
+    signal.throwIfAborted()
+    const paper = findPaper(bitmap)
     const readings: string[] = []
-    for (const [imageIndex, image] of images.entries()) {
-      const modes = imageIndex >= 2 && imageIndex <= 3
-        ? [PSM.SINGLE_BLOCK]
-        : [PSM.SINGLE_BLOCK, PSM.SINGLE_COLUMN]
-      for (const mode of modes) {
+    for (const view of views) {
+      const image = view.draw(bitmap, paper)
+      for (const mode of view.column ? [PSM.SINGLE_BLOCK, PSM.SINGLE_COLUMN] : [PSM.SINGLE_BLOCK]) {
         signal.throwIfAborted()
-        await worker.setParameters({ tessedit_pageseg_mode: mode })
-        const { data } = await worker.recognize(image, {}, { blocks: true })
+        await Promise.race([worker.setParameters({ tessedit_pageseg_mode: mode }), aborted])
+        const { data } = await Promise.race([worker.recognize(image, {}, { blocks: true }), aborted])
         const text = confidentText((data.blocks ?? []).flatMap(block => block.paragraphs.flatMap(paragraph => paragraph.lines)))
         if (text) readings.push(text)
-        if (complete(text)) return readings
-        again = true
+        if (text && enough(readings)) return readings
+        pass++
       }
     }
     return readings
   } finally {
+    void decoding.then(bitmap => bitmap.close(), () => {})
     signal.removeEventListener('abort', stop)
-    await worker.terminate().catch(() => {})
+    // A scan started after this one was aborted reports on its own.
+    if (report === mine) report = () => {}
   }
 }

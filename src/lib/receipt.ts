@@ -19,15 +19,16 @@ const timesPattern = new RegExp(String.raw`(?<!\d)(\d+(?:[.,]\d{1,3})?)\s*(?:\p{
 const reversedPattern = new RegExp(String.raw`(?<!\d)(${amount})\s*[xх×*]\s*(\d{1,2})(?![\d.,])`, 'iu')
 
 // Lines that are totals, payments, taxes or receipt metadata rather than dishes.
-const totalWords = String.raw`итог\p{L}*|всего|к\s+оплате|jami|to.?lov\s+uchun|total|subtotal`
+// OCR often loses the start of "TO'LOV UCHUN:", leaving "UCHUN:" or "CHUN:".
+const totalWords = String.raw`итог\p{L}*|всего|к\s+оплате|jami|to.?lov\s+uchun|u?chun(?=\s*:)|total|subtotal`
 const skipWords = [
   totalWords,
-  String.raw`оплат\p{L}*|наличн\p{L}*|безнал\p{L}*|карт(?:а|ой|е|ы)|сдача|ндс|qqs|naqd\p{L}*|karta|plastik|qaytim|t[o0]'?landi|tax|vat|sh\.?\s?j|jumladan`,
+  String.raw`оплат\p{L}*|наличн\p{L}*|безнал\p{L}*|карт(?:а|ой|е|ы)|сдача|ндс|qqs|naqd\p{L}*|karta(?:si|lar\p{L}*|ga|dan)?|bank\p{L}*|банк\p{L}*|plastik|qaytim|t[o0]'?landi|tax|vat|sh\.?\s?j|jumladan`,
   String.raw`обслуживан\p{L}*|надбавк\p{L}*|xizmat\p{L}*|service|скидк\p{L}*|chegirma|discount|бонус\p{L}*|чаев\p{L}*|tips?`,
   // Exact words where a dish could start the same way: "Открытый пирог", "Кассата".
   String.raw`инн|stir|чек|chek\p{L}*|check|savdo|сч[её]т|гостевой|открыт|заказ|зал|касс[аы]|кассир\p{L}*|kassa|kassir|смена|продажа|sotuv\p{L}*|фискал\p{L}*|fiskal\p{L}*|терминал|terminal`,
   String.raw`mxik|mk|мк|икпу|ikpu|штрих\p{L}*|shtrix\p{L}*|sku|sh\.?\s?k|qad[aoq]{1,4}|k[ao]d\p{L}?|код`,
-  String.raw`дата|sana|время|vaqt|официант\p{L}*|ofitsiant|стол|stol|гост(?:ь|ей|и)|mehmon\p{L}*|спасибо|rahmat|телефон|tel|адрес|manzil`,
+  String.raw`дата|sana|время|vaqt|официант\p{L}*|ofitsiant|стол|stol|гост(?:ь|ей|и)|mehmon\p{L}*|спасибо|rahmat|телефон|tel|адрес|manzil|ko.?cha(?:si)?`,
   String.raw`наименован\p{L}*|кол-?во|цена|сумма|полная|nomi|soni|narxi|summa|позици\p{L}*|покуп\p{L}*`,
 ].join('|')
 const skipPattern = new RegExp(String.raw`(?<!\p{L})(?:${skipWords})(?!\p{L})`, 'iu')
@@ -36,14 +37,17 @@ const servicePattern = /(?<!\p{L})(?:обслуживан\p{L}*|надбавк\p
 const discountPattern = /(?<!\p{L})(?:скидк\p{L}*|chegirma|discount)(?!\p{L})/iu
 // Numbers that are never prices: dates, times and phone numbers ("Кальян до 17:00" is still a dish), receipt and
 // article numbers, codes after a slash, weights, volumes and pieces in names, and numbers glued to a word ("1кишилик").
+// Sizes such as "5x3" in "Uzaytirgich Tekled 5x3 dona": no thousands group follows, unlike "2 x 25 000".
+const sizePattern = /(?<![\d.,])\d{1,2}\s?[xх×]\s?\d{1,2}(?![\d.,]|\s?\d{3})/giu
 const notPricePattern = new RegExp([
+  sizePattern.source,
   String.raw`\d{1,2}[./-]\d{1,2}[./-]\d{2,4}|(?<!\d)\d{1,2}:\d{2}(?::\d{2})?(?!\d)|\+\s?\d[\d\s()-]{7,}\d`,
   String.raw`[№#]\s*:?\s*\d+`,
   String.raw`\[[^\]]*\]`,
   String.raw`\(\s*\d[\d\s.,]*\)`,
   String.raw`\/\s*\d+`,
   String.raw`(?<![\d.,])\d+(?:[.,]\d+)?\s?(?:кг|kg|гр?|gr?|мл|ml|л|l|шт|pcs|dona|%)(?!\p{L})`,
-  String.raw`(?<![\d.,])\d+(?:[.,]\d+)?(?=\p{L}{2})(?!сум|so'?m|sum|uzs)`,
+  String.raw`(?<![\d.,])\d+(?:[.,]\d+)?(?=\p{L}{2})(?!сум|so'?m|sum|uzs)|(?<![\d.,])\d+-(?=\p{L})`,
   String.raw`(?<!\S)0\d{4,}`,
 ].join('|'), 'giu')
 const currencyPattern = /(?<!\p{L})(?:сум|so'?m|sum|uzs)(?!\p{L})/giu
@@ -68,6 +72,13 @@ function fixDigits(line: string) {
 const latin = 'AaBCcEeHKkMmOoPpTXxy', cyrillic = 'АаВСсЕеНКкМмОоРрТХху'
 const toCyrillic = new Map([...latin].map((char, i) => [char, cyrillic[i]]))
 const toLatin = new Map([...cyrillic].map((char, i) => [char, latin[i]]))
+
+/** Only letters without a twin in the other alphabet tell which one a text is written in. */
+const distinct = (text: string, script: RegExp, twins: Map<string, string>) => (text.match(script) ?? []).filter(char => !twins.has(char)).length
+const scriptBalance = (text: string) => distinct(text, /\p{Script=Cyrillic}/gu, toLatin) - distinct(text, /\p{Script=Latin}/gu, toCyrillic)
+const isCyrillic = (text: string) => scriptBalance(text) > 0
+/** Two texts in different alphabets; one of only look-alike letters ("сом") fits either. */
+const otherScript = (a: string, b: string) => scriptBalance(a) * scriptBalance(b) < 0
 
 /** Rewrites look-alike letters in the receipt's main script, so a dish reads as one alphabet. */
 function unifyScript(name: string, cyrillicReceipt: boolean) {
@@ -128,16 +139,18 @@ function timesItem(name: string, match: RegExpExecArray): ScannedItem | null {
 /**
  * An item while parsing. `certain` lines ("1 x 5 000 = 5 000") are kept even when no name is found. `alt` is the unit price
  * if the line's last number is the price of one piece rather than the line's sum: "Самса 2 22 000" reads either way.
+ * `vat` is the line's sum worked out from the tax printed under it, for when OCR misread the price.
  */
-type Parsed = ScannedItem & { certain: boolean; alt?: number }
+type Parsed = ScannedItem & { certain: boolean; alt?: number; vat?: number }
 
 /** Parses one line into an item. Its name is empty when the line has only numbers: fiscal receipts print the name on the line above. */
 function parseLine(line: string): Parsed | null {
-  const times = timesPattern.exec(line)
+  const bare = line.replace(sizePattern, match => ' '.repeat(match.length))
+  const times = timesPattern.exec(bare)
   const parsed = times && timesItem(nameOrEmpty(line.slice(0, times.index), true), times)
   if (parsed) return { ...parsed, certain: Boolean(times![3] || times![4]) }
   // "Шашлык 45 000 x 2": the price first, then the pieces.
-  const reversed = reversedPattern.exec(line)
+  const reversed = reversedPattern.exec(bare)
   const flipped = reversed && item(nameOrEmpty(line.slice(0, reversed.index), true), Number(reversed[2]), parseAmount(reversed[1]))
   if (flipped) return { ...flipped, certain: false }
   const found = amounts(line)
@@ -189,6 +202,38 @@ function markExtras(items: ScannedItem[], total: number | null) {
   }
 }
 
+/** When other pieces in exactly one row make the dishes add up to the total, OCR misread them: "1" often comes out as "7" or "4". */
+function fixQuantity<T extends ScannedItem>(items: T[], total: number): T[] | null {
+  const fixes = items.flatMap((entry, i) => {
+    const quantity = Math.round((total - sumOf(items) + lineSum(entry)) / entry.unitPrice)
+    const fixed = items.map((other, j) => j === i ? { ...other, quantity } : other)
+    return isQuantity(quantity) && quantity !== entry.quantity && addsUp(fixed, total) ? [fixed] : []
+  })
+  return fixes.length === 1 ? fixes[0] : null
+}
+
+// "Shu jumladan QQS 12%: 1 713,21" under an item on Uzbek fiscal receipts: the tax included in the line's sum.
+const vatPattern = /(?<!\p{L})(?:qqs|ндс)(?!\p{L})/iu
+const centsPattern = /(?<!\d)(\d{1,3}(?:[  ]\d{3})*[.,]\d{2})\s*$/
+
+/**
+ * The line's sum that the tax in the line comes from: 1 713,21 at 12% is 15 990. Only a tax read to the tiyin that gives
+ * whole sums counts, so a misread or cut-off tax ("1 713") is not taken for a price.
+ */
+function vatSum(line: string) {
+  const percent = percentOf(line), tax = centsPattern.exec(line)
+  if (!percent || percent > 30 || !tax) return null
+  const sum = parseAmount(tax[1]) * (100 + percent) / percent
+  return Math.abs(sum - Math.round(sum)) <= 0.06 && Math.round(sum) >= scanLimits.minPrice ? Math.round(sum) : null
+}
+
+/** The row with the line's sum its tax gives; the pieces stay when they divide it. */
+function withVat<T extends Parsed>(entry: T): T {
+  if (!entry.vat || close(lineSum(entry), entry.vat)) return entry
+  const quantity = Number.isInteger(entry.vat / entry.quantity) ? entry.quantity : 1
+  return { ...entry, quantity, unitPrice: entry.vat / quantity }
+}
+
 /** "Сумма: 401 000" before service and discounts: what the dishes add up to. */
 const subtotalPattern = /^полная(?!\p{L})|^сумма(?!\s+\p{L})|(?<!\p{L})(?:subtotal|подытог)(?!\p{L})/iu
 const currencyLine = /^[^\p{L}\d]*(?:сум|so'?m|sum|uzs)[^\p{L}\d]*$/iu
@@ -213,7 +258,9 @@ export function parseReceipt(text: string, known?: Pick<ScanResult, 'total' | 's
   // Fiscal receipts print the name above the price and a translation below it.
   let last: ScannedItem | null = null, lastNamedInline = false
   const settle = () => {
-    if (last && lastNamedInline && names.length) last.name = cleanName(`${last.name} ${names.map(entry => entry.text).join(' ')}`)
+    // A line in the other alphabet is a translation, as "Удлинитель Tekled 5x3 шт" under "Uzaytirgich Tekled 5x3 dona".
+    const rest = last && lastNamedInline ? names.filter(entry => !otherScript(entry.text, last!.name)) : []
+    if (last && rest.length) last.name = cleanName(`${last.name} ${rest.map(entry => entry.text).join(' ')}`)
     names = []; last = null
   }
   for (const raw of text.split(/\r?\n/)) {
@@ -227,6 +274,11 @@ export function parseReceipt(text: string, known?: Pick<ScanResult, 'total' | 's
     const line = fixed.replace(/^(?:(?:\d{1,3}|[|!lI])\s?[.)]\s*(?=[\p{L}[("«“])|\d{1,3}\s+(?=\p{Lu}{3}))/u, '')
     if (!line || currencyLine.test(line)) continue
     if (skipPattern.test(line)) {
+      // The tax line under an item, before the next one starts; never the receipt's total tax.
+      if (!ended && last && items.at(-1) === last && vatPattern.test(line) && !totalPattern.test(line)) {
+        const sum = vatSum(line)
+        if (sum) (last as Parsed).vat = sum
+      }
       settle()
       const value = amounts(line).filter(entry => entry.value >= scanLimits.minPrice).at(-1)?.value
       if (headerPattern.test(line) && value === undefined) unitPrices = unitPriceHeader.test(line) && !lineSumHeader.test(line)
@@ -249,8 +301,10 @@ export function parseReceipt(text: string, known?: Pick<ScanResult, 'total' | 's
       if (items.length && known?.total === lineSum(parsed)) { settle(); ended = true; continue }
       const inline = Boolean(parsed.name)
       if (inline) {
+        // A name wrapped onto the price line goes on in lower case: "Logotipli paket Bio poelitilen 4 k" over "gacha ⇥ 1 ⇥ 400".
+        if (names.length && /^\p{Ll}/u.test(parsed.name)) parsed.name = cleanName(`${names.pop()!.text} ${parsed.name}`)
         // A short line in title case right above a dish, such as "Кухня" or "Напитки", is a menu section.
-        if (/^\p{Lu}\p{Ll}/u.test(names.at(-1)?.text ?? '')) names.pop()
+        else if (/^\p{Lu}\p{Ll}/u.test(names.at(-1)?.text ?? '')) names.pop()
         settle()
       } else {
         // The name above the price starts at a numbered line; else, after a dish named on its own price line, it is
@@ -286,14 +340,16 @@ export function parseReceipt(text: string, known?: Pick<ScanResult, 'total' | 's
   // only adds up the other way.
   const asSums = items, asUnits = items.map(entry => entry.alt ? { ...entry, unitPrice: entry.alt } : entry)
   const readings = unitPrices ? [asUnits, asSums] : [asSums, asUnits]
-  const fit = candidates.flatMap(value => readings.map(entries => ({ value, entries }))).find(({ value, entries }) => addsUp(entries, value))
+  // Prices from the tax lines come last: they only win when the receipt's total agrees with them.
+  if (items.some(entry => entry.vat && !close(lineSum(entry), entry.vat))) readings.push(...readings.map(entries => entries.map(withVat)))
+  const options = candidates.flatMap(value => readings.map(entries => ({ value, entries })))
+  const fit = options.find(({ value, entries }) => addsUp(entries, value))
+    ?? options.map(({ value, entries }) => ({ value, entries: fixQuantity(entries, value) })).find(option => option.entries)
   const food = fit?.value ?? candidates[0] ?? null
   const chosen = fit?.entries ?? readings[0]
   markExtras(chosen, food)
 
-  // Only letters without a twin in the other alphabet tell which one the receipt is printed in.
-  const distinct = (script: RegExp, twins: Map<string, string>) => (text.match(script) ?? []).filter(char => !twins.has(char)).length
-  const cyrillicReceipt = distinct(/\p{Script=Cyrillic}/gu, toLatin) > distinct(/\p{Script=Latin}/gu, toCyrillic)
+  const cyrillicReceipt = isCyrillic(text)
   const base = food ?? sumOf(chosen)
   // The printed percent is exact; else it comes from the amount. Above half the food it is a misread number.
   const percent = servicePercent ?? (service && base ? service / base * 100 : null)
@@ -307,6 +363,19 @@ export function parseReceipt(text: string, known?: Pick<ScanResult, 'total' | 's
 /** The checked dishes add up to the receipt's total. */
 export function isComplete(result: ScanResult) {
   return result.total !== null && result.items.length > 0 && Math.abs(sumOf(result.items.filter(entry => !entry.unsure)) - result.total) <= result.items.length
+}
+
+/**
+ * Readings are enough when the last one adds up, or when three of them found the same rows and total: those come from
+ * at least two views of the photo, and more passes rarely change the answer then.
+ */
+export function settled(texts: string[]) {
+  const results = texts.map(text => parseReceipt(text))
+  const last = results.at(-1)
+  if (!last) return false
+  if (isComplete(last)) return true
+  const key = (result: ScanResult) => JSON.stringify([result.total, result.items.map(entry => [entry.quantity, entry.unitPrice])])
+  return last.items.length > 0 && results.filter(result => key(result) === key(last)).length >= 3
 }
 
 /**

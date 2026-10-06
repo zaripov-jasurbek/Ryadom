@@ -490,6 +490,7 @@ body:has(.comment-form textarea:focus) .tab-bar { display: none; }
 .scan-row { display: grid; grid-template-columns: auto 92px 1fr auto; grid-template-areas: "check name name remove" ". qty price price"; gap: 8px; align-items: center; padding: 10px; border-radius: var(--radius-sm); box-shadow: var(--raise-sm); transition: opacity .18s; }
 .scan-row.off { opacity: .5; }
 .scan-row.invalid { box-shadow: var(--raise-sm), inset 0 0 0 2px var(--danger); }
+.scan-row.suspect.off { opacity: .7; box-shadow: var(--raise-sm), inset 0 0 0 1px var(--warn-ink); }
 .scan-row input[type=checkbox] { grid-area: check; width: 20px; height: 20px; accent-color: var(--brand); }
 .scan-row .icon-button { grid-area: remove; }
 .scan-row input:not([type=checkbox]) { width: 100%; min-width: 0; min-height: 40px; padding: 0 10px; border: 0; border-radius: 10px; background: var(--field); box-shadow: var(--inset-sm); font-size: 16px; outline: none; }
@@ -502,6 +503,14 @@ body:has(.comment-form textarea:focus) .tab-bar { display: none; }
 .scan-qty > span, .scan-price > span { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); font-size: 12px; color: var(--muted); pointer-events: none; }
 .modal-total small { font-size: 13px; }
 .modal-total small.off-total { color: var(--danger); }
+.scan-diff { margin: -4px 0 6px; font-size: 13px; line-height: 1.45; color: var(--danger); }
+.scan-photo { margin: 2px 0 8px; font-size: 13px; color: var(--muted); }
+.scan-photo summary { cursor: pointer; }
+.scan-photo-frame { max-height: 320px; margin-top: 8px; overflow: auto; border-radius: var(--radius-sm); box-shadow: var(--inset-sm); }
+.scan-photo-frame button { display: block; width: 100%; padding: 0; border: 0; background: none; cursor: zoom-in; }
+.scan-photo-frame img { display: block; width: 100%; height: auto; }
+.scan-photo-frame.zoomed { max-height: 60vh; }
+.scan-photo-frame.zoomed button { width: 200%; cursor: zoom-out; }
 .scan-service { margin-top: 10px; align-items: center; }
 .scan-service .chip { margin-left: auto; flex: none; background: var(--bg); }
 .scan-raw { margin-top: 10px; font-size: 13px; color: var(--muted); }

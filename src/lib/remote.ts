@@ -67,6 +67,9 @@ export const createRemoteCheck = (title: string, servicePercent: number, ownerNa
 export const claimRemoteCheckOwner = (publicId: string, ownerToken: string) => call('claim_check_owner', { p_public_id: publicId, p_owner_token: ownerToken })
 export const joinRemoteCheck = (publicId: string, name: string, sessionToken: string) => call('join_check', { p_public_id: publicId, p_name: name, p_session_token: sessionToken }) as Promise<Created>
 export const addRemoteItem = (checkId: string, name: string, quantity: number, price: number) => call('add_item', { p_check_id: checkId, p_name: name, p_quantity: quantity, p_unit_price: price })
+/** All rows or none, in one request; scanned receipts add many at once. */
+export const addRemoteItems = (checkId: string, items: { name: string; quantity: number; unitPrice: number }[]) =>
+  call('add_items', { p_check_id: checkId, p_items: items.map(entry => ({ name: entry.name, quantity: entry.quantity, unit_price: entry.unitPrice })) })
 export const updateRemoteItem = (checkId: string, itemId: string, name: string, quantity: number, price: number) => call('update_item', { p_check_id: checkId, p_item_id: itemId, p_name: name, p_quantity: quantity, p_unit_price: price })
 export const updateRemoteCheck = (checkId: string, title: string, servicePercent: number, paymentDetails: string) => call('update_check', { p_check_id: checkId, p_title: title, p_service_percent: servicePercent, p_payment_details: paymentDetails })
 export const shareRemoteItemEqually = (checkId: string, itemId: string) => call('share_item_equally', { p_check_id: checkId, p_item_id: itemId })

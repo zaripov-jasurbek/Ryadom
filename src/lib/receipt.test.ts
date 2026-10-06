@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { bestReading, isComplete, parseAmount, parseReceipt } from './receipt.ts'
+import { bestReading, isComplete, parseAmount, parseReceipt, settled } from './receipt.ts'
 
 describe('receipt amounts', () => {
   it('reads thousands separators and drops tiyin', () => {
@@ -392,6 +392,68 @@ JO'LANDI:\t42,000
 FM: 16420211629245\tFB: 344038933636
 S/R: q-1\tVersiya: 0.2`
 
+// A screenshot of an electronic receipt: "Narxi" is the line sum here, a wrapped name lost its second line and the
+// pieces of the bag read as "7".
+const shopApp = `Nomi\tSoni\tNarxi
+Limonad B fresh Olma, 450ml\t1\t10,990.00
+Limonad В fresh Apelsin, 450ml\t1\t10,990.00
+Sharbatli ichBe Fresh mangot/i 450ml\t1\t10,990.00
+Saqich Orbit Tetiklash yalpiz 136g\t2\t8,180.00
+Ichimlik Flavis anor t/i 450ml\t1\t9,990.00
+Uzaytirgich Tekled 5x3 dona\t1\t68,990.00
+Shokoladli kruassan Le Kroshe 100g\t1\t15,990.00
+но он раке! Bio\t4 К\t7\t400.00
+Naqd pul\t0.00
+Bank kartalari\t136,520.00
+Jami to'lov\t136,520.00`
+
+// A Korzinka fiscal receipt: an address with a house number, sizes such as "5x3", names with the price on their line
+// and a Russian translation below, and the total whose "TO'LOV" OCR lost.
+const korzinkaLong = `«Anglesey Food» MChJ XK
+K083 Korzinka - Shahriston
+Toshkent, Amir Temur shoh ko'chasi, 112-uy
+STIR: 202099756\tS/N: STS-20230505-000157
+KASSIR: o'z o'ziga xizmat\tPOS N 10
+SAVDO CHEKI N 153\t06/10/2026 15:38:14
+So'm
+1. Saqich Orbit Tetiklash. yalpiz 13.6g
+2dona*4 090,00 = 8 180,00
+Жев. резинка Orbit Освежающая мята 13,6г
+Shu jumladan QQS 12%: 876,43
+Sh.k./MXIK\t42069942/02106999018092023
+2. Uzaytirgich Tekled 5x3 dona\t68 990,00
+Удлинитель Tekled 5x3 шт
+Shu jumladan QQS 12%: 7 391,79
+3. Shokoladli kruassan Le Kroshe 100g
+15 990,00
+Круассан с шоколадом Le Kroshe 100г
+Shu jumladan QQS 12%: 1 713,21
+4. Logotipli paket Bio poelitilen 4 k gacha
+400,00
+Пакет с логотипом Био-поэлитилен до 4кг
+Shu jumladan QQS 12%: 42,86
+5. Limonad B fresh Olma, 450ml\t10 990,00
+Лимонад B fresh Яблоко, 450мл
+Shu jumladan QQS 12%: 1 177,50
+MK\t010478007266055O217kO-fhL>dHN):
+6. Limonad B fresh Apelsin, 450ml\t10 990,00
+Лимонад B fresh Апельсин, 450мл
+Shu jumladan QQS 12%: 1 177,50
+7. Sharbatli ich.Be Fresh mango.t/i 450ml
+10 990,00
+Напиток сок. Be Fresh манго ж/б 450мл
+Shu jumladan QQS 12%: 1 177,50
+8. Ichimlik Flavis anor t/i 450ml\t9 990,00
+Напиток Flavis гранат ж/б 450мл
+Shu jumladan QQS 12%: 1 070,36
+UCHUN:\t136 520,00
+Shu jumladan QQS\t14 627,15
+To'landi (Click):\t136 520,00
+To'lov shakli:\tPlastik karta
+Karta turi:\tShaxsiy
+Korzinka Plus kartasi bilan
+1365`
+
 const lineTotals = (text: string) => parseReceipt(text).items.map(entry => [entry.quantity, entry.unitPrice])
 
 describe('real receipts in columns', () => {
@@ -439,6 +501,51 @@ describe('real receipts in columns', () => {
     assert.ok(isComplete(result))
   })
 
+  it('skips the bank card line, keeps sizes in names and fixes the one quantity the total disagrees with', () => {
+    const result = parseReceipt(shopApp)
+    assert.deepEqual(result.items.map(entry => [entry.quantity, entry.unitPrice]), [
+      [1, 10990], [1, 10990], [1, 10990], [2, 4090], [1, 9990], [1, 68990], [1, 15990], [1, 400],
+    ])
+    assert.equal(result.items[5].name, 'Uzaytirgich Tekled 5x3')
+    assert.equal(result.total, 136520)
+    assert.ok(isComplete(result))
+  })
+
+  it('reads a long fiscal receipt without the address, translations or sizes as pieces', () => {
+    const result = parseReceipt(korzinkaLong)
+    assert.deepEqual(result.items, [
+      { name: 'Saqich Orbit Tetiklash. yalpiz 13.6g', quantity: 2, unitPrice: 4090 },
+      { name: 'Uzaytirgich Tekled 5x3', quantity: 1, unitPrice: 68990 },
+      { name: 'Shokoladli kruassan Le Kroshe 100g', quantity: 1, unitPrice: 15990 },
+      { name: 'Logotipli paket Bio poelitilen 4 k gacha', quantity: 1, unitPrice: 400 },
+      { name: 'Limonad B fresh Olma, 450ml', quantity: 1, unitPrice: 10990 },
+      { name: 'Limonad B fresh Apelsin, 450ml', quantity: 1, unitPrice: 10990 },
+      { name: 'Sharbatli ich.Be Fresh mango.t/i 450ml', quantity: 1, unitPrice: 10990 },
+      { name: 'Ichimlik Flavis anor t/i 450ml', quantity: 1, unitPrice: 9990 },
+    ])
+    assert.equal(result.total, 136520)
+  })
+
+  it('takes the price from the tax line under it when OCR misread the price and the total agrees', () => {
+    const misread = korzinkaLong.replace('15 990,00', '5 990,00')
+    const price = (text: string) => parseReceipt(text).items.find(entry => entry.name.startsWith('Shokoladli'))!.unitPrice
+    assert.equal(price(misread), 15990)
+    assert.ok(isComplete(parseReceipt(misread)))
+    // Without the total nothing tells which one is right, and a cut-off tax is no evidence.
+    assert.equal(price(misread.replace('UCHUN:\t136 520,00\n', '')), 5990)
+    assert.equal(price(misread.replace('1 713,21', '1 713')), 5990)
+  })
+
+  it('stops reading again once a reading adds up, or three readings agree', () => {
+    assert.equal(settled([]), false)
+    assert.equal(settled([shopApp]), true)
+    const partial = 'Плов\t1\t45 000\nЧай\t1\t5 000'
+    assert.equal(settled([partial, partial]), false)
+    assert.equal(settled([partial, 'Плов\t1\t45 000', partial]), false)
+    assert.equal(settled([partial, partial, partial]), true)
+    assert.equal(settled(['ИНН 301234567', 'ИНН 301234567', 'ИНН 301234567']), false)
+  })
+
   it('keeps the column apart in a line with no OCR tabs but two spaces', () => {
     assert.deepEqual(lineTotals('*Чикен карри  2  120 000\nИтог: 120 000'), [[2, 60000]])
   })
@@ -479,6 +586,11 @@ katta
 1 x 12 000,00 = 12 000,00
 Jami: 62 000,00`)
     assert.deepEqual(items.map(entry => entry.name), ['Lavash tovuqli katta', 'Coca-Cola 0,5 l'])
+  })
+
+  it('joins a name wrapped onto the price line in lower case', () => {
+    assert.deepEqual(parseReceipt('Shokoladli kruassan\t1\t15,990.00\nLogotipli paket Bio poelitilen 4 k\ngacha\t1\t400.00').items.map(entry => entry.name),
+      ['Shokoladli kruassan', 'Logotipli paket Bio poelitilen 4 k gacha'])
   })
 
   it('reads the price before the pieces', () => {
