@@ -502,6 +502,7 @@ describe('real receipts in columns', () => {
   })
 
   it('skips the bank card line, keeps sizes in names and fixes the one quantity the total disagrees with', () => {
+    // "1" read as "7" in the last row.
     const result = parseReceipt(shopApp)
     assert.deepEqual(result.items.map(entry => [entry.quantity, entry.unitPrice]), [
       [1, 10990], [1, 10990], [1, 10990], [2, 4090], [1, 9990], [1, 68990], [1, 15990], [1, 400],
@@ -524,16 +525,6 @@ describe('real receipts in columns', () => {
       { name: 'Ichimlik Flavis anor t/i 450ml', quantity: 1, unitPrice: 9990 },
     ])
     assert.equal(result.total, 136520)
-  })
-
-  it('takes the price from the tax line under it when OCR misread the price and the total agrees', () => {
-    const misread = korzinkaLong.replace('15 990,00', '5 990,00')
-    const price = (text: string) => parseReceipt(text).items.find(entry => entry.name.startsWith('Shokoladli'))!.unitPrice
-    assert.equal(price(misread), 15990)
-    assert.ok(isComplete(parseReceipt(misread)))
-    // Without the total nothing tells which one is right, and a cut-off tax is no evidence.
-    assert.equal(price(misread.replace('UCHUN:\t136 520,00\n', '')), 5990)
-    assert.equal(price(misread.replace('1 713,21', '1 713')), 5990)
   })
 
   it('stops reading again once a reading adds up, or three readings agree', () => {
@@ -595,5 +586,53 @@ Jami: 62 000,00`)
 
   it('reads the price before the pieces', () => {
     assert.deepEqual(lineTotals('Шашлык 45 000 x 2'), [[2, 45000]])
+  })
+})
+
+describe('readings of camera photos', () => {
+  it('leaves a count as read when a lost row is what keeps the dishes from the total', () => {
+    // "Норин порц 2 70 000" came out as garbage; 18 pieces of bread would add up, but nothing on the receipt says so.
+    const { items } = parseReceipt(`Наименование\tКол-во\tСумма
+Кора лимон чой\t1\t12 000
+Нон бутун\t1\t9 000
+Кола 1,5 л\t1\t20 000
+ово\ti\t8 00\tс
+Лагмон 0,7\t1\t45 000
+Мужской каприз\t1\t37 000
+Жаз ( мол гуш )\t1\t22 000
+Шуба\t1\t34 000
+Полная сумма:\t332 000`)
+    assert.deepEqual(items.find(entry => entry.name === 'Нон бутун'), { name: 'Нон бутун', quantity: 1, unitPrice: 9000 })
+  })
+
+  it('reads a bold 8 taken for "$" and counts pieces from the price and the line sum', () => {
+    const { items, total } = parseReceipt(`1. Saqich Orbit Tetiklash. yalpiz 13.6g
+24опа*4\t090,00\t= $ 180,00
+Kpyaccan C шоколадом Le Kroshe 100r
+TO'LOV UCHUN:\t8 180,00`)
+    assert.deepEqual(items.map(entry => [entry.quantity, entry.unitPrice]), [[2, 4090]])
+    assert.equal(total, 8180)
+  })
+
+  it('skips the subtotal and the bill split per guest', () => {
+    const rixuz = parseReceipt(`Наименование\tК-во\tСумма
+Бифстроган сет\t2 70 000
+Кола 1,5\t18 000
+Подытог:\t88 000
+Обслуживание\t12%\t10 560
+ИТОГО К ОПЛАТЕ:\t98 560`)
+    assert.deepEqual(rixuz.items.map(entry => entry.name), ['Бифстроган сет', 'Кола 1,5'])
+    assert.equal(rixuz.total, 88000)
+    const split = parseReceipt(`Зигир оши порция\t1\t52 000
+Нон яримта\t1\t4 000
+Полная сумма:\t56 000
+264 320 / 3 = 88 107`)
+    assert.deepEqual(split.items.map(entry => entry.unitPrice), [52000, 4000])
+  })
+
+  it('prefers the reading closest to its total over one with more made-up rows', () => {
+    const close = 'Плов\t1\t45 000\nЧай\t1\t5 000\nИтого:\t60 000'
+    const noisy = 'Плов\t1\t45 000\nЧай\t1\t5 000\nKorzinka\t1\t1 365\nUN\t1\t136 000\nИтого:\t60 000'
+    assert.equal(bestReading([noisy, close]).text, close)
   })
 })

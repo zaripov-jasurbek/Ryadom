@@ -19,5 +19,5 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["vite.config.ts", "supabase/tests/**/*.ts"]
+  "include": ["vite.config.ts", "supabase/tests/**/*.ts", "scripts/**/*.ts"]
 }
