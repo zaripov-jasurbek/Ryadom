@@ -120,24 +120,105 @@ function evenLight(px: Uint8ClampedArray, width: number, height: number) {
   }
 }
 
-/** Crops the photo to the receipt, sizes the text for Tesseract and evens out the light. */
-async function prepare(file: Blob) {
-  const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' })
-  const paper = findPaper(bitmap)
+/** Draws a normalized OCR canvas. */
+function drawVariant(bitmap: ImageBitmap, paper: Rect, mode: 'normal' | 'gray' | 'threshold' | 'thresholdStrong') {
   const scale = Math.min(3, targetWidth / paper.width, Math.sqrt(maxPixels / (paper.width * paper.height)))
   const canvas = document.createElement('canvas')
-  canvas.width = Math.round(paper.width * scale); canvas.height = Math.round(paper.height * scale)
+  canvas.width = Math.max(1, Math.round(paper.width * scale))
+  canvas.height = Math.max(1, Math.round(paper.height * scale))
   const ctx = canvas.getContext('2d', { willReadFrequently: true })
   if (!ctx) throw new Error('Canvas is unavailable')
   ctx.imageSmoothingQuality = 'high'
   ctx.drawImage(bitmap, paper.x, paper.y, paper.width, paper.height, 0, 0, canvas.width, canvas.height)
-  bitmap.close()
   const image = ctx.getImageData(0, 0, canvas.width, canvas.height)
-  evenLight(image.data, canvas.width, canvas.height)
+  if (mode !== 'normal') evenLight(image.data, canvas.width, canvas.height)
+  if (mode === 'gray') {
+    for (let i = 0; i < image.data.length; i += 4) {
+      const value = image.data[i]
+      image.data[i] = image.data[i + 1] = image.data[i + 2] = value
+    }
+  } else if (mode === 'threshold' || mode === 'thresholdStrong') {
+    const cut = mode === 'threshold' ? 165 : 200
+    for (let i = 0; i < image.data.length; i += 4) {
+      const value = image.data[i] < cut ? 0 : 255
+      image.data[i] = image.data[i + 1] = image.data[i + 2] = value
+    }
+  }
   ctx.putImageData(image, 0, 0)
   return canvas
 }
 
+/**
+ * Estimates a small camera tilt from horizontal text/table lines and rotates the receipt before OCR.
+ * This is intentionally limited to a few degrees: large perspective distortion is better left to a future
+ * corner-based rectifier, while small tilt is common in handheld photos and costs very little to fix.
+ */
+function deskew(canvas: HTMLCanvasElement) {
+  const sampleWidth = Math.min(300, canvas.width)
+  const sampleHeight = Math.max(1, Math.round(canvas.height * sampleWidth / canvas.width))
+  const sample = document.createElement('canvas')
+  sample.width = sampleWidth; sample.height = sampleHeight
+  const ctx = sample.getContext('2d', { willReadFrequently: true })
+  if (!ctx) return canvas
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, sampleWidth, sampleHeight)
+  ctx.drawImage(canvas, 0, 0, sampleWidth, sampleHeight)
+  const pixels = ctx.getImageData(0, 0, sampleWidth, sampleHeight).data
+  const score = (angle: number) => {
+    const radians = angle * Math.PI / 180
+    const cos = Math.cos(radians), sin = Math.sin(radians)
+    const cx = (sampleWidth - 1) / 2, cy = (sampleHeight - 1) / 2
+    const rows = new Float32Array(sampleHeight)
+    for (let y = 0; y < sampleHeight; y += 2) for (let x = 0; x < sampleWidth; x += 2) {
+      const sx = Math.round((x - cx) * cos + (y - cy) * sin + cx)
+      const sy = Math.round(-(x - cx) * sin + (y - cy) * cos + cy)
+      if (sx < 0 || sx >= sampleWidth || sy < 0 || sy >= sampleHeight) continue
+      const i = (sy * sampleWidth + sx) * 4
+      const gray = pixels[i] * .299 + pixels[i + 1] * .587 + pixels[i + 2] * .114
+      rows[y] += Math.max(0, 220 - gray)
+    }
+    const mean = rows.reduce((a, b) => a + b, 0) / rows.length
+    return rows.reduce((sum, value) => sum + (value - mean) ** 2, 0) / rows.length
+  }
+  let bestAngle = 0, bestScore = score(0)
+  for (let angle = -7; angle <= 7; angle += 1) {
+    const value = score(angle)
+    if (value > bestScore) { bestScore = value; bestAngle = angle }
+  }
+  if (Math.abs(bestAngle) < 1) return canvas
+
+  const radians = bestAngle * Math.PI / 180
+  const sin = Math.abs(Math.sin(radians)), cos = Math.abs(Math.cos(radians))
+  const width = Math.ceil(canvas.width * cos + canvas.height * sin)
+  const height = Math.ceil(canvas.width * sin + canvas.height * cos)
+  const rotated = document.createElement('canvas')
+  rotated.width = width; rotated.height = height
+  const out = rotated.getContext('2d')
+  if (!out) return canvas
+  out.fillStyle = '#fff'; out.fillRect(0, 0, width, height)
+  out.translate(width / 2, height / 2)
+  out.rotate(radians)
+  out.drawImage(canvas, -canvas.width / 2, -canvas.height / 2)
+  return rotated
+}
+
+/**
+ * Makes several deliberately different views of the same photo. A full-photo view is kept as a fallback because
+ * paper detection is heuristic and can accidentally crop a white table, a pale receipt, or a receipt with a shadow.
+ */
+async function prepare(file: Blob) {
+  const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' })
+  const paper = findPaper(bitmap)
+  const whole: Rect = { x: 0, y: 0, width: bitmap.width, height: bitmap.height }
+  const variants = [
+    deskew(drawVariant(bitmap, paper, 'normal')),
+    deskew(drawVariant(bitmap, paper, 'gray')),
+    deskew(drawVariant(bitmap, paper, 'threshold')),
+    deskew(drawVariant(bitmap, paper, 'thresholdStrong')),
+    drawVariant(bitmap, whole, 'normal'),
+  ]
+  bitmap.close()
+  return variants
+}
 type Box = { x0: number; x1: number }
 type OcrLine = { confidence: number; words: { text: string; confidence: number; bbox: Box }[] }
 
@@ -165,7 +246,7 @@ export function confidentText(lines: OcrLine[]) {
  */
 export async function recognizeReceipt(file: Blob, onProgress: OcrProgress, signal: AbortSignal, complete: (text: string) => boolean): Promise<string[]> {
   onProgress('Подготавливаем фото', 0)
-  const [{ createWorker, OEM, PSM }, image] = await Promise.all([import('tesseract.js'), prepare(file)])
+  const [{ createWorker, OEM, PSM }, images] = await Promise.all([import('tesseract.js'), prepare(file)])
   signal.throwIfAborted()
   const root = new URL(`${import.meta.env.BASE_URL}tesseract/`, location.href).href
   let again = false
@@ -179,13 +260,19 @@ export async function recognizeReceipt(file: Blob, onProgress: OcrProgress, sign
   signal.addEventListener('abort', stop)
   try {
     const readings: string[] = []
-    for (const mode of [PSM.SINGLE_BLOCK, PSM.SINGLE_COLUMN]) {
-      signal.throwIfAborted()
-      await worker.setParameters({ tessedit_pageseg_mode: mode })
-      const { data } = await worker.recognize(image, {}, { blocks: true })
-      readings.push(confidentText((data.blocks ?? []).flatMap(block => block.paragraphs.flatMap(paragraph => paragraph.lines))))
-      if (complete(readings.at(-1)!)) break
-      again = true
+    for (const [imageIndex, image] of images.entries()) {
+      const modes = imageIndex >= 2 && imageIndex <= 3
+        ? [PSM.SINGLE_BLOCK]
+        : [PSM.SINGLE_BLOCK, PSM.SINGLE_COLUMN]
+      for (const mode of modes) {
+        signal.throwIfAborted()
+        await worker.setParameters({ tessedit_pageseg_mode: mode })
+        const { data } = await worker.recognize(image, {}, { blocks: true })
+        const text = confidentText((data.blocks ?? []).flatMap(block => block.paragraphs.flatMap(paragraph => paragraph.lines)))
+        if (text) readings.push(text)
+        if (complete(text)) return readings
+        again = true
+      }
     }
     return readings
   } finally {
