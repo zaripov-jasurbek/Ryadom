@@ -638,6 +638,8 @@ TO'LOV UCHUN:\t8 180,00`)
 o'lov UCHUN\t15 990,00`)
     assert.deepEqual(items.map(entry => entry.unitPrice), [15990])
     assert.equal(total, 15990)
+    // A big bill whose total OCR read without its spaces is still a total.
+    assert.equal(parseReceipt('Банкет\t1\t1 250 000\nИтого:\t1250000').total, 1250000)
   })
 
   it('takes the total from the line below a total line without its sum', () => {

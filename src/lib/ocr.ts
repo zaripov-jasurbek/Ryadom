@@ -17,7 +17,7 @@ const targetWidth = 1400
 const maxPixels = 6_000_000
 
 type Rect = { x: number; y: number; width: number; height: number }
-export type Point = { x: number; y: number }
+type Point = { x: number; y: number }
 /** The part of the photo to read: its corners clockwise from the top left, in pixels of the upright photo. */
 export type Area = [Point, Point, Point, Point]
 
@@ -138,11 +138,11 @@ const distance = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y)
 
 /**
  * The projective map from the rectangle 0…width × 0…height onto the area's corners: what a photo taken at an angle does to
- * the flat paper. Solved from the four corner pairs; returns where a point of the rectangle is in the photo.
+ * the flat paper. Solved from the four corner pairs as x = (a·u + b·v + c) / (g·u + h·v + 1), y = (d·u + e·v + f) / (g·u + h·v + 1);
+ * returns [a, b, c, d, e, f, g, h].
  */
 function perspective(area: Area, width: number, height: number) {
   const from = [[0, 0], [width, 0], [width, height], [0, height]]
-  // x = (a·u + b·v + c) / (g·u + h·v + 1), y = (d·u + e·v + f) / (g·u + h·v + 1)
   const rows = from.flatMap(([u, v], i) => {
     const { x, y } = area[i]
     return [[u, v, 1, 0, 0, 0, -u * x, -v * x, x], [0, 0, 0, u, v, 1, -u * y, -v * y, y]]
@@ -156,11 +156,7 @@ function perspective(area: Area, width: number, height: number) {
       for (let c = col; c < 9; c++) rows[r][c] -= f * rows[col][c]
     }
   }
-  const [a, b, c, d, e, f, g, h] = rows.map((row, i) => row[8] / row[i] || 0)
-  return (u: number, v: number) => {
-    const w = g * u + h * v + 1
-    return { x: (a * u + b * v + c) / w, y: (d * u + e * v + f) / w }
-  }
+  return rows.map((row, i) => row[8] / row[i] || 0)
 }
 
 /** One photo being read: its area drawn flat once per width, and how its lines bend, measured the first time it is needed. */
@@ -189,16 +185,17 @@ function flatten(scan: Scan) {
   sctx.imageSmoothingQuality = 'high'
   sctx.drawImage(bitmap, left, top, right - left, bottom - top, 0, 0, source.width, source.height)
   const src = sctx.getImageData(0, 0, source.width, source.height).data, sw = source.width, sh = source.height
-  const at = perspective(area, width, height)
+  const [a, b, c, d, e, f, g, h] = perspective(area, width, height)
   const flat = new ImageData(width, height), px = flat.data
   for (let v = 0; v < height; v++) for (let u = 0; u < width; u++) {
-    const point = at(u + .5, v + .5)
-    const x = (point.x - left) * sx - .5, y = (point.y - top) * sy - .5
+    // The middle of the flat pixel, in the photo, then in the copy of the photo around the area.
+    const cu = u + .5, cv = v + .5, w = g * cu + h * cv + 1
+    const x = ((a * cu + b * cv + c) / w - left) * sx - .5, y = ((d * cu + e * cv + f) / w - top) * sy - .5
     const x0 = Math.floor(x), y0 = Math.floor(y), fx = x - x0, fy = y - y0, o = (v * width + u) * 4
     px[o + 3] = 255
     if (x0 < 0 || y0 < 0 || x0 + 1 >= sw || y0 + 1 >= sh) { px[o] = px[o + 1] = px[o + 2] = 255; continue }
     const i = (y0 * sw + x0) * 4, j = i + sw * 4
-    for (let c = 0; c < 3; c++) px[o + c] = (src[i + c] * (1 - fx) + src[i + 4 + c] * fx) * (1 - fy) + (src[j + c] * (1 - fx) + src[j + 4 + c] * fx) * fy
+    for (let k = 0; k < 3; k++) px[o + k] = (src[i + k] * (1 - fx) + src[i + 4 + k] * fx) * (1 - fy) + (src[j + k] * (1 - fx) + src[j + 4 + k] * fx) * fy
   }
   return scan.flat = flat
 }
@@ -234,7 +231,7 @@ function drawVariant(scan: Scan, mode: Mode) {
 const inkLevel = 180
 
 /**
- * A quarter-size copy of the canvas as ink amounts, for measuring the layout; `scale` maps its pixels back.
+ * A copy of the canvas at most 700 pixels wide as ink amounts, for measuring the layout; `scale` maps its pixels back.
  * The height of letters is the typical height of vertical runs of ink.
  */
 function inkMap(canvas: HTMLCanvasElement) {
@@ -325,7 +322,9 @@ function bendOf(canvas: HTMLCanvasElement): Bend | null {
     }
     slope[row] = a; curve[row] = Math.max(-maxCurve, Math.min(maxCurve, b))
   }
-  return { step, slope, curve }
+  // Lines that move less than a pixel over the width are straight already: the owner's frame took the angle out.
+  const shift = slope.reduce((most, value, row) => Math.max(most, Math.abs(value) * middle + Math.abs(curve[row]) * middle * middle / 2), 0)
+  return shift < 1 ? null : { step, slope, curve }
 }
 
 /** Redraws the canvas with its text lines straight: each row is read along the line through it. */
@@ -353,12 +352,11 @@ function unbend(canvas: HTMLCanvasElement, bend: Bend) {
   return out
 }
 
-/** The area with its lines straightened, for paper that curled; flat paper stays as it is. */
+/** The area with its lines straightened, for paper that curled; nothing when the lines are straight, as that view was read. */
 function straight(scan: Scan, mode: Mode) {
-  const canvas = drawVariant(scan, mode)
   // The evenly lit view shows the lines best; every view of one photo bends the same way.
-  if (scan.bend === undefined) scan.bend = bendOf(mode === 'gray' ? canvas : drawVariant(scan, 'gray'))
-  return scan.bend ? unbend(canvas, scan.bend) : canvas
+  if (scan.bend === undefined) scan.bend = bendOf(drawVariant(scan, 'gray'))
+  return scan.bend ? unbend(drawVariant(scan, mode), scan.bend) : null
 }
 
 /**
@@ -366,7 +364,7 @@ function straight(scan: Scan, mode: Mode) {
  * Each canvas takes tens of megabytes, so a view is drawn again rather than kept. A straightened view helps curled paper;
  * a column of lines catches large bold totals.
  */
-const passes: { draw: (scan: Scan) => HTMLCanvasElement; column?: boolean }[] = [
+const passes: { draw: (scan: Scan) => HTMLCanvasElement | null; column?: boolean }[] = [
   { draw: scan => drawVariant(scan, 'normal') },
   { draw: scan => drawVariant(scan, 'gray') },
   { draw: scan => straight(scan, 'gray') },
@@ -465,6 +463,7 @@ export async function recognizeReceipt(file: Blob, area: Area, onProgress: OcrPr
       signal.throwIfAborted()
       const { draw, column } = passes[index]
       const image = draw(scan)
+      if (!image) continue
       signal.throwIfAborted()
       await Promise.race([worker.setParameters({ tessedit_pageseg_mode: column ? PSM.SINGLE_COLUMN : PSM.SINGLE_BLOCK }), aborted])
       const { data } = await Promise.race([worker.recognize(image, {}, { blocks: true }), aborted])

@@ -4,7 +4,8 @@
 //   node scripts/scan-receipts.ts [name ...] [--all] [--text]
 //
 // Photos and their rows live in receipts/ (private, not in git): receipts/expected.json maps a photo's file name to
-// { total, servicePercent, items: [[name, quantity, unitPrice], ...] }. --all reads every view of the photo instead of stopping
+// { area, total, servicePercent, items: [[name, quantity, unitPrice], ...] }, where `area` is the frame an owner would set:
+// four corners [x, y] clockwise from the top left, around the dishes and the total. --all reads every pass instead of stopping
 // once the readings settle, and scores each reading; --text prints the chosen reading. Chromium is $CHROMIUM or Playwright's.
 import { spawn } from 'node:child_process'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'

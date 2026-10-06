@@ -98,8 +98,8 @@
   function release() { dragging = null }
   /** Arrow keys move a focused corner by 1% of the photo, with Shift by 5%. */
   function nudge(event: KeyboardEvent, corner: number) {
-    const step = (event.shiftKey ? .05 : .01) * Math.max(size.width, size.height)
-    const moves: Record<string, [number, number]> = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }
+    const by = (event.shiftKey ? .05 : .01) * Math.max(size.width, size.height)
+    const moves: Record<string, [number, number]> = { ArrowLeft: [-by, 0], ArrowRight: [by, 0], ArrowUp: [0, -by], ArrowDown: [0, by] }
     const move = moves[event.key]
     if (!move) return
     event.preventDefault()

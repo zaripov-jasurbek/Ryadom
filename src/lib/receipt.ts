@@ -49,8 +49,8 @@ const notPricePattern = new RegExp([
   String.raw`(?<![\d.,])\d+(?:[.,]\d+)?\s?(?:кг|kg|гр?|gr?|r|мл|ml|л|l|шт|pcs|dona|%)(?!\p{L})`,
   String.raw`(?<![\d.,])\d+(?:[.,]\d+)?(?=\p{L}{2})(?!сум|so'?m|sum|uzs)|(?<![\d.,])\d+-(?=\p{L})`,
   String.raw`(?<!\S)0\d{4,}`,
-  // Codes: a long run of digits with no groups, or digits before a slash ("22294968/01905007001000000").
-  String.raw`(?<![\d.,])\d{7,}(?!\d)|(?<![\d.,])\d{4,}(?=\s?\/)`,
+  // Codes: eight digits or more with no groups, longer than any price, or digits before a slash ("22294968/01905007001000000").
+  String.raw`(?<![\d.,])\d{8,}(?!\d)|(?<![\d.,])\d{4,}(?=\s?\/)`,
 ].join('|'), 'giu')
 const currencyPattern = /(?<!\p{L})(?:сум|so'?m|sum|uzs)(?!\p{L})/giu
 
