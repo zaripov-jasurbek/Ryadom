@@ -19,12 +19,12 @@ const timesPattern = new RegExp(String.raw`(?<!\d)(\d+(?:[.,]\d{1,3})?)\s*(?:\p{
 const reversedPattern = new RegExp(String.raw`(?<!\d)(${amount})\s*[xх×*]\s*(\d{1,2})(?![\d.,])`, 'iu')
 
 // Lines that are totals, payments, taxes or receipt metadata rather than dishes.
-// OCR often loses the start of "TO'LOV UCHUN:", leaving "UCHUN:" or "CHUN:".
-const totalWords = String.raw`итог\p{L}*|всего|к\s+оплате|jami|to.?lov\s+uchun|u?chun(?=\s*:)|total|subtotal`
+// OCR often loses the start of "TO'LOV UCHUN:", leaving "O'LOV UCHUN", "UCHUN:" or "CHUN:".
+const totalWords = String.raw`итог\p{L}*|всего|к\s+оплате|jami|t?[o0].?lov\s+uchun|u?chun(?=\s*:)|total|subtotal`
 const skipWords = [
   totalWords,
   String.raw`оплат\p{L}*|наличн\p{L}*|безнал\p{L}*|карт(?:а|ой|е|ы)|сдача|ндс|qqs|naqd\p{L}*|karta(?:si|lar\p{L}*|ga|dan)?|bank\p{L}*|банк\p{L}*|plastik|qaytim|t[o0]'?landi|tax|vat|sh\.?\s?j|jumladan`,
-  String.raw`обслуживан\p{L}*|надбавк\p{L}*|xizmat\p{L}*|service|скидк\p{L}*|chegirma|discount|бонус\p{L}*|чаев\p{L}*|tips?`,
+  String.raw`подытог\p{L}*|обслуживан\p{L}*|надбавк\p{L}*|xizmat\p{L}*|service|скидк\p{L}*|chegirma|discount|бонус\p{L}*|чаев\p{L}*|tips?`,
   // Exact words where a dish could start the same way: "Открытый пирог", "Кассата".
   String.raw`инн|stir|чек|chek\p{L}*|check|savdo|сч[её]т|гостевой|открыт|заказ|зал|касс[аы]|кассир\p{L}*|kassa|kassir|смена|продажа|sotuv\p{L}*|фискал\p{L}*|fiskal\p{L}*|терминал|terminal`,
   String.raw`mxik|mk|мк|икпу|ikpu|штрих\p{L}*|shtrix\p{L}*|sku|sh\.?\s?k|qad[aoq]{1,4}|k[ao]d\p{L}?|код`,
@@ -46,9 +46,11 @@ const notPricePattern = new RegExp([
   String.raw`\[[^\]]*\]`,
   String.raw`\(\s*\d[\d\s.,]*\)`,
   String.raw`\/\s*\d+`,
-  String.raw`(?<![\d.,])\d+(?:[.,]\d+)?\s?(?:кг|kg|гр?|gr?|мл|ml|л|l|шт|pcs|dona|%)(?!\p{L})`,
+  String.raw`(?<![\d.,])\d+(?:[.,]\d+)?\s?(?:кг|kg|гр?|gr?|r|мл|ml|л|l|шт|pcs|dona|%)(?!\p{L})`,
   String.raw`(?<![\d.,])\d+(?:[.,]\d+)?(?=\p{L}{2})(?!сум|so'?m|sum|uzs)|(?<![\d.,])\d+-(?=\p{L})`,
   String.raw`(?<!\S)0\d{4,}`,
+  // Codes: eight digits or more with no groups, longer than any price, or digits before a slash ("22294968/01905007001000000").
+  String.raw`(?<![\d.,])\d{8,}(?!\d)|(?<![\d.,])\d{4,}(?=\s?\/)`,
 ].join('|'), 'giu')
 const currencyPattern = /(?<!\p{L})(?:сум|so'?m|sum|uzs)(?!\p{L})/giu
 
@@ -59,10 +61,11 @@ export function parseAmount(raw: string): number {
   return Number(whole || '0') + (decimals ? Number(`0.${decimals[1]}`) : 0)
 }
 
-/** Common OCR slips in number columns: "i", "l", "T" or "|" for a lone 1, and the letter O for a zero. */
+/** Common OCR slips in number columns: "i", "l", "T" or "|" for a lone 1, the letter O for a zero and "$" for a bold 8. */
 function fixDigits(line: string) {
   return line
     .replace(/(?<=\s)[iIlTТ|!](?=\s+\d)/gu, '1')
+    .replace(/(?<![\p{L}\d])\$(?=\d|\s\d{3}(?!\d))/gu, '8')
     // "45 OOO" and "4O 000": a group of O's after a digit group, or O's mixed into a number.
     .replace(/(?<=\d[ .,])[OoОо]{3}(?!\p{L})/gu, '000')
     .replace(/(?<!\p{L})[\dOoОо]*\d[\dOoОо]*(?!\p{L})/gu, token => token.replace(/[OoОо]/gu, '0'))
@@ -133,15 +136,17 @@ function timesItem(name: string, match: RegExpExecArray): ScannedItem | null {
   if (lineTotal === null || !(match[3] || close(quantity * unitPrice, lineTotal))) return item(name, quantity, unitPrice)
   if (!isQuantity(quantity)) return item(name, 1, lineTotal)
   if (close(quantity * unitPrice, lineTotal)) return item(name, quantity, unitPrice)
+  // The price and the line's sum agree on the pieces when OCR misread their count: "24опа*4 090,00 = 8 180,00" is 2 pieces.
+  const pieces = lineTotal / unitPrice
+  if (isQuantity(pieces)) return item(name, pieces, unitPrice)
   return Number.isInteger(lineTotal / quantity) ? item(name, quantity, lineTotal / quantity) : item(name, 1, lineTotal)
 }
 
 /**
  * An item while parsing. `certain` lines ("1 x 5 000 = 5 000") are kept even when no name is found. `alt` is the unit price
  * if the line's last number is the price of one piece rather than the line's sum: "Самса 2 22 000" reads either way.
- * `vat` is the line's sum worked out from the tax printed under it, for when OCR misread the price.
  */
-type Parsed = ScannedItem & { certain: boolean; alt?: number; vat?: number }
+type Parsed = ScannedItem & { certain: boolean; alt?: number }
 
 /** Parses one line into an item. Its name is empty when the line has only numbers: fiscal receipts print the name on the line above. */
 function parseLine(line: string): Parsed | null {
@@ -202,40 +207,25 @@ function markExtras(items: ScannedItem[], total: number | null) {
   }
 }
 
-/** When other pieces in exactly one row make the dishes add up to the total, OCR misread them: "1" often comes out as "7" or "4". */
+// Pieces OCR confuses: a thin "1" comes out as "7" or "4" and back.
+const confusable = new Set(['1:7', '7:1', '1:4', '4:1'])
+
+/**
+ * When one row's pieces read as a digit OCR confuses with another, and the other one makes the dishes add up to the total,
+ * the row takes it: "7 ⇥ 400" with a total 2 400 short is "1 ⇥ 400". Any other count is left as read for the owner to check.
+ */
 function fixQuantity<T extends ScannedItem>(items: T[], total: number): T[] | null {
   const fixes = items.flatMap((entry, i) => {
     const quantity = Math.round((total - sumOf(items) + lineSum(entry)) / entry.unitPrice)
     const fixed = items.map((other, j) => j === i ? { ...other, quantity } : other)
-    return isQuantity(quantity) && quantity !== entry.quantity && addsUp(fixed, total) ? [fixed] : []
+    return confusable.has(`${entry.quantity}:${quantity}`) && addsUp(fixed, total) ? [fixed] : []
   })
   return fixes.length === 1 ? fixes[0] : null
 }
 
-// "Shu jumladan QQS 12%: 1 713,21" under an item on Uzbek fiscal receipts: the tax included in the line's sum.
-const vatPattern = /(?<!\p{L})(?:qqs|ндс)(?!\p{L})/iu
-const centsPattern = /(?<!\d)(\d{1,3}(?:[  ]\d{3})*[.,]\d{2})\s*$/
-
-/**
- * The line's sum that the tax in the line comes from: 1 713,21 at 12% is 15 990. Only a tax read to the tiyin that gives
- * whole sums counts, so a misread or cut-off tax ("1 713") is not taken for a price.
- */
-function vatSum(line: string) {
-  const percent = percentOf(line), tax = centsPattern.exec(line)
-  if (!percent || percent > 30 || !tax) return null
-  const sum = parseAmount(tax[1]) * (100 + percent) / percent
-  return Math.abs(sum - Math.round(sum)) <= 0.06 && Math.round(sum) >= scanLimits.minPrice ? Math.round(sum) : null
-}
-
-/** The row with the line's sum its tax gives; the pieces stay when they divide it. */
-function withVat<T extends Parsed>(entry: T): T {
-  if (!entry.vat || close(lineSum(entry), entry.vat)) return entry
-  const quantity = Number.isInteger(entry.vat / entry.quantity) ? entry.quantity : 1
-  return { ...entry, quantity, unitPrice: entry.vat / quantity }
-}
-
 /** "Сумма: 401 000" before service and discounts: what the dishes add up to. */
 const subtotalPattern = /^полная(?!\p{L})|^сумма(?!\s+\p{L})|(?<!\p{L})(?:subtotal|подытог)(?!\p{L})/iu
+const splitPattern = /\d\s*\/\s*\d{1,2}\s*=\s*\d/
 const currencyLine = /^[^\p{L}\d]*(?:сум|so'?m|sum|uzs)[^\p{L}\d]*$/iu
 const sizeLine = /^\d+(?:[.,]\d+)?\s?(?:кг|kg|гр?|gr?|мл|ml|л|l)\.?$/iu
 // The table header names the last column: "Цена" is the price of one piece, "Сумма" the line's sum.
@@ -249,6 +239,8 @@ const unitPriceHeader = /(?<!\p{L})(?:цена|narxi?)(?!\p{L})/iu, lineSumHeade
 export function parseReceipt(text: string, known?: Pick<ScanResult, 'total' | 'servicePercent'>): ScanResult {
   const items: Parsed[] = []
   let total: number | null = null, subtotal: number | null = null, ended = false, unitPrices = false
+  // A total line without its sum: "TO'LOV UCHUN:" with "136 520,00" printed on the line below.
+  let totalBelow = false
   // Service and discount printed after the last total line are not part of it: "Итого 143 000, обслуживание 14 300".
   let service = 0, servicePercent: number | null = null, serviceInTotal = true, discount = 0, discountInTotal = true
   // Lines with letters and no price: a name for the price line below, or the rest of a long name above.
@@ -265,7 +257,8 @@ export function parseReceipt(text: string, known?: Pick<ScanResult, 'total' | 's
   }
   for (const raw of text.split(/\r?\n/)) {
     // A tab or a run of spaces separates columns; it is kept, so numbers in two columns never merge into one.
-    const cells = raw.replace(/ {2,}/g, '\t').replace(/[^\S\t]+/g, ' ').trim().split(/ *\t[\t ]*/)
+    // A gap OCR took for a column inside "4 090,00": a price never starts with 0, so that group continues the number.
+    const cells = raw.replace(/ {2,}/g, '\t').replace(/[^\S\t]+/g, ' ').replace(/(?<=(?:^|\D)\d{1,3})\t+(?=0\d{2}(?:[.,]\d{2})?(?!\d))/g, ' ').trim().split(/ *\t[\t ]*/)
     // Specks at the paper's edge come out as a short first or last column: "2 ⇥ Суп ⇥ 1 ⇥ 42 000 ⇥ 3".
     if (cells.length >= 2 && cells[0].length <= 4 && letters(cells[0]) < 2 && letters(cells[1]) >= 2) cells.shift()
     if (cells.length >= 3 && cells.at(-1)!.length <= 2 && amounts(cells.at(-2)!).some(entry => entry.value >= scanLimits.minPrice)) cells.pop()
@@ -273,17 +266,18 @@ export function parseReceipt(text: string, known?: Pick<ScanResult, 'total' | 's
     const fixed = fixDigits(cells.join('\t'))
     const line = fixed.replace(/^(?:(?:\d{1,3}|[|!lI])\s?[.)]\s*(?=[\p{L}[("«“])|\d{1,3}\s+(?=\p{Lu}{3}))/u, '')
     if (!line || currencyLine.test(line)) continue
+    const below = totalBelow
+    totalBelow = false
+    if (below && !ended) {
+      const value = amounts(line).filter(entry => entry.value >= scanLimits.minPrice).at(-1)?.value
+      if (value !== undefined && letters(line.replace(currencyPattern, '')) <= 6) { settle(); total = value; serviceInTotal = discountInTotal = true; ended = true; continue }
+    }
     if (skipPattern.test(line)) {
-      // The tax line under an item, before the next one starts; never the receipt's total tax.
-      if (!ended && last && items.at(-1) === last && vatPattern.test(line) && !totalPattern.test(line)) {
-        const sum = vatSum(line)
-        if (sum) (last as Parsed).vat = sum
-      }
       settle()
       const value = amounts(line).filter(entry => entry.value >= scanLimits.minPrice).at(-1)?.value
       if (headerPattern.test(line) && value === undefined) unitPrices = unitPriceHeader.test(line) && !lineSumHeader.test(line)
       else if (totalPattern.test(line)) {
-        if (value !== undefined) { total = value; serviceInTotal = discountInTotal = true }
+        if (value !== undefined) { total = value; serviceInTotal = discountInTotal = true } else totalBelow = true
       } else if (servicePattern.test(line)) {
         service = value ?? service; servicePercent = percentOf(line) ?? servicePercent; serviceInTotal = total === null
       } else if (discountPattern.test(line)) {
@@ -294,6 +288,8 @@ export function parseReceipt(text: string, known?: Pick<ScanResult, 'total' | 's
       continue
     }
     if (ended) continue
+    // "264 320 / 3 = 88 107": the bill split per guest, printed under the total.
+    if (splitPattern.test(line)) { settle(); continue }
     const parsed = parseLine(line)
     // Among the dishes, a price line whose name OCR lost is kept for the owner to name.
     if (parsed && (parsed.name || names.length || parsed.certain || items.length)) {
@@ -326,7 +322,8 @@ export function parseReceipt(text: string, known?: Pick<ScanResult, 'total' | 's
   settle()
 
   // What the dishes should add up to, most likely first; the first one they do add up to wins.
-  const dearest = Math.max(0, ...items.map(lineSum))
+  // One misread row may add up to more than the whole receipt; a total below two rows is the misread one.
+  const dearest = items.map(lineSum).sort((a, b) => b - a)[items.length >= 3 ? 1 : 0] ?? 0
   const plausible = (value: number | null) => value !== null && Math.round(value) >= dearest ? Math.round(value) : null
   const inTotal = (serviceInTotal ? service : 0) - (discountInTotal ? discount : 0)
   const candidates = [
@@ -340,8 +337,7 @@ export function parseReceipt(text: string, known?: Pick<ScanResult, 'total' | 's
   // only adds up the other way.
   const asSums = items, asUnits = items.map(entry => entry.alt ? { ...entry, unitPrice: entry.alt } : entry)
   const readings = unitPrices ? [asUnits, asSums] : [asSums, asUnits]
-  // Prices from the tax lines come last: they only win when the receipt's total agrees with them.
-  if (items.some(entry => entry.vat && !close(lineSum(entry), entry.vat))) readings.push(...readings.map(entries => entries.map(withVat)))
+  // Rows stay as printed: a misread price is left for the owner to fix against the photo, not made up to fit the total.
   const options = candidates.flatMap(value => readings.map(entries => ({ value, entries })))
   const fit = options.find(({ value, entries }) => addsUp(entries, value))
     ?? options.map(({ value, entries }) => ({ value, entries: fixQuantity(entries, value) })).find(option => option.entries)
@@ -379,11 +375,17 @@ export function settled(texts: string[]) {
 }
 
 /**
- * Of several readings of one photo: the one that adds up to its total, else one that found a total, else the one with most
- * dishes. A reading that missed the total line borrows it from another, since each pass loses different lines.
+ * Of several readings of one photo: the one that adds up to its total, else the one closest to its total, else the one with
+ * most dishes. Rows over the total count double: misread lines add made-up dishes, while a lost line only leaves a gap the
+ * owner sees. A reading that missed the total line borrows it from another, since each pass loses different lines.
  */
 export function bestReading(texts: string[]) {
-  const rank = (result: ScanResult) => (isComplete(result) ? 2000 : 0) + (result.total === null ? 0 : 1000) + result.items.length
+  const rank = (result: ScanResult) => {
+    if (isComplete(result)) return 3000 + result.items.length
+    if (!result.total) return result.items.length
+    const gap = sumOf(result.items.filter(entry => !entry.unsure)) - result.total
+    return 1000 + 999 * (1 - Math.min(1, (gap > 0 ? 2 * gap : -gap) / result.total))
+  }
   const readings = texts.map(text => ({ text, result: parseReceipt(text) }))
   const known = readings.map(reading => reading.result).filter(result => result.total !== null).sort((a, b) => rank(b) - rank(a))[0]
   return readings
