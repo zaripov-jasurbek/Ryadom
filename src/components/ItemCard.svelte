@@ -41,7 +41,7 @@
   }
 
   function toggleUnits() {
-    haptic.tap()
+    haptic.selection()
     if (!showUnits) { expanded = true; return }
     expanded = false
     if (app.editingUnit.startsWith(`${item.id}:`)) app.editingUnit = ''
