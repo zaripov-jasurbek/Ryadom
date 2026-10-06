@@ -336,6 +336,19 @@ export function isComplete(result: ScanResult) {
 }
 
 /**
+ * Readings are enough when the last one adds up, or when three of them found the same rows and total: those come from
+ * at least two views of the photo, and more passes rarely change the answer then.
+ */
+export function settled(texts: string[]) {
+  const results = texts.map(text => parseReceipt(text))
+  const last = results.at(-1)
+  if (!last) return false
+  if (isComplete(last)) return true
+  const key = (result: ScanResult) => JSON.stringify([result.total, result.items.map(entry => [entry.quantity, entry.unitPrice])])
+  return last.items.length > 0 && results.filter(result => key(result) === key(last)).length >= 3
+}
+
+/**
  * Of several readings of one photo: the one that adds up to its total, else one that found a total, else the one with most
  * dishes. A reading that missed the total line borrows it from another, since each pass loses different lines.
  */

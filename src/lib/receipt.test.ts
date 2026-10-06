@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { bestReading, isComplete, parseAmount, parseReceipt } from './receipt.ts'
+import { bestReading, isComplete, parseAmount, parseReceipt, settled } from './receipt.ts'
 
 describe('receipt amounts', () => {
   it('reads thousands separators and drops tiyin', () => {
@@ -524,6 +524,16 @@ describe('real receipts in columns', () => {
       { name: 'Ichimlik Flavis anor t/i 450ml', quantity: 1, unitPrice: 9990 },
     ])
     assert.equal(result.total, 136520)
+  })
+
+  it('stops reading again once a reading adds up, or three readings agree', () => {
+    assert.equal(settled([]), false)
+    assert.equal(settled([shopApp]), true)
+    const partial = 'Плов\t1\t45 000\nЧай\t1\t5 000'
+    assert.equal(settled([partial, partial]), false)
+    assert.equal(settled([partial, 'Плов\t1\t45 000', partial]), false)
+    assert.equal(settled([partial, partial, partial]), true)
+    assert.equal(settled(['ИНН 301234567', 'ИНН 301234567', 'ИНН 301234567']), false)
   })
 
   it('keeps the column apart in a line with no OCR tabs but two spaces', () => {

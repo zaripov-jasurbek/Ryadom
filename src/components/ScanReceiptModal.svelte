@@ -1,8 +1,8 @@
 <script lang="ts">
   import { onDestroy } from 'svelte'
   import { formatUzs } from '../lib/calculations'
-  import { recognizeReceipt } from '../lib/ocr'
-  import { bestReading, isComplete, parseReceipt, scanLimits } from '../lib/receipt'
+  import { recognizeReceipt, stopReceiptEngine } from '../lib/ocr'
+  import { bestReading, scanLimits, settled } from '../lib/receipt'
   import { plural } from '../lib/format'
   import { limits } from '../lib/limits'
   import { app } from '../lib/store.svelte'
@@ -47,7 +47,7 @@
     const current = controller = new AbortController()
     setPreview(file); error = ''; status = 'Подготавливаем фото'; progress = 0; step = 'reading'
     try {
-      const readings = await recognizeReceipt(file, (stage, value) => { if (controller === current) { status = stage; progress = value } }, current.signal, text => isComplete(parseReceipt(text)))
+      const readings = await recognizeReceipt(file, (stage, value) => { if (controller === current) { status = stage; progress = value } }, current.signal, settled)
       if (controller !== current) return
       const { text, result } = bestReading(readings)
       rawText = text; receiptTotal = result.total; receiptService = result.servicePercent
@@ -84,7 +84,7 @@
     rows = rows.filter(row => !addedIds.has(row.id))
   }
 
-  onDestroy(() => { controller?.abort(); setPreview(null) })
+  onDestroy(() => { controller?.abort(); stopReceiptEngine(); setPreview(null) })
 </script>
 
 <!-- Outside the dialog, so its focus trap never lands on them. -->
