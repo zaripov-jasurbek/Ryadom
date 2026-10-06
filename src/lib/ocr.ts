@@ -154,7 +154,7 @@ function drawVariant(bitmap: ImageBitmap, paper: Rect, mode: 'normal' | 'gray' |
  * corner-based rectifier, while small tilt is common in handheld photos and costs very little to fix.
  */
 function deskew(canvas: HTMLCanvasElement) {
-  const sampleWidth = Math.min(500, canvas.width)
+  const sampleWidth = Math.min(300, canvas.width)
   const sampleHeight = Math.max(1, Math.round(canvas.height * sampleWidth / canvas.width))
   const sample = document.createElement('canvas')
   sample.width = sampleWidth; sample.height = sampleHeight
@@ -168,7 +168,7 @@ function deskew(canvas: HTMLCanvasElement) {
     const cos = Math.cos(radians), sin = Math.sin(radians)
     const cx = (sampleWidth - 1) / 2, cy = (sampleHeight - 1) / 2
     const rows = new Float32Array(sampleHeight)
-    for (let y = 0; y < sampleHeight; y++) for (let x = 0; x < sampleWidth; x++) {
+    for (let y = 0; y < sampleHeight; y += 2) for (let x = 0; x < sampleWidth; x += 2) {
       const sx = Math.round((x - cx) * cos + (y - cy) * sin + cx)
       const sy = Math.round(-(x - cx) * sin + (y - cy) * cos + cy)
       if (sx < 0 || sx >= sampleWidth || sy < 0 || sy >= sampleHeight) continue
