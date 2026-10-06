@@ -7,6 +7,7 @@
   import { limits } from '../lib/limits'
   import { app } from '../lib/store.svelte'
   import Modal from './Modal.svelte'
+  import { haptic } from '../lib/haptics'
 
   type Row = { id: number; include: boolean; name: string; quantity: number | null; price: number | null }
 
@@ -52,10 +53,12 @@
       rawText = text; receiptTotal = result.total; receiptService = result.servicePercent
       rows = result.items.map(entry => ({ id: nextId++, include: !entry.unsure, name: entry.name, quantity: entry.quantity, price: entry.unitPrice }))
       step = 'review'
+      haptic.success()
     } catch (failure) {
       if (current.signal.aborted) return
       console.error(failure)
       error = 'Не получилось распознать. Снимите ближе и при хорошем свете.'
+      haptic.error()
       step = 'pick'
     }
   }
@@ -75,7 +78,7 @@
     if (step !== 'review' || !ready || app.busy) return
     const items = chosen.map(row => ({ name: row.name.trim(), quantity: row.quantity!, unitPrice: row.price! }))
     const added = await app.addItems(items)
-    if (added === items.length) { app.notify(`Добавлено ${plural(added, 'позиция', 'позиции', 'позиций')}`); app.scanOpen = false; return }
+    if (added === items.length) { haptic.success(); app.notify(`Добавлено ${plural(added, 'позиция', 'позиции', 'позиций')}`); app.scanOpen = false; return }
     // Keep what was not added so the owner can retry without scanning again.
     const addedIds = new Set(chosen.slice(0, added).map(row => row.id))
     rows = rows.filter(row => !addedIds.has(row.id))
