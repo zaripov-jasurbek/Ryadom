@@ -19,8 +19,8 @@ const timesPattern = new RegExp(String.raw`(?<!\d)(\d+(?:[.,]\d{1,3})?)\s*(?:\p{
 const reversedPattern = new RegExp(String.raw`(?<!\d)(${amount})\s*[xх×*]\s*(\d{1,2})(?![\d.,])`, 'iu')
 
 // Lines that are totals, payments, taxes or receipt metadata rather than dishes.
-// OCR often loses the start of "TO'LOV UCHUN:", leaving "UCHUN:" or "CHUN:".
-const totalWords = String.raw`итог\p{L}*|всего|к\s+оплате|jami|to.?lov\s+uchun|u?chun(?=\s*:)|total|subtotal`
+// OCR often loses the start of "TO'LOV UCHUN:", leaving "O'LOV UCHUN", "UCHUN:" or "CHUN:".
+const totalWords = String.raw`итог\p{L}*|всего|к\s+оплате|jami|t?[o0].?lov\s+uchun|u?chun(?=\s*:)|total|subtotal`
 const skipWords = [
   totalWords,
   String.raw`оплат\p{L}*|наличн\p{L}*|безнал\p{L}*|карт(?:а|ой|е|ы)|сдача|ндс|qqs|naqd\p{L}*|karta(?:si|lar\p{L}*|ga|dan)?|bank\p{L}*|банк\p{L}*|plastik|qaytim|t[o0]'?landi|tax|vat|sh\.?\s?j|jumladan`,
@@ -49,6 +49,8 @@ const notPricePattern = new RegExp([
   String.raw`(?<![\d.,])\d+(?:[.,]\d+)?\s?(?:кг|kg|гр?|gr?|r|мл|ml|л|l|шт|pcs|dona|%)(?!\p{L})`,
   String.raw`(?<![\d.,])\d+(?:[.,]\d+)?(?=\p{L}{2})(?!сум|so'?m|sum|uzs)|(?<![\d.,])\d+-(?=\p{L})`,
   String.raw`(?<!\S)0\d{4,}`,
+  // Codes: a long run of digits with no groups, or digits before a slash ("22294968/01905007001000000").
+  String.raw`(?<![\d.,])\d{7,}(?!\d)|(?<![\d.,])\d{4,}(?=\s?\/)`,
 ].join('|'), 'giu')
 const currencyPattern = /(?<!\p{L})(?:сум|so'?m|sum|uzs)(?!\p{L})/giu
 
@@ -237,6 +239,8 @@ const unitPriceHeader = /(?<!\p{L})(?:цена|narxi?)(?!\p{L})/iu, lineSumHeade
 export function parseReceipt(text: string, known?: Pick<ScanResult, 'total' | 'servicePercent'>): ScanResult {
   const items: Parsed[] = []
   let total: number | null = null, subtotal: number | null = null, ended = false, unitPrices = false
+  // A total line without its sum: "TO'LOV UCHUN:" with "136 520,00" printed on the line below.
+  let totalBelow = false
   // Service and discount printed after the last total line are not part of it: "Итого 143 000, обслуживание 14 300".
   let service = 0, servicePercent: number | null = null, serviceInTotal = true, discount = 0, discountInTotal = true
   // Lines with letters and no price: a name for the price line below, or the rest of a long name above.
@@ -262,12 +266,18 @@ export function parseReceipt(text: string, known?: Pick<ScanResult, 'total' | 's
     const fixed = fixDigits(cells.join('\t'))
     const line = fixed.replace(/^(?:(?:\d{1,3}|[|!lI])\s?[.)]\s*(?=[\p{L}[("«“])|\d{1,3}\s+(?=\p{Lu}{3}))/u, '')
     if (!line || currencyLine.test(line)) continue
+    const below = totalBelow
+    totalBelow = false
+    if (below && !ended) {
+      const value = amounts(line).filter(entry => entry.value >= scanLimits.minPrice).at(-1)?.value
+      if (value !== undefined && letters(line.replace(currencyPattern, '')) <= 6) { settle(); total = value; serviceInTotal = discountInTotal = true; ended = true; continue }
+    }
     if (skipPattern.test(line)) {
       settle()
       const value = amounts(line).filter(entry => entry.value >= scanLimits.minPrice).at(-1)?.value
       if (headerPattern.test(line) && value === undefined) unitPrices = unitPriceHeader.test(line) && !lineSumHeader.test(line)
       else if (totalPattern.test(line)) {
-        if (value !== undefined) { total = value; serviceInTotal = discountInTotal = true }
+        if (value !== undefined) { total = value; serviceInTotal = discountInTotal = true } else totalBelow = true
       } else if (servicePattern.test(line)) {
         service = value ?? service; servicePercent = percentOf(line) ?? servicePercent; serviceInTotal = total === null
       } else if (discountPattern.test(line)) {

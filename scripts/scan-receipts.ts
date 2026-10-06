@@ -12,7 +12,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createServer } from 'vite'
 
-type Expected = { total: number | null; servicePercent: number | null; items: [string, number, number][] }
+type Expected = { area: [number, number][]; total: number | null; servicePercent: number | null; items: [string, number, number][] }
 type Item = { name: string; quantity: number; unitPrice: number; unsure?: boolean }
 type Result = { items: Item[]; total: number | null; servicePercent: number | null }
 type Scan = { ms: number; text: string; result: Result; readings: { text: string; result: Result }[] }
@@ -117,7 +117,8 @@ try {
       const { bestReading, parseReceipt, settled } = await import('/src/lib/receipt.ts')
       const file = await (await fetch(${JSON.stringify(`/receipts/${photo}`)})).blob()
       const started = performance.now()
-      const texts = await recognizeReceipt(file, () => {}, new AbortController().signal, ${all ? '() => false' : 'settled'})
+      const area = ${JSON.stringify(expected[photo].area.map(([x, y]) => ({ x, y })))}
+      const texts = await recognizeReceipt(file, area, () => {}, new AbortController().signal, ${all ? '() => false' : 'settled'})
       const { text, result } = bestReading(texts)
       return { ms: performance.now() - started, text, result, readings: texts.map(text => ({ text, result: parseReceipt(text) })) }
     })()`)

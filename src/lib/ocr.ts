@@ -17,6 +17,9 @@ const targetWidth = 1400
 const maxPixels = 6_000_000
 
 type Rect = { x: number; y: number; width: number; height: number }
+export type Point = { x: number; y: number }
+/** The part of the photo to read: its corners clockwise from the top left, in pixels of the upright photo. */
+export type Area = [Point, Point, Point, Point]
 
 /** Otsu's threshold: the gray level that best splits the histogram into dark and bright. */
 function otsu(histogram: number[], count: number) {
@@ -48,8 +51,8 @@ function longestRun(shares: number[]) {
 }
 
 /**
- * Finds the receipt in the photo: paper is bright and colourless, so the columns and then the rows that are
- * mostly bright mark it out from the table, hands and shadows around it. Text outside the paper only confuses OCR.
+ * Where the receipt probably is, as a first frame for the owner to move onto the dishes. Paper is bright and colourless,
+ * so the columns and then the rows that are mostly bright mark it out from the table, hands and shadows around it.
  * Rows take a lower threshold, so the end of a receipt in the shadow of a hand still counts as paper.
  */
 function findPaper(bitmap: ImageBitmap): Rect {
@@ -88,6 +91,17 @@ function findPaper(bitmap: ImageBitmap): Rect {
   return { x: x0 / scale, y: y0 / scale, width: (x1 - x0) / scale, height: (y1 - y0) / scale }
 }
 
+/** The photo's upright size and a first frame for the owner to adjust: around the paper, or the whole photo. */
+export async function suggestArea(file: Blob): Promise<{ width: number; height: number; area: Area }> {
+  const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' })
+  try {
+    const { x, y, width, height } = findPaper(bitmap)
+    return { width: bitmap.width, height: bitmap.height, area: [{ x, y }, { x: x + width, y }, { x: x + width, y: y + height }, { x, y: y + height }] }
+  } finally {
+    bitmap.close()
+  }
+}
+
 /**
  * Divides every pixel by the mean brightness around it, so text in a shadow or under uneven light gets the same
  * contrast as the rest; Tesseract binarizes the page with one threshold and would lose it otherwise.
@@ -120,17 +134,85 @@ function evenLight(px: Uint8ClampedArray, width: number, height: number) {
   }
 }
 
-/** Draws a normalized OCR canvas, `stretch` times wider than tall for narrow fonts (see `glyphShape`). */
-function drawVariant(bitmap: ImageBitmap, paper: Rect, mode: 'normal' | 'gray' | 'threshold' | 'thresholdStrong', stretch = 1) {
-  const scale = Math.min(3, targetWidth / paper.width, Math.sqrt(maxPixels / (paper.width * paper.height * stretch)))
+const distance = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y)
+
+/**
+ * The projective map from the rectangle 0…width × 0…height onto the area's corners: what a photo taken at an angle does to
+ * the flat paper. Solved from the four corner pairs; returns where a point of the rectangle is in the photo.
+ */
+function perspective(area: Area, width: number, height: number) {
+  const from = [[0, 0], [width, 0], [width, height], [0, height]]
+  // x = (a·u + b·v + c) / (g·u + h·v + 1), y = (d·u + e·v + f) / (g·u + h·v + 1)
+  const rows = from.flatMap(([u, v], i) => {
+    const { x, y } = area[i]
+    return [[u, v, 1, 0, 0, 0, -u * x, -v * x, x], [0, 0, 0, u, v, 1, -u * y, -v * y, y]]
+  })
+  for (let col = 0; col < 8; col++) {
+    const pivot = rows.slice(col).reduce((best, row, i) => Math.abs(row[col]) > Math.abs(rows[best][col]) ? col + i : best, col)
+    ;[rows[col], rows[pivot]] = [rows[pivot], rows[col]]
+    for (let r = 0; r < 8; r++) {
+      if (r === col || !rows[col][col]) continue
+      const f = rows[r][col] / rows[col][col]
+      for (let c = col; c < 9; c++) rows[r][c] -= f * rows[col][c]
+    }
+  }
+  const [a, b, c, d, e, f, g, h] = rows.map((row, i) => row[8] / row[i] || 0)
+  return (u: number, v: number) => {
+    const w = g * u + h * v + 1
+    return { x: (a * u + b * v + c) / w, y: (d * u + e * v + f) / w }
+  }
+}
+
+/** One photo being read: its area drawn flat once per width, and how its lines bend, measured the first time it is needed. */
+type Scan = { bitmap: ImageBitmap; area: Area; stretch: number; flat?: ImageData; bend?: Bend | null }
+
+/**
+ * The area drawn as a flat rectangle, about `targetWidth` wide and `stretch` times wider for narrow fonts (see `glyphShape`):
+ * the corners the owner set undo the angle of the photo exactly, and what lies outside them is never read.
+ */
+function flatten(scan: Scan) {
+  if (scan.flat) return scan.flat
+  const { bitmap, area, stretch } = scan
+  const across = (distance(area[0], area[1]) + distance(area[3], area[2])) / 2
+  const down = (distance(area[0], area[3]) + distance(area[1], area[2])) / 2
+  const scale = Math.min(3, targetWidth / across, Math.sqrt(maxPixels / (across * down * stretch)))
+  const width = Math.max(1, Math.round(across * scale * stretch)), height = Math.max(1, Math.round(down * scale))
+  // The photo around the area, drawn at the output's resolution, so a phone never holds all of a large photo's pixels.
+  const left = Math.max(0, Math.floor(Math.min(...area.map(p => p.x)))), top = Math.max(0, Math.floor(Math.min(...area.map(p => p.y))))
+  const right = Math.min(bitmap.width, Math.ceil(Math.max(...area.map(p => p.x)))), bottom = Math.min(bitmap.height, Math.ceil(Math.max(...area.map(p => p.y))))
+  const fit = Math.min(1, Math.sqrt(2 * maxPixels / Math.max(1, (right - left) * scale * stretch * (bottom - top) * scale)))
+  const sx = scale * stretch * fit, sy = scale * fit
+  const source = document.createElement('canvas')
+  source.width = Math.max(1, Math.round((right - left) * sx)); source.height = Math.max(1, Math.round((bottom - top) * sy))
+  const sctx = source.getContext('2d', { willReadFrequently: true })
+  if (!sctx) throw new Error('Canvas is unavailable')
+  sctx.imageSmoothingQuality = 'high'
+  sctx.drawImage(bitmap, left, top, right - left, bottom - top, 0, 0, source.width, source.height)
+  const src = sctx.getImageData(0, 0, source.width, source.height).data, sw = source.width, sh = source.height
+  const at = perspective(area, width, height)
+  const flat = new ImageData(width, height), px = flat.data
+  for (let v = 0; v < height; v++) for (let u = 0; u < width; u++) {
+    const point = at(u + .5, v + .5)
+    const x = (point.x - left) * sx - .5, y = (point.y - top) * sy - .5
+    const x0 = Math.floor(x), y0 = Math.floor(y), fx = x - x0, fy = y - y0, o = (v * width + u) * 4
+    px[o + 3] = 255
+    if (x0 < 0 || y0 < 0 || x0 + 1 >= sw || y0 + 1 >= sh) { px[o] = px[o + 1] = px[o + 2] = 255; continue }
+    const i = (y0 * sw + x0) * 4, j = i + sw * 4
+    for (let c = 0; c < 3; c++) px[o + c] = (src[i + c] * (1 - fx) + src[i + 4 + c] * fx) * (1 - fy) + (src[j + c] * (1 - fx) + src[j + 4 + c] * fx) * fy
+  }
+  return scan.flat = flat
+}
+
+type Mode = 'normal' | 'gray' | 'threshold' | 'thresholdStrong'
+
+/** Draws the flat area for OCR: as photographed, evenly lit, or black and white at two cuts. */
+function drawVariant(scan: Scan, mode: Mode) {
+  const flat = flatten(scan)
   const canvas = document.createElement('canvas')
-  canvas.width = Math.max(1, Math.round(paper.width * scale * stretch))
-  canvas.height = Math.max(1, Math.round(paper.height * scale))
+  canvas.width = flat.width; canvas.height = flat.height
   const ctx = canvas.getContext('2d', { willReadFrequently: true })
   if (!ctx) throw new Error('Canvas is unavailable')
-  ctx.imageSmoothingQuality = 'high'
-  ctx.drawImage(bitmap, paper.x, paper.y, paper.width, paper.height, 0, 0, canvas.width, canvas.height)
-  const image = ctx.getImageData(0, 0, canvas.width, canvas.height)
+  const image = new ImageData(new Uint8ClampedArray(flat.data), flat.width, flat.height)
   if (mode !== 'normal') evenLight(image.data, canvas.width, canvas.height)
   if (mode === 'gray') {
     for (let i = 0; i < image.data.length; i += 4) {
@@ -146,59 +228,6 @@ function drawVariant(bitmap: ImageBitmap, paper: Rect, mode: 'normal' | 'gray' |
   }
   ctx.putImageData(image, 0, 0)
   return canvas
-}
-
-/**
- * Estimates a small camera tilt from horizontal text/table lines and rotates the receipt before OCR.
- * This is intentionally limited to a few degrees: large perspective distortion is better left to a future
- * corner-based rectifier, while small tilt is common in handheld photos and costs very little to fix.
- */
-function deskew(canvas: HTMLCanvasElement) {
-  const sampleWidth = Math.min(300, canvas.width)
-  const sampleHeight = Math.max(1, Math.round(canvas.height * sampleWidth / canvas.width))
-  const sample = document.createElement('canvas')
-  sample.width = sampleWidth; sample.height = sampleHeight
-  const ctx = sample.getContext('2d', { willReadFrequently: true })
-  if (!ctx) return canvas
-  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, sampleWidth, sampleHeight)
-  ctx.drawImage(canvas, 0, 0, sampleWidth, sampleHeight)
-  const pixels = ctx.getImageData(0, 0, sampleWidth, sampleHeight).data
-  const score = (angle: number) => {
-    const radians = angle * Math.PI / 180
-    const cos = Math.cos(radians), sin = Math.sin(radians)
-    const cx = (sampleWidth - 1) / 2, cy = (sampleHeight - 1) / 2
-    const rows = new Float32Array(sampleHeight)
-    for (let y = 0; y < sampleHeight; y += 2) for (let x = 0; x < sampleWidth; x += 2) {
-      const sx = Math.round((x - cx) * cos + (y - cy) * sin + cx)
-      const sy = Math.round(-(x - cx) * sin + (y - cy) * cos + cy)
-      if (sx < 0 || sx >= sampleWidth || sy < 0 || sy >= sampleHeight) continue
-      const i = (sy * sampleWidth + sx) * 4
-      const gray = pixels[i] * .299 + pixels[i + 1] * .587 + pixels[i + 2] * .114
-      rows[y] += Math.max(0, 220 - gray)
-    }
-    const mean = rows.reduce((a, b) => a + b, 0) / rows.length
-    return rows.reduce((sum, value) => sum + (value - mean) ** 2, 0) / rows.length
-  }
-  let bestAngle = 0, bestScore = score(0)
-  for (let angle = -7; angle <= 7; angle += 1) {
-    const value = score(angle)
-    if (value > bestScore) { bestScore = value; bestAngle = angle }
-  }
-  if (Math.abs(bestAngle) < 1) return canvas
-
-  const radians = bestAngle * Math.PI / 180
-  const sin = Math.abs(Math.sin(radians)), cos = Math.abs(Math.cos(radians))
-  const width = Math.ceil(canvas.width * cos + canvas.height * sin)
-  const height = Math.ceil(canvas.width * sin + canvas.height * cos)
-  const rotated = document.createElement('canvas')
-  rotated.width = width; rotated.height = height
-  const out = rotated.getContext('2d')
-  if (!out) return canvas
-  out.fillStyle = '#fff'; out.fillRect(0, 0, width, height)
-  out.translate(width / 2, height / 2)
-  out.rotate(radians)
-  out.drawImage(canvas, -canvas.width / 2, -canvas.height / 2)
-  return rotated
 }
 
 /** Gray levels darker than this count as ink when measuring the layout. */
@@ -324,32 +353,27 @@ function unbend(canvas: HTMLCanvasElement, bend: Bend) {
   return out
 }
 
-type Mode = 'normal' | 'gray' | 'threshold' | 'thresholdStrong'
-/** One photo being read; the bend is measured the first time a view needs it. */
-type Scan = { bitmap: ImageBitmap; paper: Rect; stretch: number; bend?: Bend | null }
-
+/** The area with its lines straightened, for paper that curled; flat paper stays as it is. */
 function straight(scan: Scan, mode: Mode) {
-  const canvas = drawVariant(scan.bitmap, scan.paper, mode, scan.stretch)
+  const canvas = drawVariant(scan, mode)
   // The evenly lit view shows the lines best; every view of one photo bends the same way.
-  if (scan.bend === undefined) scan.bend = bendOf(mode === 'gray' ? canvas : drawVariant(scan.bitmap, scan.paper, 'gray', scan.stretch))
-  return scan.bend ? unbend(canvas, scan.bend) : deskew(canvas)
+  if (scan.bend === undefined) scan.bend = bendOf(mode === 'gray' ? canvas : drawVariant(scan, 'gray'))
+  return scan.bend ? unbend(canvas, scan.bend) : canvas
 }
 
 /**
- * Deliberately different views of the same photo, read one at a time until the readings settle: most receipts read on
- * the first. Each canvas takes tens of megabytes, so a view is drawn again rather than kept. Straightened views help
- * curled paper and come early; a column of lines catches large bold totals. A full-photo view is kept as a fallback
- * because paper detection is heuristic and can accidentally crop a white table, a pale receipt, or a receipt with a shadow.
+ * Deliberately different views of the area, read one at a time until the readings settle: most receipts read on the first.
+ * Each canvas takes tens of megabytes, so a view is drawn again rather than kept. A straightened view helps curled paper;
+ * a column of lines catches large bold totals.
  */
-const passes: { view: string; draw: (scan: Scan) => HTMLCanvasElement; column?: boolean }[] = [
-  { view: 'normal', draw: scan => deskew(drawVariant(scan.bitmap, scan.paper, 'normal', scan.stretch)) },
-  { view: 'gray', draw: scan => deskew(drawVariant(scan.bitmap, scan.paper, 'gray', scan.stretch)) },
-  { view: 'gray straight', draw: scan => straight(scan, 'gray') },
-  { view: 'normal', draw: scan => deskew(drawVariant(scan.bitmap, scan.paper, 'normal', scan.stretch)), column: true },
-  { view: 'gray', draw: scan => deskew(drawVariant(scan.bitmap, scan.paper, 'gray', scan.stretch)), column: true },
-  { view: 'threshold straight', draw: scan => straight(scan, 'threshold') },
-  { view: 'thresholdStrong', draw: scan => deskew(drawVariant(scan.bitmap, scan.paper, 'thresholdStrong', scan.stretch)) },
-  { view: 'photo', draw: scan => drawVariant(scan.bitmap, { x: 0, y: 0, width: scan.bitmap.width, height: scan.bitmap.height }, 'normal', scan.stretch) },
+const passes: { draw: (scan: Scan) => HTMLCanvasElement; column?: boolean }[] = [
+  { draw: scan => drawVariant(scan, 'normal') },
+  { draw: scan => drawVariant(scan, 'gray') },
+  { draw: scan => straight(scan, 'gray') },
+  { draw: scan => drawVariant(scan, 'normal'), column: true },
+  { draw: scan => drawVariant(scan, 'gray'), column: true },
+  { draw: scan => straight(scan, 'threshold') },
+  { draw: scan => drawVariant(scan, 'thresholdStrong') },
 ]
 
 // The worker stays loaded while the scanner is open, so a retake skips loading the engine and its models.
@@ -412,10 +436,10 @@ export function confidentText(lines: OcrLine[]) {
 }
 
 /**
- * Reads the receipt in the passes above until `enough` accepts the readings so far. The first reading also measures the
+ * Reads the area of the receipt photo in the passes above until `enough` accepts the readings so far. The first reading also measures the
  * font: a narrow one is read again from the first pass, stretched. Returns every reading; aborting stops the engine.
  */
-export async function recognizeReceipt(file: Blob, onProgress: OcrProgress, signal: AbortSignal, enough: (readings: string[]) => boolean): Promise<string[]> {
+export async function recognizeReceipt(file: Blob, area: Area, onProgress: OcrProgress, signal: AbortSignal, enough: (readings: string[]) => boolean): Promise<string[]> {
   onProgress('Подготавливаем фото', 0)
   // Rereads show their own count, so a bar that fills again does not look like the scan started over.
   let pass = 0, rereads = passes.length - 1
@@ -434,7 +458,7 @@ export async function recognizeReceipt(file: Blob, onProgress: OcrProgress, sign
     const [{ PSM }, worker] = await Promise.race([Promise.all([import('tesseract.js'), startEngine()]), aborted])
     const bitmap = await decoding
     signal.throwIfAborted()
-    let scan: Scan = { bitmap, paper: findPaper(bitmap), stretch: 1 }
+    let scan: Scan = { bitmap, area, stretch: 1 }
     const readings: string[] = []
     let measured = false
     for (let index = 0; index < passes.length; index++) {
@@ -453,7 +477,7 @@ export async function recognizeReceipt(file: Blob, onProgress: OcrProgress, sign
         measured = true
         const stretch = glyphShape(lines)
         // Drawn wider, the photo is measured afresh.
-        if (stretch > 1) { scan = { ...scan, stretch, bend: undefined }; index = -1; rereads++ }
+        if (stretch > 1) { scan = { bitmap, area, stretch }; index = -1; rereads++ }
       }
     }
     return readings

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onDestroy } from 'svelte'
   import { formatUzs } from '../lib/calculations'
-  import { recognizeReceipt, stopReceiptEngine } from '../lib/ocr'
+  import { recognizeReceipt, stopReceiptEngine, suggestArea, type Area } from '../lib/ocr'
   import { bestReading, scanLimits, settled } from '../lib/receipt'
   import { plural } from '../lib/format'
   import { limits } from '../lib/limits'
@@ -12,7 +12,7 @@
   /** `suspect` rows were left unchecked because the receipt's total adds up without them. */
   type Row = { id: number; include: boolean; suspect: boolean; name: string; quantity: number | null; price: number | null }
 
-  let step = $state<'pick' | 'reading' | 'review'>('pick')
+  let step = $state<'pick' | 'area' | 'reading' | 'review'>('pick')
   let status = $state('')
   let progress = $state(0)
   let error = $state('')
@@ -45,12 +45,89 @@
     preview = file ? URL.createObjectURL(file) : ''
   }
 
-  async function read(file: File) {
+  // The photo and the part of it to read: the owner frames the dishes, so headers, footers and the table around stay out.
+  let photo: File | null = null
+  let size = $state({ width: 1, height: 1 })
+  let area = $state<Area>([{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0, y: 1 }])
+  let frame = $state<HTMLDivElement>()
+  let frameWidth = $state(0)
+  let dragging = $state<number | null>(null)
+  let grip = { x: 0, y: 0 }
+  const cornerNames = ['Левый верхний угол', 'Правый верхний угол', 'Правый нижний угол', 'Левый нижний угол']
+  const shape = $derived(area.map(corner => `${corner.x},${corner.y}`).join(' '))
+  // The loupe shows the corner under the finger at this zoom.
+  const zoom = 2.5, loupe = 96
+
+  async function choose(file: File) {
+    controller?.abort(); controller = null
+    setPreview(file); photo = file; error = ''
+    try {
+      const suggested = await suggestArea(file)
+      if (photo !== file) return
+      size = { width: suggested.width, height: suggested.height }
+      area = suggested.area
+      step = 'area'
+    } catch (failure) {
+      console.error(failure)
+      error = 'Не получилось открыть фото. Попробуйте другое.'
+      haptic.error()
+      step = 'pick'
+    }
+  }
+
+  function photoPoint(event: PointerEvent) {
+    const rect = frame!.getBoundingClientRect()
+    return { x: (event.clientX - rect.left) / rect.width * size.width, y: (event.clientY - rect.top) / rect.height * size.height }
+  }
+  const clamp = (point: { x: number; y: number }) => ({ x: Math.min(size.width, Math.max(0, point.x)), y: Math.min(size.height, Math.max(0, point.y)) })
+
+  function grab(event: PointerEvent, corner: number) {
+    event.preventDefault()
+    ;(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId)
+    // The corner keeps its distance from the finger instead of jumping under it.
+    const at = photoPoint(event)
+    grip = { x: area[corner].x - at.x, y: area[corner].y - at.y }
+    dragging = corner
+    haptic.selection()
+  }
+  function drag(event: PointerEvent, corner: number) {
+    if (dragging !== corner) return
+    const at = photoPoint(event)
+    area[corner] = clamp({ x: at.x + grip.x, y: at.y + grip.y })
+  }
+  function release() { dragging = null }
+  /** Arrow keys move a focused corner by 1% of the photo, with Shift by 5%. */
+  function nudge(event: KeyboardEvent, corner: number) {
+    const step = (event.shiftKey ? .05 : .01) * Math.max(size.width, size.height)
+    const moves: Record<string, [number, number]> = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }
+    const move = moves[event.key]
+    if (!move) return
+    event.preventDefault()
+    area[corner] = clamp({ x: area[corner].x + move[0], y: area[corner].y + move[1] })
+  }
+
+  /** A frame that crosses itself or covers almost nothing cannot be drawn flat. */
+  function frameProblem(corners: Area) {
+    const turns = corners.map((corner, i) => {
+      const next = corners[(i + 1) % 4], after = corners[(i + 2) % 4]
+      return (next.x - corner.x) * (after.y - next.y) - (next.y - corner.y) * (after.x - next.x)
+    })
+    if (!turns.every(turn => turn > 0) && !turns.every(turn => turn < 0)) return 'Углы рамки перепутаны: потяните их на свои места.'
+    const surface = Math.abs(corners.reduce((sum, corner, i) => sum + corner.x * corners[(i + 1) % 4].y - corners[(i + 1) % 4].x * corner.y, 0)) / 2
+    if (surface < size.width * size.height * .01) return 'Рамка слишком маленькая: растяните её на список блюд.'
+    return ''
+  }
+
+  async function read() {
+    const file = photo
+    if (!file) return
+    const problem = frameProblem(area)
+    if (problem) { error = problem; haptic.error(); return }
     controller?.abort()
     const current = controller = new AbortController()
-    setPreview(file); error = ''; status = 'Подготавливаем фото'; progress = 0; step = 'reading'
+    error = ''; status = 'Подготавливаем фото'; progress = 0; step = 'reading'
     try {
-      const readings = await recognizeReceipt(file, (stage, value) => { if (controller === current) { status = stage; progress = value } }, current.signal, settled)
+      const readings = await recognizeReceipt(file, $state.snapshot(area) as Area, (stage, value) => { if (controller === current) { status = stage; progress = value } }, current.signal, settled)
       if (controller !== current) return
       const { text, result } = bestReading(readings)
       rawText = text; receiptTotal = result.total; receiptService = result.servicePercent
@@ -63,7 +140,7 @@
       console.error(failure)
       error = 'Не получилось распознать. Снимите ближе и при хорошем свете.'
       haptic.error()
-      step = 'pick'
+      step = 'area'
     }
   }
 
@@ -71,12 +148,14 @@
     const input = event.currentTarget as HTMLInputElement
     const file = input.files?.[0]
     input.value = ''
-    if (file) void read(file)
+    if (file) void choose(file)
   }
 
   function addRow() { rows = [...rows, { id: nextId++, include: true, suspect: false, name: '', quantity: 1, price: null }] }
   function removeRow(row: Row) { rows = rows.filter(entry => entry.id !== row.id) }
-  function restart() { controller?.abort(); controller = null; setPreview(null); rows = []; rawText = ''; receiptTotal = null; receiptService = null; error = ''; step = 'pick' }
+  function restart() { controller?.abort(); controller = null; setPreview(null); photo = null; rows = []; rawText = ''; receiptTotal = null; receiptService = null; error = ''; step = 'pick' }
+  /** Back to the frame on the same photo, to read another part or the same part framed better. */
+  function reframe() { controller?.abort(); controller = null; error = ''; step = 'area' }
 
   async function submit() {
     if (step !== 'review' || !ready || app.busy) return
@@ -97,7 +176,7 @@
 
 <Modal labelledby="scan-title" onclose={() => app.scanOpen = false} onsubmit={() => void submit()}>
   <div class="eyebrow">Скан чека</div>
-  <h2 id="scan-title">{step === 'review' ? 'Проверьте позиции' : 'Сфотографируйте чек'}</h2>
+  <h2 id="scan-title">{step === 'review' ? 'Проверьте позиции' : step === 'area' ? 'Выделите позиции' : 'Сфотографируйте чек'}</h2>
 
   {#if step === 'pick'}
     <p class="lead">Снимите чек целиком, вместе с ценами.</p>
@@ -107,13 +186,40 @@
       <button type="button" class="soft-button wide" onclick={() => gallery.click()}>Выбрать из галереи</button>
     </div>
     <div class="privacy-note">🔒 Фото остаётся на телефоне</div>
+  {:else if step === 'area'}
+    <p class="lead">Потяните углы рамки так, чтобы в ней остался <b>только список блюд и итог</b>. Название заведения, дату и всё, что ниже итога, оставьте снаружи.</p>
+    {#if error}<div class="form-error" role="alert">{error}</div>{/if}
+    <!-- Sized to the photo's proportions and the screen's height, so the whole receipt fits and the corners stay reachable. -->
+    <div class="scan-area" bind:this={frame} bind:clientWidth={frameWidth} style:width="min(100%, calc(60vh * {size.width / size.height}))" style:aspect-ratio="{size.width} / {size.height}">
+      <img src={preview} alt="Фото чека" draggable="false" />
+      <svg viewBox="0 0 {size.width} {size.height}" preserveAspectRatio="none" aria-hidden="true">
+        <path class="scan-area-shade" fill-rule="evenodd" d="M0 0H{size.width}V{size.height}H0Z M{shape.replaceAll(' ', 'L')}Z" />
+        <polygon class="scan-area-edge" points={shape} />
+      </svg>
+      {#each area as corner, i (i)}
+        <button type="button" class="scan-corner" class:active={dragging === i} style:left="{corner.x / size.width * 100}%" style:top="{corner.y / size.height * 100}%"
+          aria-label={`${cornerNames[i]} рамки, двигайте стрелками`} onpointerdown={event => grab(event, i)} onpointermove={event => drag(event, i)}
+          onpointerup={release} onpointercancel={release} onkeydown={event => nudge(event, i)}></button>
+      {/each}
+      {#if dragging !== null}
+        {@const corner = area[dragging]}
+        {@const x = corner.x / size.width * frameWidth}
+        {@const y = corner.y / size.width * frameWidth}
+        <!-- The finger hides the corner, so the loupe shows it magnified above, or below near the top edge. -->
+        <div class="scan-loupe" aria-hidden="true" style:left="{x}px" style:top="{y < loupe + 40 ? y + 70 : y - 70}px"
+          style:background-image="url({preview})" style:background-size="{frameWidth * zoom}px auto"
+          style:background-position="{loupe / 2 - x * zoom}px {loupe / 2 - y * zoom}px"></div>
+      {/if}
+    </div>
+    <button type="button" class="primary-button wide" onclick={() => void read()}>Распознать</button>
+    <button type="button" class="ghost-button" onclick={restart}>Другое фото</button>
   {:else if step === 'reading'}
     <div class="scan-reading" role="status" aria-live="polite">
       {#if preview}<img class="scan-preview" src={preview} alt="Фото чека" />{/if}
       <div class="scan-progress"><i style:width="{Math.round(progress * 100)}%"></i></div>
       <span>{status}… {Math.round(progress * 100)}%</span>
     </div>
-    <button type="button" class="soft-button wide" onclick={restart}>Отменить</button>
+    <button type="button" class="soft-button wide" onclick={reframe}>Отменить</button>
   {:else}
     {#if rows.length}
       <p class="lead">Исправьте ошибки и снимите галочку с лишнего.{#if hasSuspects} Строки без галочки, скорее всего, распознаны с ошибкой.{/if}</p>
@@ -155,6 +261,9 @@
       <details class="scan-raw"><summary>Распознанный текст</summary><pre>{rawText}</pre></details>
     {/if}
     <button class="primary-button wide" disabled={app.busy || !ready}>{app.busy ? 'Добавляем…' : `Добавить ${plural(chosen.length, 'позицию', 'позиции', 'позиций')}`} <span aria-hidden="true">＋</span></button>
-    <button type="button" class="ghost-button" onclick={restart}>Переснять</button>
+    <div class="scan-again">
+      <button type="button" class="ghost-button" onclick={reframe}>Изменить рамку</button>
+      <button type="button" class="ghost-button" onclick={restart}>Переснять</button>
+    </div>
   {/if}
 </Modal>

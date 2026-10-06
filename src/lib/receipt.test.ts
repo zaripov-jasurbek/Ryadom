@@ -630,6 +630,25 @@ TO'LOV UCHUN:\t8 180,00`)
     assert.deepEqual(split.items.map(entry => entry.unitPrice), [52000, 4000])
   })
 
+  it('never takes a code for a price when OCR lost its label', () => {
+    const { items, total } = parseReceipt(`3. Shokoladli kruassan Le Kroshe 100g
+15 990,00
+22294968/01905007001000000
+4780072660550
+o'lov UCHUN\t15 990,00`)
+    assert.deepEqual(items.map(entry => entry.unitPrice), [15990])
+    assert.equal(total, 15990)
+  })
+
+  it('takes the total from the line below a total line without its sum', () => {
+    const { items, total } = parseReceipt(`8. Ichimlik Flavis anor t/i 450ml\t9 990,00
+Напиток Flavis гранат ж/б 450мл
+TO'LOV\tUCHUN:
+O'LoV\t9 990,00`)
+    assert.deepEqual(items.map(entry => entry.unitPrice), [9990])
+    assert.equal(total, 9990)
+  })
+
   it('prefers the reading closest to its total over one with more made-up rows', () => {
     const close = 'Плов\t1\t45 000\nЧай\t1\t5 000\nИтого:\t60 000'
     const noisy = 'Плов\t1\t45 000\nЧай\t1\t5 000\nKorzinka\t1\t1 365\nUN\t1\t136 000\nИтого:\t60 000'
