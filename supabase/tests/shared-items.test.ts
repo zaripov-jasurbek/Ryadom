@@ -61,12 +61,12 @@ describe('split among everyone, with guests arriving later', () => {
     await t.join('Bekzod')
     const bill = await assertSameTotals(t)
     const azizTotal = calculateTotals(bill)[1]
-    assert.equal(azizTotal.due, 3_666)
+    assert.equal(azizTotal.due, 3_667)
     assert.equal(azizTotal.remaining, 0)
-    assert.equal(azizTotal.overpaid, 1_834)
+    assert.equal(azizTotal.overpaid, 1_833)
     const { rows } = await db.query<{ status: string }>('select status::text from public.payments where participant_id = $1', [aziz.id])
     assert.equal(rows[0].status, 'proof_submitted', 'a payment that still covers the total is not reopened')
-    assert.equal(calculateTotals(bill).reduce((sum, person) => sum + person.due, 0), 11_000, 'the table still pays the whole check')
+    assert.equal(calculateTotals(bill).reduce((sum, person) => sum + person.due, 0), 11_002, 'the table still pays the whole check, plus two sums from rounding up')
   })
 
   it('works without a number too, for checks created before it was asked', async () => {
@@ -79,29 +79,36 @@ describe('split among everyone, with guests arriving later', () => {
     assert.deepEqual(calculateTotals(bill).map(person => person.due), [2_000, 2_000, 2_000])
   })
 
-  it('ends the rule when someone marks a serving by hand', async () => {
+  it('lets nobody mark or split the item by hand until the creator ends the rule', async () => {
     const t = await table(db, 3)
     const bread = await t.item('Хлеб', 2, 3_000)
     await t.shareAll(bread)
     const aziz = await t.join('Aziz')
-    const bill = await t.bill()
-    await db.rpc(aziz.user, 'toggle_unit_share', { p_item_unit: bill.items[0].unitIds![0], p_enabled: false })
+    const unit = (await t.bill()).items[0].unitIds![0]
+    await assert.rejects(db.rpc(aziz.user, 'toggle_unit_share', { p_item_unit: unit, p_enabled: false }), /split among everyone/)
+    await assert.rejects(db.rpc(t.owner, 'toggle_unit_share', { p_item_unit: unit, p_enabled: false }), /split among everyone/)
+    await assert.rejects(db.rpc(t.owner, 'set_unit_custom_shares', { p_item_unit: unit, p_allocations: { [aziz.id]: 3_000 } }), /split among everyone/)
+    await assert.rejects(db.rpc(aziz.user, 'unshare_item', { p_check_id: t.check.id, p_item_id: bread }), /Owner access required/)
+    await db.rpc(t.owner, 'unshare_item', { p_check_id: t.check.id, p_item_id: bread })
+    let bill = await assertSameTotals(t)
+    assert.equal(bill.items[0].sharedAll, false)
+    assert.deepEqual(calculateTotals(bill).map(person => person.due), [3_000, 3_000], 'the people already on it keep it, split among them')
+    assert.equal(assignedSubtotal(bill), 6_000, 'no part is left waiting for guests')
+    await db.rpc(aziz.user, 'toggle_unit_share', { p_item_unit: unit, p_enabled: false })
     await t.join('Bekzod')
-    const after = await assertSameTotals(t)
-    assert.equal(after.items[0].sharedAll, false)
-    assert.equal(calculateTotals(after)[2].due, 0, 'a guest after the hand-made change is not added')
-    assert.equal(assignedSubtotal(after), 6_000, 'the parts kept for the guests on the way go back to the people on each serving')
+    bill = await assertSameTotals(t)
+    assert.deepEqual(calculateTotals(bill).map(person => person.due), [4_500, 1_500, 0], 'marks work again, and a later guest is not added')
   })
-  it('ends the rule on a custom split too, and leaves no part of the other servings unassigned', async () => {
-    const t = await table(db, 4)
-    const bread = await t.item('Хлеб', 3, 4_000)
-    await t.shareAll(bread)
-    const aziz = await t.join('Aziz')
-    const bill = await t.bill()
-    await db.rpc(t.owner, 'set_unit_custom_shares', { p_item_unit: bill.items[0].unitIds![0], p_allocations: { [t.people[0].id]: 1_000, [aziz.id]: 3_000 } })
-    const after = await assertSameTotals(t)
-    assert.equal(after.items[0].sharedAll, false)
-    assert.deepEqual(calculateTotals(after).map(person => person.due), [5_000, 7_000])
+
+  it('charges everyone the same, rounded up, instead of handing the leftover sums to the first ones', async () => {
+    const t = await table(db, null)
+    await t.join('Aziz')
+    await t.join('Bekzod')
+    const tea = await t.item('Чай', 1, 10_000)
+    await t.shareAll(tea)
+    const bill = await assertSameTotals(t)
+    assert.deepEqual(calculateTotals(bill).map(person => person.due), [3_334, 3_334, 3_334])
+    assert.equal(assignedSubtotal(bill), 10_002, 'two extra sums for the payer')
   })
 
   it('re-splits when the creator changes the number of guests or the servings', async () => {
@@ -135,7 +142,8 @@ describe('split among everyone, with guests arriving later', () => {
         else {
           const bill = await t.bill(), item = bill.items[random(bill.items.length)], person = t.people[random(t.people.length)]
           const unit = item.unitIds![random(item.quantity)]
-          await db.rpc(person.user, 'toggle_unit_share', { p_item_unit: unit, p_enabled: random(3) > 0 })
+          if (item.sharedAll) await db.rpc(t.owner, 'unshare_item', { p_check_id: t.check.id, p_item_id: item.id })
+          else await db.rpc(person.user, 'toggle_unit_share', { p_item_unit: unit, p_enabled: random(3) > 0 })
         }
         await assertSameTotals(t)
       }

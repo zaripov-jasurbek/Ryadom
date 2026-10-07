@@ -22,7 +22,7 @@
   // A single serving is one line: name, who has it and the button, so a long receipt stays short to scroll.
   let expanded = $state(false)
   const stepper = $derived(item.quantity > 1)
-  const showUnits = $derived(stepper && (expanded || app.editingUnit.startsWith(`${item.id}:`)))
+  const showUnits = $derived(stepper && !sharedAll && (expanded || app.editingUnit.startsWith(`${item.id}:`)))
   const isCustom = (unit: number) => item.unitModes?.[String(unit)] === 'custom'
   const me = $derived(app.selectedPerson)
   const myUnits = $derived(me ? units.filter(unit => consumers(unit).some(person => person.id === me)) : [])
@@ -117,17 +117,18 @@
           <div class="menu-popover" role="menu">
             <button role="menuitem" onclick={() => fromMenu(() => app.editingItem = item)}>✎ Изменить</button>
             {#if canShareAll}<button role="menuitem" disabled={app.busy} onclick={() => fromMenu(() => void shareWithEveryone())}>÷ Поровну на всех · {parts}</button>{/if}
-            {#if !stepper}<button role="menuitem" onclick={() => fromMenu(() => toggleEditor('0'))}>⚖ Доли вручную</button>{/if}
+            {#if sharedAll}<button role="menuitem" disabled={app.busy} onclick={() => fromMenu(() => void app.unshareItem(item))}>✕ Убрать «на всех»</button>
+            {:else if !stepper}<button role="menuitem" onclick={() => fromMenu(() => toggleEditor('0'))}>⚖ Доли вручную</button>{/if}
             <button role="menuitem" class="danger" onclick={() => fromMenu(() => void remove())}>🗑 Удалить</button>
           </div>
         {/if}
       </div>
     {/if}
   </div>
-  {#if !stepper && app.editingUnit === `${item.id}:0`}<CustomShareEditor {item} unit={0} />{/if}
+  {#if !stepper && !sharedAll && app.editingUnit === `${item.id}:0`}<CustomShareEditor {item} unit={0} />{/if}
+  <!-- Split among everyone: nothing to mark or split by hand until the creator ends it in the menu. -->
   {#if stepper && sharedAll}
     <div class="portion-summary">{@render everyoneNote()}</div>
-    {#if app.isOwner}<button type="button" class="ghost-button units-toggle" aria-expanded={showUnits} onclick={toggleUnits}>{showUnits ? 'Свернуть порции ▴' : 'По порциям ▾'}</button>{/if}
   {:else if stepper}
     <div class="portion-summary">
       <div class="unit-consumers">

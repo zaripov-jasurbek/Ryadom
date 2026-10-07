@@ -75,6 +75,7 @@ export const updateRemoteItem = (checkId: string, itemId: string, name: string, 
 export const updateRemoteCheck = (checkId: string, title: string, servicePercent: number, paymentDetails: string, expectedGuests?: number | null) =>
   call('update_check', { p_check_id: checkId, p_title: title, p_service_percent: servicePercent, p_payment_details: paymentDetails, p_expected_guests: expectedGuests === undefined ? null : expectedGuests ?? 0 })
 export const shareRemoteItemEqually = (checkId: string, itemId: string) => call('share_item_equally', { p_check_id: checkId, p_item_id: itemId })
+export const unshareRemoteItem = (checkId: string, itemId: string) => call('unshare_item', { p_check_id: checkId, p_item_id: itemId })
 export const unconfirmRemotePayment = (checkId: string, participantId: string) => call('unconfirm_payment', { p_check_id: checkId, p_participant_id: participantId })
 export const deleteRemoteItem = (checkId: string, itemId: string) => call('delete_item', { p_check_id: checkId, p_item_id: itemId })
 export const toggleRemoteUnit = (unitId: string, enabled: boolean) => call('toggle_unit_share', { p_item_unit: unitId, p_enabled: enabled })

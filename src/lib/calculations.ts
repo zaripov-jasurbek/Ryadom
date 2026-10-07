@@ -91,8 +91,7 @@ export function withSelection(item: BillItem, unit: number, personId: string, en
   const unitAmounts = { ...item.unitAmounts }
   delete unitAmounts[key]
   const next = enabled ? (current.includes(personId) ? current : [...current, personId]) : current.filter(id => id !== personId)
-  // A mark by hand ends "split among everyone", as toggle_unit_share does on the server.
-  return { ...item, sharedAll: false, unitAmounts, unitSelections: { ...item.unitSelections, [key]: next } }
+  return { ...item, unitAmounts, unitSelections: { ...item.unitSelections, [key]: next } }
 }
 
 export function isUnitAssigned(item: BillItem, unit: number): boolean {

@@ -16,6 +16,7 @@ export interface Database {
       update_item: { Args: { p_check_id: string; p_item_id: string; p_name: string; p_quantity: number; p_unit_price: number }; Returns: undefined }
       update_check: { Args: { p_check_id: string; p_title: string; p_service_percent: number; p_payment_details: string; p_expected_guests?: number | null }; Returns: undefined }
       share_item_equally: { Args: { p_check_id: string; p_item_id: string }; Returns: undefined }
+      unshare_item: { Args: { p_check_id: string; p_item_id: string }; Returns: undefined }
       unconfirm_payment: { Args: { p_check_id: string; p_participant_id: string }; Returns: undefined }
       delete_item: { Args: { p_check_id: string; p_item_id: string }; Returns: undefined }
       toggle_unit_share: { Args: { p_item_unit: string; p_enabled: boolean }; Returns: undefined }

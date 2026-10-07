@@ -5,6 +5,7 @@ const messages: [RegExp, string][] = [
   [/Invalid owner link/, 'Эта ссылка больше не работает'],
   [/Participant access required|Join the check first/, 'Сначала присоединитесь к чеку'],
   [/custom split/, 'Создатель распределил эту порцию вручную'],
+  [/split among everyone/, 'Создатель разделил эту позицию на всех'],
   [/Shares must equal/, 'Доли должны в сумме дать цену порции'],
   [/Invalid (participant )?allocations?/, 'Доли распределены неверно — проверьте суммы'],
   [/No submitted proof/, 'Участник ещё не отметил оплату'],
