@@ -1,23 +1,21 @@
-import { assignedSubtotal, calculateTotals, ownerIdOf, serviceFee, withSelection, type Bill, type BillItem, type CommentMessage, type Participant } from './calculations'
+import { assignedSubtotal, calculateTotals, ownerIdOf, serviceFee, withSelection, type Bill, type BillItem, type Participant } from './calculations'
 import { errorMessage } from './errors'
-import { addRemoteComment, addRemoteItem, addRemoteItems, updateRemoteCheck, updateRemoteItem, shareRemoteItemEqually, unshareRemoteItem, claimRemoteCheckOwner, confirmRemotePayment, createRemoteCheck, deleteRemoteCheck, deleteRemoteComment, deleteRemoteItem, ensureAnonymousSession, isRemoteCheckGone, joinRemoteCheck, loadRemoteCheck, previewRemoteCheck, removeRemoteParticipant, resetRemoteCustomShares, setRemoteCustomShares, submitRemotePayment, subscribeToRemoteCheck, toggleRemoteUnit, unconfirmRemotePayment, type PresenceUser, type RemoteBill, type RemoteSubscription } from './remote'
+import { addRemoteItem, addRemoteItems, updateRemoteCheck, updateRemoteItem, shareRemoteItemEqually, unshareRemoteItem, claimRemoteCheckOwner, confirmRemotePayment, createRemoteCheck, deleteRemoteCheck, deleteRemoteItem, ensureAnonymousSession, isRemoteCheckGone, joinRemoteCheck, loadRemoteCheck, removeRemoteParticipant, renameRemoteParticipant, submitRemotePayment, subscribeToRemoteCheck, toggleRemoteUnit, unconfirmRemotePayment, type PresenceUser, type RemoteBill, type RemoteSubscription } from './remote'
 import { checkPath, homePath, readOwnerToken, routeCheckId } from './routes'
 import { preloadSupabase } from './supabase'
 import { expiresAt } from './limits'
+import { defaultTitle, randomName } from './format'
 import { shareOr } from './share'
 
 export type Mode = 'home' | 'create' | 'join' | 'check'
+/** A line of the check being made: what was typed or scanned, checked only when the check is created. */
+export type DraftRow = { id: number; name: string; quantity: number | null; price: number | null }
 export type ConfirmRequest = { title: string; body?: string; action: string; danger?: boolean; resolve: (answer: boolean) => void }
 const billsKey = 'billsplit:v1'
 const personKey = (billId: string) => `billsplit:person:${billId}`
 /** A guest's join token: this browser gets its participant back after losing its Supabase session. */
 const guestKey = (billId: string) => `billsplit:guest:${billId}`
 const nameKey = 'billsplit:name'
-/** When this browser last looked at a check's chat, for the unread badge on the tab. */
-const seenKey = (billId: string) => `billsplit:seen:${billId}`
-
-/** The check page's bottom menu: items, payment, chat; its fourth button invites people. */
-export type CheckTab = 'order' | 'pay' | 'chat'
 
 function parseBills(raw: string | null): Bill[] | null {
   if (raw === null) return null
@@ -47,16 +45,18 @@ class AppStore {
   /** False while the device has no network: taps would fail, so the page says so up front. */
   online = $state(typeof navigator === 'undefined' || navigator.onLine)
   toast = $state('')
-  activeTab = $state<CheckTab>('order')
-  /** Time of the newest comment seen in the chat tab; later ones from other people count as unread. */
-  commentsSeen = $state('')
   pendingUnits = $state<Record<string, true>>({})
   // Overlays live here so Escape can close whichever one is open.
   addItemOpen = $state(false)
   scanOpen = $state(false)
+  /** A photo already chosen for the scanner, so it starts at the frame instead of asking for one. */
+  scanFile = $state<File | null>(null)
+  /** The check being made on the create page, before it exists on the server. */
+  draft = $state<DraftRow[]>([])
+  /** What the scanned receipt says the dishes add up to, to compare with the table. */
+  draftTotal = $state<number | null>(null)
+  draftService = $state<number | null>(null)
   qrOpen = $state(false)
-  paymentFor = $state<string | null>(null)
-  editingUnit = $state('')
   editingItem = $state<BillItem | null>(null)
   checkEditOpen = $state(false)
   /** The sheet with everyone at the table, opened from the avatars under the check's name. */
@@ -65,7 +65,6 @@ class AppStore {
   payDetailsOpen = $state(false)
   /** The open confirmation sheet; it replaces window.confirm, which looks foreign on phones. */
   confirmRequest = $state<ConfirmRequest | null>(null)
-  itemFilter = $state<'all' | 'mine' | 'open'>('all')
   /** The name typed last time, so the next check does not ask for it again. */
   savedName = $state(readStorage(nameKey) ?? '')
 
@@ -74,12 +73,9 @@ class AppStore {
   unassignedTotal = $derived(this.bill ? totalFood(this.bill) - assignedSubtotal(this.bill) : 0)
   /** The creator paid the restaurant, so their own share counts as settled. */
   ownerId = $derived(this.bill ? ownerIdOf(this.bill) : undefined)
-  paidAll = $derived(this.totals.reduce((sum, person) => sum + (person.id === this.ownerId ? person.due : person.paid), 0))
   allConfirmed = $derived(Boolean(this.bill && this.unassignedTotal <= 0 && this.bill.items.length && this.totals.every(person => person.id === this.ownerId || person.status === 'paid' || person.due === 0)))
   currentParticipant = $derived(this.bill?.participants.find(person => person.id === this.selectedPerson))
   currentTotal = $derived(this.totals.find(person => person.id === this.selectedPerson))
-  // Server timestamps share one ISO format, so they compare as strings.
-  unreadComments = $derived((this.bill?.comments ?? []).filter(comment => comment.participantId !== this.selectedPerson && comment.createdAt > this.commentsSeen).length)
   participantIndex = $derived(new Map(this.bill?.participants.map((person, index) => [person.id, index]) ?? []))
 
   private remote: RemoteSubscription | null = null
@@ -145,7 +141,7 @@ class AppStore {
     request?.resolve(answer)
   }
 
-  closeOverlays() { this.answerConfirm(false); this.addItemOpen = false; this.scanOpen = false; this.qrOpen = false; this.paymentFor = null; this.editingUnit = ''; this.editingItem = null; this.checkEditOpen = false; this.peopleOpen = false; this.payDetailsOpen = false }
+  closeOverlays() { this.answerConfirm(false); this.addItemOpen = false; this.scanOpen = false; this.scanFile = null; this.qrOpen = false; this.editingItem = null; this.checkEditOpen = false; this.peopleOpen = false; this.payDetailsOpen = false }
 
   private rememberName(name: string) { this.savedName = name; writeStorage(nameKey, name) }
 
@@ -167,14 +163,16 @@ class AppStore {
   }
 
   private show(bill: Bill, owner: boolean) {
-    this.bill = bill; this.isOwner = owner; this.mode = 'check'; this.activeTab = 'order'; this.itemFilter = 'all'
+    this.bill = bill; this.isOwner = owner; this.mode = 'check'
     this.selectedPerson = readStorage(personKey(bill.id))
-    this.commentsSeen = readStorage(seenKey(bill.id)) ?? ''
     void this.connect(bill)
   }
 
   goHome() { this.disconnect(); this.closeOverlays(); this.mode = 'home'; history.pushState({}, '', homePath()) }
-  beginCreate() { this.mode = 'create'; preloadSupabase() }
+  beginCreate() {
+    this.mode = 'create'; this.draft = [this.newDraftRow()]; this.draftTotal = null; this.draftService = null
+    preloadSupabase()
+  }
 
   openCheck(id: string) {
     const found = this.bills.find(entry => entry.id === id)
@@ -206,14 +204,7 @@ class AppStore {
   /** Removes a check from this device's list only; it stays available to everyone else by its link. */
   forgetBill(id: string) {
     this.updateBills(bills => bills.filter(entry => entry.id !== id))
-    writeStorage(personKey(id), null); writeStorage(guestKey(id), null); writeStorage(seenKey(id), null)
-  }
-
-  /** Marks the chat as read up to its newest comment. */
-  markCommentsSeen() {
-    const bill = this.bill, last = bill?.comments?.at(-1)?.createdAt
-    if (!bill || !last || last === this.commentsSeen) return
-    this.commentsSeen = last; writeStorage(seenKey(bill.id), last)
+    writeStorage(personKey(id), null); writeStorage(guestKey(id), null)
   }
 
   // ---- realtime ----
@@ -283,40 +274,59 @@ class AppStore {
 
   // ---- create and join ----
 
-  async createBill(title: string, ownerName: string, servicePercent: number, paymentDetails: string, expectedGuests: number | null = null) {
+  /** The check typed or scanned on the create page, with nothing asked besides; then the invitation opens. */
+  async createBill(servicePercent: number, items: { name: string; quantity: number; unitPrice: number }[]) {
     const ownerToken = crypto.randomUUID()
+    // A name typed in an earlier check, or letters nobody has to make up; the title is the meal and the date.
+    const ownerName = this.savedName || randomName(), title = defaultTitle()
     let bill: Bill
-    this.rememberName(ownerName)
     this.busy = true
     try {
-      const created = await createRemoteCheck(title, servicePercent, ownerName, ownerToken, paymentDetails, expectedGuests)
-      bill = { id: created.public_id, dbId: created.id, title, servicePercent, paymentDetails: paymentDetails || undefined, expectedGuests: expectedGuests ?? undefined, ownerId: created.participant_id, participants: [{ id: created.participant_id, name: ownerName, paid: 0, status: 'unpaid' }], items: [], createdAt: new Date().toISOString(), ownerToken }
+      const created = await createRemoteCheck(title, servicePercent, ownerName, ownerToken, '', null)
+      bill = { id: created.public_id, dbId: created.id, title, servicePercent, ownerId: created.participant_id, participants: [{ id: created.participant_id, name: ownerName, paid: 0, status: 'unpaid' }], items: [], createdAt: new Date().toISOString(), ownerToken }
     } catch (error) { this.fail(error, 'Не удалось создать чек'); return } finally { this.busy = false }
-    this.bill = bill; this.isOwner = true; this.token = ownerToken; this.mode = 'check'; this.activeTab = 'order'; this.commentsSeen = ''
+    this.bill = bill; this.isOwner = true; this.token = ownerToken; this.mode = 'check'
     this.selectedPerson = bill.participants[0].id; writeStorage(personKey(bill.id), this.selectedPerson)
     history.pushState({}, '', checkPath(bill.id))
     this.save()
+    this.draft = []; this.draftTotal = null; this.draftService = null
     await this.connect(bill)
+    await this.addItems(items)
+    this.qrOpen = true
   }
 
-  /** What the invitation shows before joining: null when the check is gone, undefined when it could not be loaded. */
-  async previewJoin() {
-    try { return await previewRemoteCheck(this.joinPublicId) }
-    catch (error) { console.warn('Check preview failed', error); return undefined }
+  // ---- the check being made ----
+
+  private draftSeq = 0
+  newDraftRow = (): DraftRow => ({ id: this.draftSeq++, name: '', quantity: 1, price: null })
+
+  /** Opens the scanner on a photo; on the create page its rows land in the draft. */
+  scanPhoto(file: File) { this.scanFile = file; this.scanOpen = true }
+
+  /** Scanned rows replace the empty ones; what was typed by hand stays. */
+  fillDraft(items: { name: string; quantity: number; unitPrice: number }[], total: number | null, servicePercent: number | null) {
+    const typed = this.draft.filter(row => row.name.trim() || row.price)
+    this.draft = [...typed, ...items.map(item => ({ id: this.draftSeq++, name: item.name, quantity: item.quantity, price: item.unitPrice })), this.newDraftRow()]
+    this.draftTotal = total
+    if (servicePercent !== null && servicePercent <= 30) this.draftService = servicePercent
   }
 
-  /** Returns an error message for the form, or '' on success. */
-  async joinSharedCheck(name: string) {
+  /**
+   * Opening the link is joining: nobody is asked for a name. A name typed in an earlier check is used,
+   * otherwise three random letters, which the guest may change later in the summary.
+   * Returns an error message for the page, or '' on success.
+   */
+  async joinSharedCheck() {
     if (!this.joinPublicId) return ''
+    const name = this.savedName || randomName()
     this.busy = true
-    this.rememberName(name)
     try {
       let sessionToken: string = crypto.randomUUID()
       if (this.token) await claimRemoteCheckOwner(this.joinPublicId, this.token)
       else { sessionToken = readStorage(guestKey(this.joinPublicId)) ?? sessionToken; writeStorage(guestKey(this.joinPublicId), sessionToken) }
       await joinRemoteCheck(this.joinPublicId, name, sessionToken)
       const loaded = await loadRemoteCheck(this.joinPublicId)
-      this.applyRemote(loaded); this.mode = 'check'; this.activeTab = 'order'; this.commentsSeen = readStorage(seenKey(loaded.id)) ?? ''
+      this.applyRemote(loaded); this.mode = 'check'
       history.replaceState({}, '', checkPath(loaded.id))
       await this.connect(loaded)
       return ''
@@ -412,29 +422,20 @@ class AppStore {
     await this.refresh()
   }
 
-  saveCustomShares(item: BillItem, unit: number, amounts: Record<string, number>) {
-    return this.mutate('Не удалось сохранить доли', () => setRemoteCustomShares(item.unitIds?.[unit] ?? '', amounts))
-  }
-
-  resetCustomShares(item: BillItem, unit: number) {
-    return this.mutate('Не удалось сбросить доли', () => resetRemoteCustomShares(item.unitIds?.[unit] ?? ''))
-  }
-
   submitPayment(amount: number) {
     return this.mutate('Не удалось отправить оплату', dbId => submitRemotePayment(dbId, amount), 'Оплата отправлена')
   }
 
+  /** Your own name in the check; it is kept for the next checks too. */
+  async rename(name: string) {
+    if (!await this.mutate('Не удалось сменить имя', dbId => renameRemoteParticipant(dbId, name))) return false
+    this.rememberName(name)
+    this.remote?.setPresence(this.presence('Просматривает чек'))
+    return true
+  }
+
   approve(personId: string) {
     return this.mutate('Не удалось подтвердить оплату', dbId => confirmRemotePayment(dbId, personId), 'Оплата подтверждена')
-  }
-
-  addComment(body: string) {
-    if (!this.selectedPerson) return Promise.resolve(false)
-    return this.mutate('Не удалось отправить комментарий', dbId => addRemoteComment(dbId, null, body))
-  }
-
-  deleteComment(comment: CommentMessage) {
-    return this.mutate('Не удалось удалить комментарий', () => deleteRemoteComment(comment.id))
   }
 
   async removeParticipant(person: Participant) {
@@ -449,7 +450,7 @@ class AppStore {
     this.forget('Чек удалён')
   }
 
-  /** The invitation for the chat: a phone opens its share sheet, a computer copies the link. */
+  /** The invitation for a messenger: a phone opens its share sheet, a computer copies the link. */
   invite() {
     const bill = this.bill
     if (!bill) return

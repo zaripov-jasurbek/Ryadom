@@ -33,11 +33,6 @@ function download(blob: Blob, fileName: string) {
   setTimeout(() => URL.revokeObjectURL(link.href), 30_000)
 }
 
-/** On a phone the summary goes to the share sheet (a chat, Notes); on a computer it downloads as a .txt file. */
-export function saveText(title: string, text: string) {
-  void shareOr({ title, text }, () => download(new Blob([text], { type: 'text/plain;charset=utf-8' }), `${safeFileName(title)}.txt`))
-}
-
 /**
  * The PNG is built synchronously: Safari opens the share sheet only right after the tap,
  * and waiting for canvas.toBlob() can use that moment up.

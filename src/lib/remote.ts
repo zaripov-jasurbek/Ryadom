@@ -79,21 +79,11 @@ export const unshareRemoteItem = (checkId: string, itemId: string) => call('unsh
 export const unconfirmRemotePayment = (checkId: string, participantId: string) => call('unconfirm_payment', { p_check_id: checkId, p_participant_id: participantId })
 export const deleteRemoteItem = (checkId: string, itemId: string) => call('delete_item', { p_check_id: checkId, p_item_id: itemId })
 export const toggleRemoteUnit = (unitId: string, enabled: boolean) => call('toggle_unit_share', { p_item_unit: unitId, p_enabled: enabled })
-export const addRemoteComment = (checkId: string, itemId: string | null, body: string) => call('add_comment', { p_check_id: checkId, p_item_id: itemId, p_body: body })
-export const deleteRemoteComment = (commentId: string) => call('delete_comment', { p_comment_id: commentId })
 export const removeRemoteParticipant = (checkId: string, participantId: string) => call('remove_participant', { p_check_id: checkId, p_participant_id: participantId })
-export const setRemoteCustomShares = (unitId: string, allocations: Record<string, number>) => call('set_unit_custom_shares', { p_item_unit: unitId, p_allocations: allocations })
-export const resetRemoteCustomShares = (unitId: string) => call('reset_unit_custom_shares', { p_item_unit: unitId })
 export const submitRemotePayment = (checkId: string, amount: number) => call('submit_payment', { p_check_id: checkId, p_amount: amount })
 export const confirmRemotePayment = (checkId: string, participantId: string) => call('confirm_payment', { p_check_id: checkId, p_participant_id: participantId })
 export const deleteRemoteCheck = (checkId: string) => call('delete_check', { p_check_id: checkId })
-
-/** Title, names and total for the invitation page; null when the check is gone or expired. */
-export type CheckPreview = { title: string; servicePercent: number; participants: string[]; items: number; foodTotal: number }
-export async function previewRemoteCheck(publicId: string): Promise<CheckPreview | null> {
-  const row = await call('check_preview', { p_public_id: publicId }) as { title: string; service_percent: number; participants: string[]; items: number; food_total: number } | null
-  return row && { title: row.title, servicePercent: Number(row.service_percent), participants: row.participants, items: Number(row.items), foodTotal: Number(row.food_total) }
-}
+export const renameRemoteParticipant = (checkId: string, name: string) => call('rename_participant', { p_check_id: checkId, p_name: name })
 
 /** True when the check is gone or the current user is no longer one of its participants. */
 export function isRemoteCheckGone(error: unknown) {

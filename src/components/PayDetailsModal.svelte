@@ -3,7 +3,7 @@
   import { app } from '../lib/store.svelte'
   import Modal from './Modal.svelte'
 
-  // Only the card: opened from the payment tab, where the rest of the check's settings would be in the way.
+  // Only the card: opened from the floating "Добавить карту" button, without the rest of the check's settings.
   const bill = app.bill!
   let details = $state(bill.paymentDetails ?? '')
 

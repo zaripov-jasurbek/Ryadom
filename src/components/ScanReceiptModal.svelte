@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy } from 'svelte'
+  import { onDestroy, onMount } from 'svelte'
   import { formatUzs } from '../lib/calculations'
   import { recognizeReceipt, stopReceiptEngine, suggestArea, type Area } from '../lib/ocr'
   import { bestReading, scanLimits, settled } from '../lib/receipt'
@@ -130,6 +130,16 @@
       const readings = await recognizeReceipt(file, $state.snapshot(area) as Area, (stage, value) => { if (controller === current) { status = stage; progress = value } }, current.signal, settled)
       if (controller !== current) return
       const { text, result } = bestReading(readings)
+      // On the create page the rows go straight into its table, which is where they are checked.
+      // Rows the total adds up without are most likely misread, so they are left out there.
+      if (app.mode === 'create') {
+        const found = result.items.filter(entry => !entry.unsure)
+        app.fillDraft(found, result.total, result.servicePercent)
+        app.notify(found.length ? `Распознано ${plural(found.length, 'позиция', 'позиции', 'позиций')} — сверьте с чеком` : 'Позиции не найдены — впишите их в таблицу')
+        found.length ? haptic.success() : haptic.error()
+        close()
+        return
+      }
       rawText = text; receiptTotal = result.total; receiptService = result.servicePercent
       rows = result.items.map(entry => ({ id: nextId++, include: !entry.unsure, suspect: Boolean(entry.unsure), name: entry.name, quantity: entry.quantity, price: entry.unitPrice }))
       photoZoomed = false
@@ -161,20 +171,27 @@
     if (step !== 'review' || !ready || app.busy) return
     const items = chosen.map(row => ({ name: row.name.trim(), quantity: row.quantity!, unitPrice: row.price! }))
     const added = await app.addItems(items)
-    if (added === items.length) { haptic.success(); app.notify(`Добавлено ${plural(added, 'позиция', 'позиции', 'позиций')}`); app.scanOpen = false; return }
+    if (added === items.length) { haptic.success(); app.notify(`Добавлено ${plural(added, 'позиция', 'позиции', 'позиций')}`); close(); return }
     // Keep what was not added so the owner can retry without scanning again.
     const addedIds = new Set(chosen.slice(0, added).map(row => row.id))
     rows = rows.filter(row => !addedIds.has(row.id))
   }
 
+  // Opened with a photo already chosen (the create page asks for it first): start at the frame.
+  onMount(() => {
+    const file = app.scanFile
+    app.scanFile = null
+    if (file) void choose(file)
+  })
   onDestroy(() => { controller?.abort(); stopReceiptEngine(); setPreview(null) })
+  function close() { app.scanOpen = false; app.scanFile = null }
 </script>
 
 <!-- Outside the dialog, so its focus trap never lands on them. -->
 <input class="visually-hidden" type="file" accept="image/*" capture="environment" tabindex="-1" aria-hidden="true" bind:this={camera} onchange={picked} />
 <input class="visually-hidden" type="file" accept="image/*" tabindex="-1" aria-hidden="true" bind:this={gallery} onchange={picked} />
 
-<Modal labelledby="scan-title" onclose={() => app.scanOpen = false} onsubmit={() => void submit()}>
+<Modal labelledby="scan-title" onclose={close} onsubmit={() => void submit()}>
   <div class="eyebrow">Скан чека</div>
   <h2 id="scan-title">{step === 'review' ? 'Проверьте позиции' : step === 'area' ? 'Выделите позиции' : 'Сфотографируйте чек'}</h2>
 

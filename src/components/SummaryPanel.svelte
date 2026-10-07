@@ -1,136 +1,80 @@
 <script lang="ts">
-  import { flushSync } from 'svelte'
-  import { formatUzs, personItems, type ParticipantTotal } from '../lib/calculations'
-  import { saveImage, saveText, summaryText } from '../lib/export'
-  import { expiryDate, initial, plural, statusLabels } from '../lib/format'
-  import { expiresAt } from '../lib/limits'
+  import { formatUzs, type ParticipantTotal } from '../lib/calculations'
+  import { initial } from '../lib/format'
+  import { limits } from '../lib/limits'
   import { app } from '../lib/store.svelte'
-  import PaymentDetails from './PaymentDetails.svelte'
-  import Amount from './Amount.svelte'
-  import { haptic } from '../lib/haptics'
 
-  const bill = $derived(app.bill!)
-  const percent = (part: number, whole: number) => whole ? Math.min(100, part / whole * 100) : 0
-  const paidPercent = $derived(percent(app.paidAll, app.billTotal))
-  const ownerName = $derived(app.ownerId ? app.personName(app.ownerId) : '')
-  const text = () => summaryText(bill, app.billTotal, app.totals, app.ownerId)
-  // What this person came to the summary for: their own amount and how to pay it, before everyone else's.
-  const mine = $derived(app.isOwner ? undefined : app.currentTotal)
-  const myNote = $derived.by(() => {
-    if (!mine) return ''
-    if (!mine.due) return 'Отметьте свои блюда в «Позициях».'
-    if (mine.overpaid) return `Вы переплатили ${formatUzs(mine.overpaid)}.`
-    if (mine.status === 'paid') return 'Оплата подтверждена.'
-    if (mine.status === 'proof_submitted') return `Ждём подтверждения${ownerName ? ` от ${ownerName}` : ''}.`
-    if (mine.paid > 0) return `Отдали ${formatUzs(mine.paid)} · осталось ${formatUzs(mine.remaining)}.`
-    return `Переведите${ownerName ? ` ${ownerName}` : ' создателю'} или отдайте наличными.`
-  })
-  const others = $derived(app.totals.filter(person => person.id !== app.ownerId))
-  const owed = $derived(others.reduce((sum, person) => sum + person.remaining, 0))
-  const toConfirm = $derived(others.filter(person => person.status === 'proof_submitted').length)
   // You first, then the rest in the order they joined.
   const people = $derived([...app.totals].sort((a, b) => Number(b.id === app.selectedPerson) - Number(a.id === app.selectedPerson)))
-  // The PDF is the printed page, so every breakdown opens for it.
-  let printing = $state(false)
 
-  async function unconfirm(person: ParticipantTotal) {
-    if (await app.confirm({ title: `Отменить подтверждение у ${person.name}?`, body: 'Оплата вернётся на проверку.', action: 'Отменить подтверждение' })) void app.unconfirm(person.id)
+  // The amount a guest says they sent is the payment itself: the whole part by default, or whatever they type.
+  const mine = $derived(app.isOwner ? undefined : app.currentTotal)
+  let typed = $state<number | null>(null)
+  const amount = $derived(Math.max(0, Math.floor(typed ?? (mine?.paid || mine?.due || 0))))
+  const unchanged = $derived(Boolean(mine && mine.status !== 'unpaid' && amount === mine.paid))
+  async function pay(event: SubmitEvent) {
+    event.preventDefault()
+    if (!mine || app.busy || unchanged) return
+    if (await app.submitPayment(amount)) typed = null
+  }
+
+  // A name typed here replaces the random letters for everyone at the table and is kept for the next checks.
+  async function rename(input: HTMLInputElement, current: string) {
+    const name = input.value.trim()
+    if (!name || name === current) { input.value = name === current ? name : ''; return }
+    if (!await app.rename(name)) input.value = ''
+  }
+
+  // Telegram-like marks: ✓ the guest says they paid, ✓✓ the creator confirmed it.
+  const mark = (person: ParticipantTotal) => person.status === 'paid' ? '✓✓' : person.status === 'proof_submitted' || person.status === 'partially_paid' ? '✓' : ''
+  async function review(person: ParticipantTotal) {
+    if (person.status === 'proof_submitted') void app.approve(person.id)
+    else if (person.status === 'paid' && await app.confirm({ title: `Снять подтверждение у ${person.name}?`, action: 'Снять' })) void app.unconfirm(person.id)
   }
 </script>
 
-<svelte:window onbeforeprint={() => flushSync(() => printing = true)} onafterprint={() => printing = false} />
+{#snippet row(person: ParticipantTotal)}
+  {@const payer = person.id === app.ownerId}
+  <span class="person-avatar tone-{app.personIndex(person.id) % 5}">{initial(person.name)}</span>
+  <span class="summary-person-name">
+    {#if app.selectedPerson === person.id}
+      <!-- Your own line: the name others see, typed over in place. -->
+      {@const named = Boolean(app.savedName) && person.name === app.savedName}
+      <span class="name-row">
+        <input class="name-input" value={named ? person.name : ''} placeholder={person.name} maxlength={limits.nameLength} autocomplete="given-name" enterkeyhint="done" aria-label="Ваше имя для остальных"
+          onchange={(e) => rename(e.currentTarget, person.name)} onkeydown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }} />
+      </span>
+    {:else}
+      <b>{person.name}</b>
+    {/if}
+    {#if payer}<small>платил по счёту</small>
+    {:else if person.status === 'partially_paid'}<small>перевёл {formatUzs(person.paid)} из {formatUzs(person.due)}</small>
+    {:else if person.overpaid}<small>переплатил {formatUzs(person.overpaid)}</small>{/if}
+  </span>
+  <span class="summary-person-total">
+    <b>{formatUzs(person.due)}</b>
+    {#if !payer && mark(person)}<span class="pay-mark" class:double={person.status === 'paid'} class:part={person.status === 'partially_paid'} aria-label={person.status === 'paid' ? 'Оплата подтверждена' : 'Перевёл'}>{mark(person)}</span>{/if}
+  </span>
+  {#if app.isOwner && person.status === 'proof_submitted'}<span class="confirm-hint">Подтвердить</span>{/if}
+{/snippet}
 
-<div class="summary-section" role="tabpanel" id="panel-pay" aria-labelledby="tab-pay">
-  {#if mine}
-    <div class="panel my-pay-card" class:settled={mine.status === 'paid'}>
-      <div class="my-pay-head">
-        <div><span class="eyebrow">Ваша часть</span><b class="my-pay-amount"><Amount value={mine.due} /></b></div>
-        {#if mine.due}<span class="status-badge status-{mine.status}">{statusLabels[mine.status]}</span>{/if}
-      </div>
-      <p class="my-pay-note">{myNote}</p>
-      {#if bill.paymentDetails && mine.remaining > 0}<PaymentDetails details={bill.paymentDetails} owner={ownerName} />{/if}
-      <!-- Almost everyone pays the whole amount at once, so that is one tap; a part payment is the exception. -->
-      {#if mine.due && mine.status !== 'paid' && mine.status !== 'proof_submitted'}
-        <button class="primary-button" disabled={app.busy} onclick={() => void app.submitPayment(mine.due)}>{mine.paid ? 'Остаток отдан' : 'Оплата сделана'} · {formatUzs(mine.remaining)} <span aria-hidden="true">✓</span></button>
-        <button class="ghost-button pay-part" onclick={() => app.paymentFor = mine.id}>{mine.paid ? 'Изменить отданную сумму' : 'Отдали только часть?'}</button>
-      {:else if mine.status === 'proof_submitted'}
-        <button class="ghost-button pay-part" onclick={() => app.paymentFor = mine.id}>Изменить сумму</button>
+<!-- Who owes what, right under the check's total. -->
+<div class="bill-people" aria-label="Кто сколько должен">
+  {#each people as person (person.id)}
+    {@const reviewable = app.isOwner && person.id !== app.ownerId && (person.status === 'proof_submitted' || person.status === 'paid')}
+    <div class="summary-person" class:is-me={app.selectedPerson === person.id}>
+      <!-- The creator confirms a payment by tapping the person, and taps again to take it back. -->
+      {#if reviewable}
+        <button type="button" class="summary-person-main" disabled={app.busy} onclick={() => review(person)}>{@render row(person)}</button>
+      {:else}
+        <div class="summary-person-main">{@render row(person)}</div>
+      {/if}
+      {#if mine && person.id === mine.id && mine.due > 0}
+        <form class="pay-inline" onsubmit={pay}>
+          <span class="suffix-input"><input type="number" min="0" step="1" inputmode="numeric" aria-label="Сколько вы перевели" value={amount} oninput={(e) => typed = e.currentTarget.value === '' ? 0 : Number(e.currentTarget.value)} /><span>сум</span></span>
+          <button class="accent-button" disabled={app.busy || unchanged}>{unchanged ? '✓ Перевёл' : 'Перевёл'}</button>
+        </form>
       {/if}
     </div>
-  {/if}
-
-  <!-- One block for the whole table: how much is paid overall, then each person with their own progress. -->
-  <div class="panel summary-card">
-    <div class="summary-title">
-      <div>
-        <span class="eyebrow">Оплаты</span>
-        <h2>{#if !app.isOwner}Кто сколько должен{:else if owed}Вам должны <Amount value={owed} />{:else}{app.allConfirmed ? '✓ Все рассчитались' : 'Пока никто не должен'}{/if}</h2>
-      </div>
-      <div class="summary-grand"><small>Общий счёт</small><b><Amount value={app.billTotal} /></b></div>
-    </div>
-    <div class="progress-track" role="progressbar" aria-label="Весь стол оплатил" aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(paidPercent)}><i style={`width:${paidPercent}%`}></i></div>
-    <p class="summary-paid">Оплачено {formatUzs(app.paidAll)} из {formatUzs(app.billTotal)}{#if toConfirm}<span class="status-badge status-proof_submitted">{plural(toConfirm, 'ждёт', 'ждут', 'ждут')} проверки</span>{/if}</p>
-
-    {#each people as person (person.id)}
-      {@const lines = personItems(bill, person.id)}
-      {@const payer = person.id === app.ownerId}
-      {@const done = payer ? 100 : percent(person.paid, person.due)}
-      <div class="summary-person" class:is-me={app.selectedPerson === person.id}>
-        <span class="person-avatar tone-{app.personIndex(person.id) % 5}">{initial(person.name)}</span>
-        <div class="summary-person-name">
-          <b>{person.name}{app.selectedPerson === person.id ? ' (вы)' : ''}</b>
-          <small>Блюда {formatUzs(person.subtotal)}{bill.servicePercent ? ` · сервис ${formatUzs(person.service)}` : ''}</small>
-        </div>
-        <div class="summary-person-total">
-          <b>{formatUzs(person.due)}</b>
-          {#if payer}<span class="status-badge status-payer">Платил по счёту</span>
-          {:else}<span class="status-badge status-{person.status}">{statusLabels[person.status]}</span>{/if}
-        </div>
-        {#if person.due > 0}
-          <div class="person-progress">
-            <div class="progress-track slim" class:done={payer || person.status === 'paid'} role="progressbar" aria-label={`${person.name}: оплачено`} aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(done)}><i style={`width:${done}%`}></i></div>
-            <small>{payer ? '' : person.remaining ? `оплачено ${formatUzs(person.paid)} · осталось ${formatUzs(person.remaining)}` : `оплачено ${formatUzs(person.paid)}`}</small>
-            {#if !payer && person.overpaid}<span class="status-badge status-overpaid">переплатил {formatUzs(person.overpaid)}</span>{/if}
-          </div>
-        {/if}
-        {#if lines.length}
-          <details class="person-items" open={printing || (!app.isOwner && app.selectedPerson === person.id)}>
-            <summary>Из чего сумма · {plural(lines.length, 'позиция', 'позиции', 'позиций')}</summary>
-            <ul>
-              {#each lines as line (line.id)}<li><span>{line.name}{line.sharedAll ? ' · на всех' : `${line.units > 1 ? ` × ${line.units}` : ''}${line.shared ? ' · доля' : ''}`}</span><b>{formatUzs(line.amount)}</b></li>{/each}
-              {#if person.service}<li class="service-line"><span>Обслуживание {bill.servicePercent}%</span><b>{formatUzs(person.service)}</b></li>{/if}
-            </ul>
-          </details>
-        {/if}
-        {#if app.isOwner && !payer && person.due > 0 && (person.status === 'paid' || person.status === 'proof_submitted')}
-          <div class="summary-actions">
-            {#if person.status === 'paid'}
-              <button class="ghost-button" disabled={app.busy} onclick={() => unconfirm(person)}>Отменить подтверждение</button>
-            {:else}
-              <button class="accent-button" disabled={app.busy} onclick={() => void app.approve(person.id)}>Подтвердить оплату</button>
-            {/if}
-          </div>
-        {/if}
-      </div>
-    {/each}
-  </div>
-
-  {#if app.isOwner && bill.paymentDetails}
-    <div class="panel pay-card owner-pay"><PaymentDetails details={bill.paymentDetails} /><button class="ghost-button" onclick={() => app.payDetailsOpen = true}>Изменить</button></div>
-  {:else if app.isOwner}
-    <button class="notice info" onclick={() => app.payDetailsOpen = true}><span aria-hidden="true">💳</span><div><b>Куда гостям переводить?</b><small>Номер карты или телефона для гостей</small></div><span class="notice-action">Добавить →</span></button>
-  {/if}
-
-  <div class="panel export-card" class:all-paid={app.allConfirmed}>
-    <div class="export-text">
-      {#if app.allConfirmed}<span class="done-mark" aria-hidden="true">✓</span>{/if}
-      <div><b>{app.allConfirmed ? 'Все оплаты подтверждены' : 'Итог'}</b><small class="muted">Чек удалится {expiryDate.format(expiresAt(bill.createdAt))}</small></div>
-    </div>
-    <div class="chip-row">
-      <button class="chip" onclick={() => app.copy(text(), 'Итог скопирован')}>Копировать</button>
-      <button class="chip" onclick={() => saveImage(bill, app.billTotal, app.totals, app.ownerId)}>Картинка</button>
-      <button class="chip" onclick={() => window.print()}>PDF</button>
-      <button class="chip" onclick={() => saveText(bill.title, text())}>Текст</button>
-    </div>
-  </div>
+  {/each}
 </div>

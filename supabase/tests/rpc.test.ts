@@ -50,6 +50,18 @@ describe('check RPCs', () => {
     assert.deepEqual((await shares(db, s.unitIds[0])).map(row => row.amount), ['20000'])
   })
 
+  it('lets each person rename only themselves', async () => {
+    const s = await setup(db)
+    const names = async () => (await db.query<{ name: string }>('select name from public.participants where check_id = $1 order by sort_order', [s.check.id])).rows.map(row => row.name)
+    await db.rpc(s.guest, 'rename_participant', { p_check_id: s.check.id, p_name: '  Азиз ' })
+    await db.rpc(s.owner, 'rename_participant', { p_check_id: s.check.id, p_name: 'Жасур' })
+    assert.deepEqual(await names(), ['Жасур', 'Азиз'])
+    await assert.rejects(db.rpc(s.guest, 'rename_participant', { p_check_id: s.check.id, p_name: '   ' }), /Invalid participant name/)
+    await assert.rejects(db.rpc(s.guest, 'rename_participant', { p_check_id: s.check.id, p_name: 'x'.repeat(49) }), /Invalid participant name/)
+    await assert.rejects(db.rpc(await db.newUser(), 'rename_participant', { p_check_id: s.check.id, p_name: 'Чужой' }), /Participant access required/)
+    assert.deepEqual(await names(), ['Жасур', 'Азиз'])
+  })
+
   it('records the item creator from the session instead of trusting the client', async () => {
     const s = await setup(db)
     const { rows } = await db.query<{ created_by: string }>('select created_by from public.items where id = $1', [s.itemId])
@@ -87,6 +99,14 @@ describe('check RPCs', () => {
     await assert.rejects(db.rpc(s.owner, 'add_items', { p_check_id: s.check.id, p_items: [] }), /Invalid item/)
     await assert.rejects(db.rpc(s.guest, 'add_items', { p_check_id: s.check.id, p_items: [{ name: 'Торт', quantity: 1, unit_price: 1_000 }] }), /Owner access required/)
     assert.equal((await names()).length, 3)
+  })
+
+  it('keeps a scanned receipt in its order', async () => {
+    const s = await setup(db)
+    const order = ['Шашлык', 'Чай', 'Самса', 'Лагман', 'Компот', 'Нон', 'Салат', 'Кола']
+    await db.rpc(s.owner, 'add_items', { p_check_id: s.check.id, p_items: order.map(name => ({ name, quantity: 1, unit_price: 1_000 })) })
+    const snapshot = await db.rpc<{ items: { name: string }[] }>(s.owner, 'get_check', { p_public_id: s.check.public_id })
+    assert.deepEqual(snapshot.items.map(item => item.name), ['Хлеб', ...order])
   })
 
   it('rejects a wrong owner token', async () => {
@@ -145,18 +165,10 @@ describe('check RPCs', () => {
   it('deletes a check with everything in it, only for the owner', async () => {
     const s = await setup(db)
     await db.rpc(s.guest, 'toggle_unit_share', { p_item_unit: s.unitIds[0], p_enabled: true })
-    await db.rpc(s.guest, 'add_comment', { p_check_id: s.check.id, p_item_id: null, p_body: 'Привет' })
     await assert.rejects(db.rpc(s.guest, 'delete_check', { p_check_id: s.check.id }), /Owner access required/)
     await db.rpc(s.owner, 'delete_check', { p_check_id: s.check.id })
     const { rows } = await db.query<{ n: number }>('select count(*)::int as n from public.participants where check_id = $1', [s.check.id])
     assert.equal(rows[0].n, 0)
-  })
-
-  it('lets only the author delete a comment', async () => {
-    const s = await setup(db)
-    const commentId = await db.rpc<string>(s.guest, 'add_comment', { p_check_id: s.check.id, p_item_id: null, p_body: 'Привет' })
-    await assert.rejects(db.rpc(s.owner, 'delete_comment', { p_comment_id: commentId }), /Only the author/)
-    await db.rpc(s.guest, 'delete_comment', { p_comment_id: commentId })
   })
 
   it('edits an item: a new price re-splits each unit equally, a smaller quantity drops the last units', async () => {
@@ -245,6 +257,20 @@ describe('check RPCs', () => {
     await db.rpc(s.owner, 'confirm_payment', { p_check_id: s.check.id, p_participant_id: s.guestParticipant })
     assert.equal(await status(), 'paid')
   })
+
+  it('takes the confirmation off when the guest changes a confirmed amount', async () => {
+    const s = await setup(db)
+    await db.rpc(s.guest, 'toggle_unit_share', { p_item_unit: s.unitIds[0], p_enabled: true })
+    const payment = async () => (await db.query<{ status: string; amount_paid: string; confirmed: boolean }>('select status::text, amount_paid::text, confirmed_at is not null as confirmed from public.payments where participant_id = $1', [s.guestParticipant])).rows[0]
+    await db.rpc(s.guest, 'submit_payment', { p_check_id: s.check.id, p_amount: 22_000 })
+    await db.rpc(s.owner, 'confirm_payment', { p_check_id: s.check.id, p_participant_id: s.guestParticipant })
+    await db.rpc(s.guest, 'submit_payment', { p_check_id: s.check.id, p_amount: 10_000 })
+    assert.deepEqual(await payment(), { status: 'partially_paid', amount_paid: '10000', confirmed: false })
+    await db.rpc(s.guest, 'submit_payment', { p_check_id: s.check.id, p_amount: 22_000 })
+    await db.rpc(s.owner, 'confirm_payment', { p_check_id: s.check.id, p_participant_id: s.guestParticipant })
+    await db.rpc(s.guest, 'submit_payment', { p_check_id: s.check.id, p_amount: 25_000 })
+    assert.deepEqual(await payment(), { status: 'proof_submitted', amount_paid: '25000', confirmed: false })
+  })
 })
 
 describe('limits and expiry', () => {
@@ -255,7 +281,6 @@ describe('limits and expiry', () => {
   it('takes writes only through RPCs', async () => {
     const s = await setup(db)
     await assert.rejects(db.as(s.guest, () => db.query("update public.payments set status = 'proof_submitted', amount_paid = 1 where participant_id = $1", [s.guestParticipant])), /permission denied/)
-    await assert.rejects(db.as(s.guest, () => db.query("insert into public.comments(check_id, participant_id, body) values ($1, $2, 'x')", [s.check.id, s.guestParticipant])), /permission denied/)
     await assert.rejects(db.as(s.owner, () => db.query("update public.payments set status = 'paid', confirmed_at = now() where participant_id = $1", [s.guestParticipant])), /permission denied/)
   })
 
@@ -278,12 +303,6 @@ describe('limits and expiry', () => {
     const saved = token()
     const first = await join(await db.newUser(), s.check.public_id, saved)
     assert.equal((await join(await db.newUser(), s.check.public_id, saved)).participant_id, first.participant_id)
-  })
-
-  it('keeps at most 50 comments per check', async () => {
-    const s = await setup(db)
-    for (let i = 0; i < 50; i++) await db.rpc(s.guest, 'add_comment', { p_check_id: s.check.id, p_item_id: null, p_body: `#${i}` })
-    await assert.rejects(db.rpc(s.owner, 'add_comment', { p_check_id: s.check.id, p_item_id: null, p_body: 'Ещё' }), /Comment limit reached/)
   })
 
   it('keeps at most 100 items per check', async () => {
@@ -334,16 +353,13 @@ describe('limits and expiry', () => {
       + (select count(*) from public.items where check_id = $1)
       + (select count(*) from public.item_units u join public.items i on i.id = u.item_id where i.check_id = $1)
       + (select count(*) from public.item_shares s join public.participants p on p.id = s.participant_id where p.check_id = $1)
-      + (select count(*) from public.payments where check_id = $1)
-      + (select count(*) from public.comments where check_id = $1) as n`, [checkId])).rows[0].n
+      + (select count(*) from public.payments where check_id = $1) as n`, [checkId])).rows[0].n
   async function filled() {
     const s = await setup(db)
     await db.rpc(s.guest, 'toggle_unit_share', { p_item_unit: s.unitIds[0], p_enabled: true })
     await db.rpc(s.owner, 'set_unit_custom_shares', { p_item_unit: s.unitIds[1], p_allocations: { [s.ownerParticipant]: 5_000, [s.guestParticipant]: 15_000 } })
     await db.rpc(s.guest, 'submit_payment', { p_check_id: s.check.id, p_amount: 40_000 })
     await db.rpc(s.owner, 'confirm_payment', { p_check_id: s.check.id, p_participant_id: s.guestParticipant })
-    await db.rpc(s.guest, 'add_comment', { p_check_id: s.check.id, p_item_id: null, p_body: 'Спасибо!' })
-    await db.rpc(s.guest, 'add_comment', { p_check_id: s.check.id, p_item_id: s.itemId, p_body: 'Про хлеб' })
     assert.ok(Number(await leftovers(s.check.id)) > 0)
     return s
   }
@@ -397,8 +413,7 @@ describe('check snapshot and broadcasts', () => {
     const s = await setup(db)
     await db.rpc(s.owner, 'set_unit_custom_shares', { p_item_unit: s.unitIds[0], p_allocations: { [s.ownerParticipant]: 5_000, [s.guestParticipant]: 15_000 } })
     await db.rpc(s.guest, 'toggle_unit_share', { p_item_unit: s.unitIds[1], p_enabled: true })
-    await db.rpc(s.guest, 'add_comment', { p_check_id: s.check.id, p_item_id: null, p_body: 'Привет' })
-    type Snapshot = { me: string; is_owner: boolean; participants: { id: string; name: string; status: string }[]; items: { quantity: number; units: { shares: { participant_id: string; amount: number; mode: string }[] }[] }[]; comments: { body: string }[] }
+    type Snapshot = { me: string; is_owner: boolean; participants: { id: string; name: string; status: string }[]; items: { quantity: number; units: { shares: { participant_id: string; amount: number; mode: string }[] }[] }[]; comments: unknown[] }
     const forGuest = await db.rpc<Snapshot>(s.guest, 'get_check', { p_public_id: s.check.public_id })
     assert.equal(forGuest.me, s.guestParticipant)
     assert.equal(forGuest.is_owner, false)
@@ -406,7 +421,8 @@ describe('check snapshot and broadcasts', () => {
     assert.equal(forGuest.items[0].units.length, 2)
     assert.deepEqual(forGuest.items[0].units[0].shares, [{ participant_id: s.ownerParticipant, amount: 5_000, mode: 'custom' }, { participant_id: s.guestParticipant, amount: 15_000, mode: 'custom' }])
     assert.deepEqual(forGuest.items[0].units[1].shares, [{ participant_id: s.guestParticipant, amount: 20_000, mode: 'equal' }])
-    assert.equal(forGuest.comments[0].body, 'Привет')
+    // Still there, empty, for the site published before the chat was removed.
+    assert.deepEqual(forGuest.comments, [])
     assert.equal((await db.rpc<Snapshot>(s.owner, 'get_check', { p_public_id: s.check.public_id })).is_owner, true)
     const stranger = await db.newUser()
     await assert.rejects(db.rpc(stranger, 'get_check', { p_public_id: s.check.public_id }), (error: { code?: string }) => error.code === 'P0002')
@@ -446,7 +462,7 @@ describe('check snapshot and broadcasts', () => {
       db.query("insert into realtime.messages(topic, extension, event, payload, private) values ($1, $2, 'changed', '{}', true)", [topic, extension]))
     const visible = async (userId: string) => (await onChannel(userId, () => db.query('select 1 from realtime.messages where topic = $1', [topic]))).rows.length
     await clearMessages()
-    await db.rpc(s.owner, 'add_comment', { p_check_id: s.check.id, p_item_id: null, p_body: 'Привет' })
+    await db.rpc(s.owner, 'add_item', { p_check_id: s.check.id, p_name: 'Чай', p_quantity: 1, p_unit_price: 5_000 })
     assert.equal(await visible(s.guest), 1)
     assert.equal(await visible(await db.newUser()), 0)
     await send(s.guest, 'presence')
@@ -454,14 +470,12 @@ describe('check snapshot and broadcasts', () => {
     await assert.rejects(send(await db.newUser(), 'presence'), /row-level security/)
   })
 
-  it('announces deletions of comments, participants and the check itself', async () => {
+  it('announces deletions of items, participants and the check itself', async () => {
     const s = await setup(db)
-    const commentId = await db.rpc<string>(s.guest, 'add_comment', { p_check_id: s.check.id, p_item_id: null, p_body: 'Привет' })
     await clearMessages()
-    await db.rpc(s.guest, 'delete_comment', { p_comment_id: commentId })
     await db.rpc(s.owner, 'delete_item', { p_check_id: s.check.id, p_item_id: s.itemId })
     await db.rpc(s.owner, 'remove_participant', { p_check_id: s.check.id, p_participant_id: s.guestParticipant })
     await db.rpc(s.owner, 'delete_check', { p_check_id: s.check.id })
-    assert.deepEqual((await messages()).map(m => m.payload.table), ['comments', 'items', 'participants', 'checks'])
+    assert.deepEqual((await messages()).map(m => m.payload.table), ['items', 'participants', 'checks'])
   })
 })

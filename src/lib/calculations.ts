@@ -13,9 +13,8 @@ export type BillItem = {
   /** "Split among everyone": the server adds people who join later and keeps parts for guests still expected. */
   sharedAll?: boolean
 }
-export type CommentMessage = { id: string; itemId?: string; participantId: string; body: string; createdAt: string }
 export type Bill = {
-  id: string; dbId: string; title: string; servicePercent: number; participants: Participant[]; items: BillItem[]; createdAt: string; ownerToken: string; comments?: CommentMessage[]
+  id: string; dbId: string; title: string; servicePercent: number; participants: Participant[]; items: BillItem[]; createdAt: string; ownerToken: string
   /** Card or phone number the creator wants transfers to; shown to every member. */
   paymentDetails?: string
   /** The creator's participant id; older saved checks lack it, and the creator is always listed first. */

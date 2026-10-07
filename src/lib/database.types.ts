@@ -24,9 +24,8 @@ export interface Database {
       reset_unit_custom_shares: { Args: { p_item_unit: string }; Returns: undefined }
       submit_payment: { Args: { p_check_id: string; p_amount: number }; Returns: undefined }
       confirm_payment: { Args: { p_check_id: string; p_participant_id: string }; Returns: undefined }
-      add_comment: { Args: { p_check_id: string; p_item_id: string | null; p_body: string }; Returns: string }
-      delete_comment: { Args: { p_comment_id: string }; Returns: undefined }
       remove_participant: { Args: { p_check_id: string; p_participant_id: string }; Returns: undefined }
+      rename_participant: { Args: { p_check_id: string; p_name: string }; Returns: undefined }
       delete_check: { Args: { p_check_id: string }; Returns: undefined }
     }
     Enums: { payment_status: 'unpaid' | 'partially_paid' | 'proof_submitted' | 'paid'; share_mode: 'equal' | 'by_quantity' | 'custom' }
