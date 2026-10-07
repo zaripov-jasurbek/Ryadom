@@ -10,6 +10,8 @@ export type BillItem = {
   unitCustomAmounts?: Record<string, Record<string, number>>
   /** Amounts the server recorded per unit and participant; when present they win over a local equal split. */
   unitAmounts?: Record<string, Record<string, number>>
+  /** "Split among everyone": the server adds people who join later and keeps parts for guests still expected. */
+  sharedAll?: boolean
 }
 export type CommentMessage = { id: string; itemId?: string; participantId: string; body: string; createdAt: string }
 export type Bill = {
@@ -18,10 +20,13 @@ export type Bill = {
   paymentDetails?: string
   /** The creator's participant id; older saved checks lack it, and the creator is always listed first. */
   ownerId?: string
+  /** How many people the creator expects at the table; shared_all items are cut into at least this many parts. */
+  expectedGuests?: number
 }
 export const ownerIdOf = (bill: Pick<Bill, 'ownerId' | 'participants'>) => bill.ownerId ?? bill.participants[0]?.id
 
-export type ParticipantTotal = { id: string; name: string; subtotal: number; service: number; due: number; paid: number; remaining: number; status: PaymentStatus }
+/** overpaid: paid more than the current total, e.g. before a late guest took over part of a shared item. */
+export type ParticipantTotal = { id: string; name: string; subtotal: number; service: number; due: number; paid: number; remaining: number; overpaid: number; status: PaymentStatus }
 
 /**
  * Splits whole UZS in proportion to whole-number weights; the largest fractions get the leftover sums.
@@ -74,8 +79,9 @@ export function calculateTotals(bill: Pick<Bill, 'participants' | 'items' | 'ser
   const services = splitInteger(serviceTotal, subtotals)
   return bill.participants.map((p, i) => {
     const due = subtotals[i] + services[i]
-    const paid = Math.min(due, Math.max(0, p.paid))
-    return { id: p.id, name: p.name, subtotal: subtotals[i], service: services[i], due, paid, remaining: due - paid, status: p.status }
+    const given = Math.max(0, p.paid)
+    const paid = Math.min(due, given)
+    return { id: p.id, name: p.name, subtotal: subtotals[i], service: services[i], due, paid, remaining: due - paid, overpaid: given - paid, status: p.status }
   })
 }
 
@@ -85,7 +91,8 @@ export function withSelection(item: BillItem, unit: number, personId: string, en
   const unitAmounts = { ...item.unitAmounts }
   delete unitAmounts[key]
   const next = enabled ? (current.includes(personId) ? current : [...current, personId]) : current.filter(id => id !== personId)
-  return { ...item, unitAmounts, unitSelections: { ...item.unitSelections, [key]: next } }
+  // A mark by hand ends "split among everyone", as toggle_unit_share does on the server.
+  return { ...item, sharedAll: false, unitAmounts, unitSelections: { ...item.unitSelections, [key]: next } }
 }
 
 export function isUnitAssigned(item: BillItem, unit: number): boolean {
@@ -95,10 +102,24 @@ export function isUnitAssigned(item: BillItem, unit: number): boolean {
 
 export const hasUnassignedUnit = (item: BillItem) => Array.from({ length: item.quantity }, (_, unit) => unit).some(unit => !isUnitAssigned(item, unit))
 
-export function assignedSubtotal(bill: Pick<Bill, 'items'>): number {
+/** What is already on someone's total; parts kept for guests who have not joined yet are not. */
+export function assignedSubtotal(bill: Pick<Bill, 'items' | 'participants'>): number {
   let sum = 0
-  for (const item of bill.items) for (let unit = 0; unit < item.quantity; unit++) if (isUnitAssigned(item, unit)) sum += item.unitPrice
+  for (const item of bill.items) for (const amount of Object.values(itemShares(item, bill.participants))) sum += amount
   return sum
+}
+
+/** "пополам", "на троих" … for a serving shared by that many people. */
+export function splitWord(people: number): string {
+  const words = ['', '', 'пополам', 'на троих', 'на четверых', 'на пятерых', 'на шестерых', 'на семерых', 'на восьмерых', 'на девятерых', 'на десятерых']
+  return words[people] ?? `на ${people}`
+}
+
+/** A shared_all item: how many parts each serving is cut into, how many people are here, and each one's share. */
+export function sharedAllInfo(item: BillItem, bill: Pick<Bill, 'participants' | 'expectedGuests'>) {
+  const present = bill.participants.length
+  const parts = Math.max(present, bill.expectedGuests ?? 0)
+  return { parts, present, waiting: parts - present, perPerson: Math.floor(item.unitPrice / Math.max(1, parts)) * item.quantity }
 }
 
 // ru-RU groups thousands with a non-breaking space everywhere; uz-UZ gives "60,134" in some browsers and "60 134" in others.
@@ -108,9 +129,10 @@ export function formatUzs(amount: number): string { return `${uzs.format(amount)
 /** "60 134" without the currency, where space is short. */
 export const formatAmount = (amount: number) => uzs.format(amount)
 
-export type PersonItem = { id: string; name: string; amount: number; units: number; shared: boolean }
+/** sharedAll: the creator split it among everyone; that line says "на всех" instead of "× 2 · доля". */
+export type PersonItem = { id: string; name: string; amount: number; units: number; shared: boolean; sharedAll: boolean }
 
-/** What a participant's subtotal is made of: their amount per item, how many servings, and whether any was shared. */
+/** What a participant's subtotal is made of: their amount per item, how many servings, whether any was shared, and how to say it. */
 export function personItems(bill: Pick<Bill, 'participants' | 'items'>, personId: string): PersonItem[] {
   const result: PersonItem[] = []
   for (const item of bill.items) {
@@ -121,7 +143,8 @@ export function personItems(bill: Pick<Bill, 'participants' | 'items'>, personId
       amount += share; units++
       if (share < item.unitPrice) shared = true
     }
-    if (amount) result.push({ id: item.id, name: item.name, amount, units, shared })
+    if (!amount) continue
+    result.push({ id: item.id, name: item.name, amount, units, shared, sharedAll: Boolean(item.sharedAll) })
   }
   return result
 }

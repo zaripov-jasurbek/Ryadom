@@ -283,14 +283,14 @@ class AppStore {
 
   // ---- create and join ----
 
-  async createBill(title: string, ownerName: string, servicePercent: number, paymentDetails: string) {
+  async createBill(title: string, ownerName: string, servicePercent: number, paymentDetails: string, expectedGuests: number | null = null) {
     const ownerToken = crypto.randomUUID()
     let bill: Bill
     this.rememberName(ownerName)
     this.busy = true
     try {
-      const created = await createRemoteCheck(title, servicePercent, ownerName, ownerToken, paymentDetails)
-      bill = { id: created.public_id, dbId: created.id, title, servicePercent, paymentDetails: paymentDetails || undefined, ownerId: created.participant_id, participants: [{ id: created.participant_id, name: ownerName, paid: 0, status: 'unpaid' }], items: [], createdAt: new Date().toISOString(), ownerToken }
+      const created = await createRemoteCheck(title, servicePercent, ownerName, ownerToken, paymentDetails, expectedGuests)
+      bill = { id: created.public_id, dbId: created.id, title, servicePercent, paymentDetails: paymentDetails || undefined, expectedGuests: expectedGuests ?? undefined, ownerId: created.participant_id, participants: [{ id: created.participant_id, name: ownerName, paid: 0, status: 'unpaid' }], items: [], createdAt: new Date().toISOString(), ownerToken }
     } catch (error) { this.fail(error, 'Не удалось создать чек'); return } finally { this.busy = false }
     this.bill = bill; this.isOwner = true; this.token = ownerToken; this.mode = 'check'; this.activeTab = 'order'; this.commentsSeen = ''
     this.selectedPerson = bill.participants[0].id; writeStorage(personKey(bill.id), this.selectedPerson)
@@ -373,8 +373,9 @@ class AppStore {
     return this.mutate('Не удалось сохранить позицию', dbId => updateRemoteItem(dbId, item.id, name, quantity, unitPrice), 'Позиция обновлена')
   }
 
-  updateCheck(title: string, servicePercent: number, paymentDetails: string) {
-    return this.mutate('Не удалось сохранить чек', dbId => updateRemoteCheck(dbId, title, servicePercent, paymentDetails), 'Чек обновлён')
+  /** expectedGuests: undefined keeps the number, null clears it. */
+  updateCheck(title: string, servicePercent: number, paymentDetails: string, expectedGuests?: number | null) {
+    return this.mutate('Не удалось сохранить чек', dbId => updateRemoteCheck(dbId, title, servicePercent, paymentDetails, expectedGuests), 'Чек обновлён')
   }
 
   shareItemEqually(item: BillItem) {

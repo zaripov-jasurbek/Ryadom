@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { formatUzs, isUnitAssigned, type BillItem } from '../lib/calculations'
+  import { formatUzs, isUnitAssigned, itemShares, sharedAllInfo, splitWord, type BillItem } from '../lib/calculations'
   import { initial, itemIcon } from '../lib/format'
   import { app } from '../lib/store.svelte'
   import CustomShareEditor from './CustomShareEditor.svelte'
@@ -8,12 +8,14 @@
   let { item }: { item: BillItem } = $props()
   const units = $derived(Array.from({ length: item.quantity }, (_, unit) => unit))
   const everyone = $derived(app.bill!.participants)
-  const sharedByAll = $derived(units.every(unit => item.unitModes?.[String(unit)] !== 'custom' && everyone.every(person => item.unitSelections[String(unit)]?.includes(person.id))))
+  // "On everyone" counts the guests still expected, so it works before they join and keeps their parts for them.
+  const all = $derived(sharedAllInfo(item, app.bill!))
+  const sharedAll = $derived(Boolean(item.sharedAll))
 
   // The creator's item actions live in one "⋯" menu instead of a row of icons.
   let menuOpen = $state(false)
   let menu: HTMLDivElement | undefined = $state()
-  const canShareAll = $derived(everyone.length > 1 && !sharedByAll)
+  const canShareAll = $derived(all.parts > 1 && !sharedAll)
   function fromMenu(action: () => void) { menuOpen = false; action() }
 
   // Several servings are marked with a stepper; the per-serving rows open for sharing one serving or custom splits.
@@ -23,6 +25,8 @@
   const showUnits = $derived(stepper && (expanded || app.editingUnit.startsWith(`${item.id}:`)))
   const isCustom = (unit: number) => item.unitModes?.[String(unit)] === 'custom'
   const me = $derived(app.selectedPerson)
+  // What the viewer pays for a shared item; before they are known, what each person pays.
+  const myShare = $derived(me ? itemShares(item, everyone)[me] ?? 0 : 0)
   const myUnits = $derived(me ? units.filter(unit => consumers(unit).some(person => person.id === me)) : [])
   const free = $derived(units.filter(unit => !isCustom(unit) && !item.unitSelections[String(unit)]?.length))
   // "+" takes a free serving; "−" first gives back a serving this person had alone, the last one first.
@@ -57,7 +61,7 @@
   }
   async function shareWithEveryone() {
     const marked = units.some(unit => isUnitAssigned(item, unit))
-    if (marked && !await app.confirm({ title: `Разделить «${item.name}» на всех?`, body: `Поровну на ${everyone.length}. Текущие отметки сбросятся.`, action: 'Разделить' })) return
+    if (marked && !await app.confirm({ title: `Разделить «${item.name}» на всех?`, body: `Поровну на ${all.parts}. Текущие отметки сбросятся.`, action: 'Разделить' })) return
     void app.shareItemEqually(item)
   }
   function toggleEditor(key: string) {
@@ -78,7 +82,14 @@
       <!-- On a one-line card an empty place says it already; repeated on every row it is only noise. -->
       {#if stepper}<span class="unit-empty">Пока никто не отметил</span>{/if}
     {/each}
-    {#if !isCustom(unit) && list.length > 1}<span class="unit-note">по {item.unitPrice % list.length ? '~' : ''}{formatUzs(Math.round(item.unitPrice / list.length))}</span>{/if}
+    {#if !isCustom(unit) && list.length > 1 && !sharedAll}<span class="unit-note">по {item.unitPrice % list.length ? '~' : ''}{formatUzs(Math.round(item.unitPrice / list.length))}</span>{/if}
+  </div>
+{/snippet}
+
+{#snippet everyoneNote()}
+  <div class="unit-consumers shared-all">
+    <span class="consumer-pill everyone-pill">÷ На всех</span>
+    <span class="unit-note">{splitWord(all.parts)}{all.waiting ? ` · пришли ${all.present} из ${all.parts}` : ''} · {me && myShare ? `ваша часть ${formatUzs(myShare)}` : `по ~${formatUzs(all.perPerson)}`}</span>
   </div>
 {/snippet}
 
@@ -99,15 +110,16 @@
       <b>{item.name}</b>
       <span class="muted">{formatUzs(item.unitPrice)}{item.quantity > 1 ? ` × ${item.quantity} = ${formatUzs(item.unitPrice * item.quantity)}` : ''}</span>
     </div>
-    {#if !stepper}{@render people(0)}{/if}
-    {#if !stepper}<div class="item-action">{@render mineButton(0)}</div>{/if}
+    {#if !stepper && sharedAll}{@render everyoneNote()}
+    {:else if !stepper}{@render people(0)}{/if}
+    {#if !stepper && !sharedAll}<div class="item-action">{@render mineButton(0)}</div>{/if}
     {#if app.isOwner}
       <div class="item-menu" bind:this={menu}>
         <button class="icon-button" aria-haspopup="menu" aria-expanded={menuOpen} aria-label={`Действия с позицией «${item.name}»`} title="Действия" onclick={() => menuOpen = !menuOpen}>⋯</button>
         {#if menuOpen}
           <div class="menu-popover" role="menu">
             <button role="menuitem" onclick={() => fromMenu(() => app.editingItem = item)}>✎ Изменить</button>
-            {#if canShareAll}<button role="menuitem" disabled={app.busy} onclick={() => fromMenu(() => void shareWithEveryone())}>÷ Поровну на всех · {everyone.length}</button>{/if}
+            {#if canShareAll}<button role="menuitem" disabled={app.busy} onclick={() => fromMenu(() => void shareWithEveryone())}>÷ Поровну на всех · {all.parts}</button>{/if}
             {#if !stepper}<button role="menuitem" onclick={() => fromMenu(() => toggleEditor('0'))}>⚖ Доли вручную</button>{/if}
             <button role="menuitem" class="danger" onclick={() => fromMenu(() => void remove())}>🗑 Удалить</button>
           </div>
@@ -116,7 +128,10 @@
     {/if}
   </div>
   {#if !stepper && app.editingUnit === `${item.id}:0`}<CustomShareEditor {item} unit={0} />{/if}
-  {#if stepper}
+  {#if stepper && sharedAll}
+    <div class="portion-summary">{@render everyoneNote()}</div>
+    {#if app.isOwner}<button type="button" class="ghost-button units-toggle" aria-expanded={showUnits} onclick={toggleUnits}>{showUnits ? 'Свернуть порции ▴' : 'По порциям ▾'}</button>{/if}
+  {:else if stepper}
     <div class="portion-summary">
       <div class="unit-consumers">
         {#each tally as { person, count } (person.id)}
@@ -152,6 +167,6 @@
   </div>
   {/if}
   {#if app.isOwner && canShareAll && !units.some(unit => isUnitAssigned(item, unit))}
-    <button class="ghost-button share-all" disabled={app.busy} onclick={shareWithEveryone}>÷ Поровну на всех · {everyone.length}</button>
+    <button class="ghost-button share-all" disabled={app.busy} onclick={shareWithEveryone}>÷ Поровну на всех · {all.parts}</button>
   {/if}
 </article>
