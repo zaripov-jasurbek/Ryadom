@@ -19,7 +19,7 @@
   const myNote = $derived.by(() => {
     if (!mine) return ''
     if (!mine.due) return 'Отметьте свои блюда в «Позициях».'
-    if (mine.overpaid) return `Вы переплатили ${formatUzs(mine.overpaid)}: к столу присоединились ещё люди, и ваша часть стала меньше.`
+    if (mine.overpaid) return `Вы переплатили ${formatUzs(mine.overpaid)}.`
     if (mine.status === 'paid') return 'Оплата подтверждена.'
     if (mine.status === 'proof_submitted') return `Ждём подтверждения${ownerName ? ` от ${ownerName}` : ''}.`
     if (mine.paid > 0) return `Отдали ${formatUzs(mine.paid)} · осталось ${formatUzs(mine.remaining)}.`
