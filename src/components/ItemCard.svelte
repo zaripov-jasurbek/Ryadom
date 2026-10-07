@@ -8,7 +8,8 @@
   const units = $derived(Array.from({ length: item.quantity }, (_, unit) => unit))
   const everyone = $derived(app.bill!.participants)
   // "On everyone" counts the guests still expected, so it works before they join and keeps their parts for them.
-  const parts = $derived(sharedAllInfo(item, app.bill!).parts)
+  const share = $derived(sharedAllInfo(item, app.bill!))
+  const parts = $derived(share.parts)
   const sharedAll = $derived(Boolean(item.sharedAll))
   const stepper = $derived(item.quantity > 1)
   const me = $derived(app.selectedPerson)
@@ -85,7 +86,7 @@
 
   <div class="bill-controls">
     {#if sharedAll}
-      <span class="train-note">На всех · по {formatAmount(Math.floor(item.unitPrice / Math.max(1, parts)) * item.quantity)}</span>
+      <span class="train-note">На всех · по {formatAmount(share.perPerson)}</span>
     {:else}
       <!-- Everyone's names one after another like train cars; a long train scrolls sideways instead of shrinking the names. -->
       <div class="train" role="group" aria-label="Кто отметил">

@@ -2,23 +2,16 @@ import { formatUzs, personItems, type Bill, type ParticipantTotal } from './calc
 import { shareOr } from './share.ts'
 
 /** The creator paid the restaurant, so their line says so instead of what is left to pay. */
-const paymentLine = (person: ParticipantTotal, ownerId?: string) =>
+export const paymentLine = (person: ParticipantTotal, ownerId?: string) =>
   person.id === ownerId ? 'платил по счёту'
     : person.overpaid ? `оплачено ${formatUzs(person.paid + person.overpaid)} · переплатил ${formatUzs(person.overpaid)}`
     : `оплачено ${formatUzs(person.paid)} · осталось ${formatUzs(person.remaining)}`
 
 /** What each person's amount is made of: their dishes, shares and service, as lines under their name. */
-function detailLines(bill: Bill, person: ParticipantTotal) {
+export function detailLines(bill: Bill, person: ParticipantTotal) {
   const lines = personItems(bill, person.id).map(line => `${line.name}${line.sharedAll ? ' (на всех)' : `${line.units > 1 ? ` × ${line.units}` : ''}${line.shared ? ' (доля)' : ''}`} — ${formatUzs(line.amount)}`)
   if (person.service) lines.push(`Обслуживание ${bill.servicePercent}% — ${formatUzs(person.service)}`)
   return lines
-}
-
-/** The whole check for a chat or a file: who owes what, and what each amount is made of. */
-export function summaryText(bill: Bill, total: number, totals: ParticipantTotal[], ownerId?: string) {
-  const head = [bill.title, `Всего: ${formatUzs(total)}${bill.servicePercent ? ` · обслуживание ${bill.servicePercent}%` : ''}`]
-  const people = totals.map(person => [`${person.name}: ${formatUzs(person.due)} · ${paymentLine(person, ownerId)}`, ...detailLines(bill, person).map(line => `  • ${line}`)].join('\n'))
-  return [...head, '', people.join('\n\n')].join('\n')
 }
 
 /** Characters that Windows, macOS or Android refuse in file names. */

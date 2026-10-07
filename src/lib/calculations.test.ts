@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { assignedSubtotal, calculateTotals, sharedAllInfo, splitWord, formatUzs, itemShares, serviceFee, splitInteger, withSelection, type Bill, type BillItem } from './calculations.ts'
+import { assignedSubtotal, calculateTotals, sharedAllInfo, formatUzs, itemShares, serviceFee, splitInteger, withSelection, type Bill, type BillItem } from './calculations.ts'
 const people = ['Jasur', 'Aziz', 'Bekzod', 'Sardor'].map((name, i) => ({ id: `${i}`, name, paid: 0, status: 'unpaid' as const }))
 describe('bill calculations', () => {
   it('splits indivisible sums deterministically and conserves the full item price', () => assert.deepEqual(splitInteger(20_000, [1, 1, 1]), [6_667, 6_667, 6_666]))
@@ -71,9 +71,6 @@ describe('bill calculations', () => {
     const item: BillItem = { id: 'bread', name: 'Bread', quantity: 2, unitPrice: 3_000, sharedAll: true, unitSelections: { '0': ['0'], '1': ['0'] }, unitAmounts: { '0': { '0': 750 }, '1': { '0': 750 } } }
     const bill = { participants: people.slice(0, 1), items: [item], expectedGuests: 4 }
     assert.equal(assignedSubtotal(bill), 1_500)
-    assert.deepEqual(sharedAllInfo(item, bill), { parts: 4, present: 1, waiting: 3, perPerson: 1_500 })
-  })
-  it('names small groups the way people say them', () => {
-    assert.deepEqual([2, 3, 4, 12].map(splitWord), ['пополам', 'на троих', 'на четверых', 'на 12'])
+    assert.deepEqual(sharedAllInfo(item, bill), { parts: 4, perPerson: 1_500 })
   })
 })
