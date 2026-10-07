@@ -22,6 +22,7 @@ const messages: [RegExp, string][] = [
   [/Item unit unavailable/, 'Позиция уже удалена'],
   [/Invalid item/, 'Проверьте название, количество и цену'],
   [/Invalid check details/, 'Проверьте название, процент и реквизиты'],
+  [/Invalid participant name/, 'Имя — от 1 до 48 символов'],
   [/Invalid title or participant name|Invalid participant session/, 'Проверьте название и имя'],
   [/Anonymous sign-ins are disabled/i, 'Сервис временно недоступен — попробуйте позже'],
   // A request past the timeout in supabase.ts; older Safari reports it as a plain abort.

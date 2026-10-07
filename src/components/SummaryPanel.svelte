@@ -2,7 +2,7 @@
   import { formatUzs, type ParticipantTotal } from '../lib/calculations'
   import { saveImage, saveText, summaryText } from '../lib/export'
   import { expiryDate, initial } from '../lib/format'
-  import { expiresAt } from '../lib/limits'
+  import { expiresAt, limits } from '../lib/limits'
   import { app } from '../lib/store.svelte'
   import PaymentDetails from './PaymentDetails.svelte'
   import Amount from './Amount.svelte'
@@ -25,6 +25,13 @@
     if (await app.submitPayment(amount)) typed = null
   }
 
+  // A name typed here replaces the random letters for everyone at the table and is kept for the next checks.
+  async function rename(input: HTMLInputElement, current: string) {
+    const name = input.value.trim()
+    if (!name || name === current) { input.value = name === current ? name : ''; return }
+    if (!await app.rename(name)) input.value = ''
+  }
+
   // Telegram-like marks: ✓ the guest says they paid, ✓✓ the creator confirmed it.
   const mark = (person: ParticipantTotal) => person.status === 'paid' ? '✓✓' : person.status === 'proof_submitted' || person.status === 'partially_paid' ? '✓' : ''
   async function review(person: ParticipantTotal) {
@@ -37,7 +44,17 @@
   {@const payer = person.id === app.ownerId}
   <span class="person-avatar tone-{app.personIndex(person.id) % 5}">{initial(person.name)}</span>
   <span class="summary-person-name">
-    <b>{person.name}{app.selectedPerson === person.id ? ' · вы' : ''}</b>
+    {#if app.selectedPerson === person.id}
+      <!-- Your own line is "вы"; the field shows the name others see and takes a new one. -->
+      {@const named = Boolean(app.savedName) && person.name === app.savedName}
+      <span class="name-row">
+        <input class="name-input" value={named ? person.name : ''} placeholder={person.name} maxlength={limits.nameLength} autocomplete="given-name" enterkeyhint="done" aria-label="Ваше имя для остальных"
+          onchange={(e) => rename(e.currentTarget, person.name)} onkeydown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }} />
+        <b>вы</b>
+      </span>
+    {:else}
+      <b>{person.name}</b>
+    {/if}
     {#if payer}<small>платил по счёту</small>
     {:else if person.status === 'partially_paid'}<small>перевёл {formatUzs(person.paid)} из {formatUzs(person.due)}</small>
     {:else if person.overpaid}<small>переплатил {formatUzs(person.overpaid)}</small>{/if}

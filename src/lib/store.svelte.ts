@@ -1,6 +1,6 @@
 import { assignedSubtotal, calculateTotals, ownerIdOf, serviceFee, withSelection, type Bill, type BillItem, type Participant } from './calculations'
 import { errorMessage } from './errors'
-import { addRemoteItem, addRemoteItems, updateRemoteCheck, updateRemoteItem, shareRemoteItemEqually, unshareRemoteItem, claimRemoteCheckOwner, confirmRemotePayment, createRemoteCheck, deleteRemoteCheck, deleteRemoteItem, ensureAnonymousSession, isRemoteCheckGone, joinRemoteCheck, loadRemoteCheck, previewRemoteCheck, removeRemoteParticipant, submitRemotePayment, subscribeToRemoteCheck, toggleRemoteUnit, unconfirmRemotePayment, type PresenceUser, type RemoteBill, type RemoteSubscription } from './remote'
+import { addRemoteItem, addRemoteItems, updateRemoteCheck, updateRemoteItem, shareRemoteItemEqually, unshareRemoteItem, claimRemoteCheckOwner, confirmRemotePayment, createRemoteCheck, deleteRemoteCheck, deleteRemoteItem, ensureAnonymousSession, isRemoteCheckGone, joinRemoteCheck, loadRemoteCheck, removeRemoteParticipant, renameRemoteParticipant, submitRemotePayment, subscribeToRemoteCheck, toggleRemoteUnit, unconfirmRemotePayment, type PresenceUser, type RemoteBill, type RemoteSubscription } from './remote'
 import { checkPath, homePath, readOwnerToken, routeCheckId } from './routes'
 import { preloadSupabase } from './supabase'
 import { expiresAt } from './limits'
@@ -312,17 +312,15 @@ class AppStore {
     if (servicePercent !== null && servicePercent <= 30) this.draftService = servicePercent
   }
 
-  /** What the invitation shows before joining: null when the check is gone, undefined when it could not be loaded. */
-  async previewJoin() {
-    try { return await previewRemoteCheck(this.joinPublicId) }
-    catch (error) { console.warn('Check preview failed', error); return undefined }
-  }
-
-  /** Returns an error message for the form, or '' on success. */
-  async joinSharedCheck(name: string) {
+  /**
+   * Opening the link is joining: nobody is asked for a name. A name typed in an earlier check is used,
+   * otherwise three random letters, which the guest may change later in the summary.
+   * Returns an error message for the page, or '' on success.
+   */
+  async joinSharedCheck() {
     if (!this.joinPublicId) return ''
+    const name = this.savedName || randomName()
     this.busy = true
-    this.rememberName(name)
     try {
       let sessionToken: string = crypto.randomUUID()
       if (this.token) await claimRemoteCheckOwner(this.joinPublicId, this.token)
@@ -427,6 +425,14 @@ class AppStore {
 
   submitPayment(amount: number) {
     return this.mutate('Не удалось отправить оплату', dbId => submitRemotePayment(dbId, amount), 'Оплата отправлена')
+  }
+
+  /** Your own name in the check; it is kept for the next checks too. */
+  async rename(name: string) {
+    if (!await this.mutate('Не удалось сменить имя', dbId => renameRemoteParticipant(dbId, name))) return false
+    this.rememberName(name)
+    this.remote?.setPresence(this.presence('Просматривает чек'))
+    return true
   }
 
   approve(personId: string) {

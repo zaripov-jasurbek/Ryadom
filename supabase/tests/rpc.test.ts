@@ -50,6 +50,18 @@ describe('check RPCs', () => {
     assert.deepEqual((await shares(db, s.unitIds[0])).map(row => row.amount), ['20000'])
   })
 
+  it('lets each person rename only themselves', async () => {
+    const s = await setup(db)
+    const names = async () => (await db.query<{ name: string }>('select name from public.participants where check_id = $1 order by sort_order', [s.check.id])).rows.map(row => row.name)
+    await db.rpc(s.guest, 'rename_participant', { p_check_id: s.check.id, p_name: '  Азиз ' })
+    await db.rpc(s.owner, 'rename_participant', { p_check_id: s.check.id, p_name: 'Жасур' })
+    assert.deepEqual(await names(), ['Жасур', 'Азиз'])
+    await assert.rejects(db.rpc(s.guest, 'rename_participant', { p_check_id: s.check.id, p_name: '   ' }), /Invalid participant name/)
+    await assert.rejects(db.rpc(s.guest, 'rename_participant', { p_check_id: s.check.id, p_name: 'x'.repeat(49) }), /Invalid participant name/)
+    await assert.rejects(db.rpc(await db.newUser(), 'rename_participant', { p_check_id: s.check.id, p_name: 'Чужой' }), /Participant access required/)
+    assert.deepEqual(await names(), ['Жасур', 'Азиз'])
+  })
+
   it('records the item creator from the session instead of trusting the client', async () => {
     const s = await setup(db)
     const { rows } = await db.query<{ created_by: string }>('select created_by from public.items where id = $1', [s.itemId])
