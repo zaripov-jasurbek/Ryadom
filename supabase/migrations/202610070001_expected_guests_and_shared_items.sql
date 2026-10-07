@@ -67,6 +67,21 @@ end $$;
 revoke all on function public.include_new_participant() from public, anon, authenticated;
 create trigger include_new_participant after insert on public.participants for each row execute function public.include_new_participant();
 
+-- Internal: a hand-made change ends "split among everyone"; the other servings are re-split among the people on them,
+-- otherwise the parts kept for guests still on the way would stay unassigned for good.
+-- Only the transaction that turns the rule off re-splits: a concurrent one waits on the item row and finds it already off.
+create or replace function public.end_shared_all(p_item_id uuid, p_except_unit uuid)
+returns void language plpgsql security definer set search_path = '' as $$
+declare price bigint; unit_id uuid;
+begin
+  update public.items set shared_all = false where id = p_item_id and shared_all returning unit_price into price;
+  if not found then return; end if;
+  for unit_id in select id from public.item_units where item_id = p_item_id and id <> p_except_unit order by unit_index loop
+    perform public.split_unit_equally(unit_id, price);
+  end loop;
+end $$;
+revoke all on function public.end_shared_all(uuid, uuid) from public, anon, authenticated;
+
 -- "Split among everyone" now also covers people who join later.
 create or replace function public.share_item_equally(p_check_id uuid, p_item_id uuid)
 returns void language plpgsql security definer set search_path = '' as $$
@@ -93,7 +108,7 @@ begin
   actor := public.current_participant(parent_item.check_id);
   if actor is null then raise exception 'Join the check first'; end if;
   if exists(select 1 from public.item_shares where item_unit_id = p_item_unit and mode = 'custom') then raise exception 'This unit has a custom split'; end if;
-  if parent_item.shared_all then update public.items set shared_all = false where id = parent_id; end if;
+  perform public.end_shared_all(parent_id, p_item_unit);
   if p_enabled then
     insert into public.item_shares(item_unit_id, participant_id, amount, mode) values (p_item_unit, actor, 0, 'equal') on conflict (item_unit_id, participant_id) do nothing;
   else
@@ -117,7 +132,7 @@ begin
   ) then raise exception 'Invalid participant allocation'; end if;
   select coalesce(sum(e.value::bigint), 0) into total from jsonb_each_text(p_allocations) e;
   if total <> item_row.unit_price then raise exception 'Shares must equal the item unit price'; end if;
-  if item_row.shared_all then update public.items set shared_all = false where id = parent_id; end if;
+  perform public.end_shared_all(parent_id, p_item_unit);
   delete from public.item_shares where item_unit_id = p_item_unit;
   insert into public.item_shares(item_unit_id, participant_id, amount, mode)
   select p_item_unit, e.key::uuid, e.value::bigint, 'custom' from jsonb_each_text(p_allocations) e where e.value::bigint > 0;

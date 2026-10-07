@@ -90,6 +90,18 @@ describe('split among everyone, with guests arriving later', () => {
     const after = await assertSameTotals(t)
     assert.equal(after.items[0].sharedAll, false)
     assert.equal(calculateTotals(after)[2].due, 0, 'a guest after the hand-made change is not added')
+    assert.equal(assignedSubtotal(after), 6_000, 'the parts kept for the guests on the way go back to the people on each serving')
+  })
+  it('ends the rule on a custom split too, and leaves no part of the other servings unassigned', async () => {
+    const t = await table(db, 4)
+    const bread = await t.item('Хлеб', 3, 4_000)
+    await t.shareAll(bread)
+    const aziz = await t.join('Aziz')
+    const bill = await t.bill()
+    await db.rpc(t.owner, 'set_unit_custom_shares', { p_item_unit: bill.items[0].unitIds![0], p_allocations: { [t.people[0].id]: 1_000, [aziz.id]: 3_000 } })
+    const after = await assertSameTotals(t)
+    assert.equal(after.items[0].sharedAll, false)
+    assert.deepEqual(calculateTotals(after).map(person => person.due), [5_000, 7_000])
   })
 
   it('re-splits when the creator changes the number of guests or the servings', async () => {
