@@ -27,6 +27,8 @@
   const others = $derived(counts.filter(entry => entry.person.id !== me))
   const mine = $derived(counts.find(entry => entry.person.id === me)?.count ?? 0)
   const free = $derived(units.filter(unit => tappable(unit) && !consumers(unit).length))
+  // A serving nobody has marked yet: the line gets a pulsing dot, like an unread chat.
+  const open = $derived(units.some(unit => !isUnitAssigned(item, unit)))
   // "−" first gives back a serving this person had alone, the last one first.
   const giveBack = $derived(me ? units.filter(unit => tappable(unit) && has(unit, me)).sort((a, b) => consumers(a).length - consumers(b).length || b - a)[0] : undefined)
   const sharing = (id: string) => me ? units.find(unit => tappable(unit) && has(unit, id) && has(unit, me)) : undefined
@@ -63,9 +65,9 @@
 
 <svelte:window onclick={(e) => { if (menuOpen && !menu?.contains(e.target as Node)) menuOpen = false }} onkeydown={(e) => { if (e.key === 'Escape') menuOpen = false }} />
 
-<div class="bill-row" class:mine={mine > 0} class:open={units.some(unit => !isUnitAssigned(item, unit))} data-item={item.id}>
+<div class="bill-row" class:mine={mine > 0} class:open data-item={item.id}>
   <div class="bill-line">
-    <b class="bill-name">{item.name}</b>
+    <b class="bill-name">{#if open}<i class="unread-dot" role="img" title="Не всё отмечено" aria-label="Не всё отмечено"></i>{/if}{item.name}</b>
     <span class="bill-qty">{item.quantity}</span>
     <span class="bill-price">{formatAmount(item.unitPrice)}</span>
     {#if app.isOwner}
@@ -95,7 +97,6 @@
             <span class="car tone-{app.personIndex(person.id) % 5}">{label}</span>
           {/if}
         {/each}
-        {#if stepper && free.length && free.length < item.quantity}<span class="train-note">свободно {free.length}</span>{/if}
       </div>
     {/if}
 
@@ -104,16 +105,16 @@
         {#if stepper}
           <div class="portion-stepper" role="group" aria-label={`Ваши порции: ${item.name}`}>
             <button type="button" aria-label="Убрать одну порцию" disabled={giveBack === undefined} onclick={() => tap('stepper', giveBack)}>−</button>
-            <span aria-live="polite">Вы {#key mine}<b class:bump={tapped === 'stepper'}>{portionCount(mine)}</b>{/key}</span>
+            <span aria-live="polite">{#key mine}<b class:bump={tapped === 'stepper'}>{portionCount(mine)}</b>{/key}</span>
             <button type="button" aria-label="Взять ещё порцию" title={free.length ? '' : 'Свободных порций нет'} disabled={!free.length} onclick={() => tap('stepper', free[0])}>+</button>
           </div>
         {:else if tappable(0)}
-          <button class="mine-toggle" class:active={mine > 0} class:pop={tapped === 'mine'} aria-pressed={mine > 0} onclick={() => tap('mine', 0)}>{mine > 0 ? '✓ Моё' : 'Моё'}</button>
+          <button class="mine-toggle" class:active={mine > 0} class:pop={tapped === 'mine'} aria-pressed={mine > 0} title="Моё" onclick={() => tap('mine', 0)}>{mine > 0 ? '✓ Я' : 'Я'}</button>
         {/if}
       {/if}
       <!-- Only the creator splits among everyone; then nobody can mark the item until they switch it off. -->
       {#if app.isOwner && (sharedAll || parts > 1)}
-        <button class="mine-toggle everyone" class:active={sharedAll} aria-pressed={sharedAll} disabled={app.busy} onclick={toggleEveryone}>{sharedAll ? '✓ На всех' : 'На всех'}</button>
+        <button class="mine-toggle everyone" class:active={sharedAll} aria-pressed={sharedAll} title="На всех" disabled={app.busy} onclick={toggleEveryone}>{sharedAll ? '✓ Все' : 'Все'}</button>
       {/if}
     </div>
   </div>

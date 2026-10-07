@@ -3,18 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="color-scheme" content="light dark" />
-    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#e8ece8" data-default="#e8ece8" />
-    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#24282b" data-default="#24282b" />
+    <meta name="color-scheme" content="light" />
+    <meta name="theme-color" content="#eef0ec" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <meta name="apple-mobile-web-app-title" content="Рядом" />
     <title>Рядом — разделите счёт легко</title>
-    <script>
-      // Apply a saved light/dark choice before first paint; no saved choice means follow the system.
-      try { const theme = localStorage.getItem('billsplit:theme'); if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = theme } catch {}
-    </script>
   </head>
   <body>
     <div id="app"></div>

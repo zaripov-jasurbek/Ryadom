@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { app } from './lib/store.svelte'
-  import { restoreTheme } from './lib/theme.svelte'
   import Header from './components/Header.svelte'
   import HomePage from './components/HomePage.svelte'
   import CreatePage from './components/CreatePage.svelte'
@@ -14,7 +13,7 @@
   import PeopleModal from './components/PeopleModal.svelte'
   import PayDetailsModal from './components/PayDetailsModal.svelte'
 
-  onMount(() => { restoreTheme(); return app.init() })
+  onMount(() => app.init())
 
   // The scanner (its window, OCR and receipt parser) loads only once someone opens it; Tesseract and its models
   // load later still, when a photo is chosen.

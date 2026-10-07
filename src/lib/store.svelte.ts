@@ -73,7 +73,6 @@ class AppStore {
   unassignedTotal = $derived(this.bill ? totalFood(this.bill) - assignedSubtotal(this.bill) : 0)
   /** The creator paid the restaurant, so their own share counts as settled. */
   ownerId = $derived(this.bill ? ownerIdOf(this.bill) : undefined)
-  paidAll = $derived(this.totals.reduce((sum, person) => sum + (person.id === this.ownerId ? person.due : person.paid), 0))
   allConfirmed = $derived(Boolean(this.bill && this.unassignedTotal <= 0 && this.bill.items.length && this.totals.every(person => person.id === this.ownerId || person.status === 'paid' || person.due === 0)))
   currentParticipant = $derived(this.bill?.participants.find(person => person.id === this.selectedPerson))
   currentTotal = $derived(this.totals.find(person => person.id === this.selectedPerson))

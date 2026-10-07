@@ -1,16 +1,9 @@
 <script lang="ts">
   import { formatUzs, type ParticipantTotal } from '../lib/calculations'
-  import { saveImage, saveText, summaryText } from '../lib/export'
-  import { expiryDate, initial } from '../lib/format'
-  import { expiresAt, limits } from '../lib/limits'
+  import { initial } from '../lib/format'
+  import { limits } from '../lib/limits'
   import { app } from '../lib/store.svelte'
-  import PaymentDetails from './PaymentDetails.svelte'
-  import Amount from './Amount.svelte'
 
-  const bill = $derived(app.bill!)
-  const percent = (part: number, whole: number) => whole ? Math.min(100, part / whole * 100) : 0
-  const paidPercent = $derived(percent(app.paidAll, app.billTotal))
-  const text = () => summaryText(bill, app.billTotal, app.totals, app.ownerId)
   // You first, then the rest in the order they joined.
   const people = $derived([...app.totals].sort((a, b) => Number(b.id === app.selectedPerson) - Number(a.id === app.selectedPerson)))
 
@@ -45,12 +38,11 @@
   <span class="person-avatar tone-{app.personIndex(person.id) % 5}">{initial(person.name)}</span>
   <span class="summary-person-name">
     {#if app.selectedPerson === person.id}
-      <!-- Your own line is "вы"; the field shows the name others see and takes a new one. -->
+      <!-- Your own line: the name others see, typed over in place. -->
       {@const named = Boolean(app.savedName) && person.name === app.savedName}
       <span class="name-row">
         <input class="name-input" value={named ? person.name : ''} placeholder={person.name} maxlength={limits.nameLength} autocomplete="given-name" enterkeyhint="done" aria-label="Ваше имя для остальных"
           onchange={(e) => rename(e.currentTarget, person.name)} onkeydown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }} />
-        <b>вы</b>
       </span>
     {:else}
       <b>{person.name}</b>
@@ -66,49 +58,23 @@
   {#if app.isOwner && person.status === 'proof_submitted'}<span class="confirm-hint">Подтвердить</span>{/if}
 {/snippet}
 
-<section class="summary-section" aria-label="Итог">
-  <div class="panel summary-card">
-    <div class="summary-title">
-      <h2>Итог</h2>
-      <small>Оплачено {formatUzs(app.paidAll)} из <Amount value={app.billTotal} /></small>
+<!-- Who owes what, right under the check's total. -->
+<div class="bill-people" aria-label="Кто сколько должен">
+  {#each people as person (person.id)}
+    {@const reviewable = app.isOwner && person.id !== app.ownerId && (person.status === 'proof_submitted' || person.status === 'paid')}
+    <div class="summary-person" class:is-me={app.selectedPerson === person.id}>
+      <!-- The creator confirms a payment by tapping the person, and taps again to take it back. -->
+      {#if reviewable}
+        <button type="button" class="summary-person-main" disabled={app.busy} onclick={() => review(person)}>{@render row(person)}</button>
+      {:else}
+        <div class="summary-person-main">{@render row(person)}</div>
+      {/if}
+      {#if mine && person.id === mine.id && mine.due > 0}
+        <form class="pay-inline" onsubmit={pay}>
+          <span class="suffix-input"><input type="number" min="0" step="1" inputmode="numeric" aria-label="Сколько вы перевели" value={amount} oninput={(e) => typed = e.currentTarget.value === '' ? 0 : Number(e.currentTarget.value)} /><span>сум</span></span>
+          <button class="accent-button" disabled={app.busy || unchanged}>{unchanged ? '✓ Перевёл' : 'Перевёл'}</button>
+        </form>
+      {/if}
     </div>
-    <div class="progress-track" role="progressbar" aria-label="Весь стол оплатил" aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(paidPercent)}><i style={`width:${paidPercent}%`}></i></div>
-
-    {#each people as person (person.id)}
-      {@const reviewable = app.isOwner && person.id !== app.ownerId && (person.status === 'proof_submitted' || person.status === 'paid')}
-      <div class="summary-person" class:is-me={app.selectedPerson === person.id}>
-        <!-- The creator confirms a payment by tapping the person, and taps again to take it back. -->
-        {#if reviewable}
-          <button type="button" class="summary-person-main" disabled={app.busy} onclick={() => review(person)}>{@render row(person)}</button>
-        {:else}
-          <div class="summary-person-main">{@render row(person)}</div>
-        {/if}
-        {#if mine && person.id === mine.id && mine.due > 0}
-          <form class="pay-inline" onsubmit={pay}>
-            <span class="suffix-input"><input type="number" min="0" step="1" inputmode="numeric" aria-label="Сколько вы перевели" value={amount} oninput={(e) => typed = e.currentTarget.value === '' ? 0 : Number(e.currentTarget.value)} /><span>сум</span></span>
-            <button class="accent-button" disabled={app.busy || unchanged}>{unchanged ? '✓ Перевёл' : 'Перевёл'}</button>
-          </form>
-        {/if}
-      </div>
-    {/each}
-  </div>
-
-  {#if app.isOwner && bill.paymentDetails}
-    <div class="panel pay-card owner-pay"><PaymentDetails details={bill.paymentDetails} /><button class="ghost-button" onclick={() => app.payDetailsOpen = true}>Изменить</button></div>
-  {:else if app.isOwner}
-    <button class="notice info" onclick={() => app.payDetailsOpen = true}><span aria-hidden="true">💳</span><div><b>Куда гостям переводить?</b><small>Номер карты или телефона</small></div><span class="notice-action">Добавить →</span></button>
-  {/if}
-
-  <div class="panel export-card" class:all-paid={app.allConfirmed}>
-    <div class="export-text">
-      {#if app.allConfirmed}<span class="done-mark" aria-hidden="true">✓</span>{/if}
-      <div><b>{app.allConfirmed ? 'Все рассчитались' : 'Поделиться итогом'}</b><small class="muted">Чек удалится {expiryDate.format(expiresAt(bill.createdAt))}</small></div>
-    </div>
-    <div class="chip-row">
-      <button class="chip" onclick={() => app.copy(text(), 'Итог скопирован')}>Копировать</button>
-      <button class="chip" onclick={() => saveImage(bill, app.billTotal, app.totals, app.ownerId)}>Картинка</button>
-      <button class="chip" onclick={() => window.print()}>PDF</button>
-      <button class="chip" onclick={() => saveText(bill.title, text())}>Текст</button>
-    </div>
-  </div>
-</section>
+  {/each}
+</div>
