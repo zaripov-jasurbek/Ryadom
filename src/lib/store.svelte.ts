@@ -1,6 +1,6 @@
-import { assignedSubtotal, calculateTotals, ownerIdOf, serviceFee, withSelection, type Bill, type BillItem, type CommentMessage, type Participant } from './calculations'
+import { assignedSubtotal, calculateTotals, ownerIdOf, serviceFee, withSelection, type Bill, type BillItem, type Participant } from './calculations'
 import { errorMessage } from './errors'
-import { addRemoteComment, addRemoteItem, addRemoteItems, updateRemoteCheck, updateRemoteItem, shareRemoteItemEqually, unshareRemoteItem, claimRemoteCheckOwner, confirmRemotePayment, createRemoteCheck, deleteRemoteCheck, deleteRemoteComment, deleteRemoteItem, ensureAnonymousSession, isRemoteCheckGone, joinRemoteCheck, loadRemoteCheck, previewRemoteCheck, removeRemoteParticipant, resetRemoteCustomShares, setRemoteCustomShares, submitRemotePayment, subscribeToRemoteCheck, toggleRemoteUnit, unconfirmRemotePayment, type PresenceUser, type RemoteBill, type RemoteSubscription } from './remote'
+import { addRemoteItem, addRemoteItems, updateRemoteCheck, updateRemoteItem, shareRemoteItemEqually, unshareRemoteItem, claimRemoteCheckOwner, confirmRemotePayment, createRemoteCheck, deleteRemoteCheck, deleteRemoteItem, ensureAnonymousSession, isRemoteCheckGone, joinRemoteCheck, loadRemoteCheck, previewRemoteCheck, removeRemoteParticipant, resetRemoteCustomShares, setRemoteCustomShares, submitRemotePayment, subscribeToRemoteCheck, toggleRemoteUnit, unconfirmRemotePayment, type PresenceUser, type RemoteBill, type RemoteSubscription } from './remote'
 import { checkPath, homePath, readOwnerToken, routeCheckId } from './routes'
 import { preloadSupabase } from './supabase'
 import { expiresAt } from './limits'
@@ -13,11 +13,9 @@ const personKey = (billId: string) => `billsplit:person:${billId}`
 /** A guest's join token: this browser gets its participant back after losing its Supabase session. */
 const guestKey = (billId: string) => `billsplit:guest:${billId}`
 const nameKey = 'billsplit:name'
-/** When this browser last looked at a check's chat, for the unread badge on the tab. */
-const seenKey = (billId: string) => `billsplit:seen:${billId}`
 
-/** The check page's bottom menu: items, payment, chat; its fourth button invites people. */
-export type CheckTab = 'order' | 'pay' | 'chat'
+/** The check page's bottom menu: items and payment; its third button invites people. */
+export type CheckTab = 'order' | 'pay'
 
 function parseBills(raw: string | null): Bill[] | null {
   if (raw === null) return null
@@ -48,8 +46,6 @@ class AppStore {
   online = $state(typeof navigator === 'undefined' || navigator.onLine)
   toast = $state('')
   activeTab = $state<CheckTab>('order')
-  /** Time of the newest comment seen in the chat tab; later ones from other people count as unread. */
-  commentsSeen = $state('')
   pendingUnits = $state<Record<string, true>>({})
   // Overlays live here so Escape can close whichever one is open.
   addItemOpen = $state(false)
@@ -78,8 +74,6 @@ class AppStore {
   allConfirmed = $derived(Boolean(this.bill && this.unassignedTotal <= 0 && this.bill.items.length && this.totals.every(person => person.id === this.ownerId || person.status === 'paid' || person.due === 0)))
   currentParticipant = $derived(this.bill?.participants.find(person => person.id === this.selectedPerson))
   currentTotal = $derived(this.totals.find(person => person.id === this.selectedPerson))
-  // Server timestamps share one ISO format, so they compare as strings.
-  unreadComments = $derived((this.bill?.comments ?? []).filter(comment => comment.participantId !== this.selectedPerson && comment.createdAt > this.commentsSeen).length)
   participantIndex = $derived(new Map(this.bill?.participants.map((person, index) => [person.id, index]) ?? []))
 
   private remote: RemoteSubscription | null = null
@@ -169,7 +163,6 @@ class AppStore {
   private show(bill: Bill, owner: boolean) {
     this.bill = bill; this.isOwner = owner; this.mode = 'check'; this.activeTab = 'order'; this.itemFilter = 'all'
     this.selectedPerson = readStorage(personKey(bill.id))
-    this.commentsSeen = readStorage(seenKey(bill.id)) ?? ''
     void this.connect(bill)
   }
 
@@ -206,14 +199,7 @@ class AppStore {
   /** Removes a check from this device's list only; it stays available to everyone else by its link. */
   forgetBill(id: string) {
     this.updateBills(bills => bills.filter(entry => entry.id !== id))
-    writeStorage(personKey(id), null); writeStorage(guestKey(id), null); writeStorage(seenKey(id), null)
-  }
-
-  /** Marks the chat as read up to its newest comment. */
-  markCommentsSeen() {
-    const bill = this.bill, last = bill?.comments?.at(-1)?.createdAt
-    if (!bill || !last || last === this.commentsSeen) return
-    this.commentsSeen = last; writeStorage(seenKey(bill.id), last)
+    writeStorage(personKey(id), null); writeStorage(guestKey(id), null)
   }
 
   // ---- realtime ----
@@ -292,7 +278,7 @@ class AppStore {
       const created = await createRemoteCheck(title, servicePercent, ownerName, ownerToken, paymentDetails, expectedGuests)
       bill = { id: created.public_id, dbId: created.id, title, servicePercent, paymentDetails: paymentDetails || undefined, expectedGuests: expectedGuests ?? undefined, ownerId: created.participant_id, participants: [{ id: created.participant_id, name: ownerName, paid: 0, status: 'unpaid' }], items: [], createdAt: new Date().toISOString(), ownerToken }
     } catch (error) { this.fail(error, 'Не удалось создать чек'); return } finally { this.busy = false }
-    this.bill = bill; this.isOwner = true; this.token = ownerToken; this.mode = 'check'; this.activeTab = 'order'; this.commentsSeen = ''
+    this.bill = bill; this.isOwner = true; this.token = ownerToken; this.mode = 'check'; this.activeTab = 'order'
     this.selectedPerson = bill.participants[0].id; writeStorage(personKey(bill.id), this.selectedPerson)
     history.pushState({}, '', checkPath(bill.id))
     this.save()
@@ -316,7 +302,7 @@ class AppStore {
       else { sessionToken = readStorage(guestKey(this.joinPublicId)) ?? sessionToken; writeStorage(guestKey(this.joinPublicId), sessionToken) }
       await joinRemoteCheck(this.joinPublicId, name, sessionToken)
       const loaded = await loadRemoteCheck(this.joinPublicId)
-      this.applyRemote(loaded); this.mode = 'check'; this.activeTab = 'order'; this.commentsSeen = readStorage(seenKey(loaded.id)) ?? ''
+      this.applyRemote(loaded); this.mode = 'check'; this.activeTab = 'order'
       history.replaceState({}, '', checkPath(loaded.id))
       await this.connect(loaded)
       return ''
@@ -428,15 +414,6 @@ class AppStore {
     return this.mutate('Не удалось подтвердить оплату', dbId => confirmRemotePayment(dbId, personId), 'Оплата подтверждена')
   }
 
-  addComment(body: string) {
-    if (!this.selectedPerson) return Promise.resolve(false)
-    return this.mutate('Не удалось отправить комментарий', dbId => addRemoteComment(dbId, null, body))
-  }
-
-  deleteComment(comment: CommentMessage) {
-    return this.mutate('Не удалось удалить комментарий', () => deleteRemoteComment(comment.id))
-  }
-
   async removeParticipant(person: Participant) {
     const removed = await this.mutate('Не удалось удалить участника', dbId => removeRemoteParticipant(dbId, person.id))
     if (removed && this.selectedPerson === person.id && this.bill) { this.selectedPerson = null; writeStorage(personKey(this.bill.id), null) }
@@ -449,7 +426,7 @@ class AppStore {
     this.forget('Чек удалён')
   }
 
-  /** The invitation for the chat: a phone opens its share sheet, a computer copies the link. */
+  /** The invitation for a messenger: a phone opens its share sheet, a computer copies the link. */
   invite() {
     const bill = this.bill
     if (!bill) return

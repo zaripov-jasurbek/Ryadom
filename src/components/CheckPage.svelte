@@ -5,7 +5,6 @@
   import { app, type CheckTab } from '../lib/store.svelte'
   import ItemCard from './ItemCard.svelte'
   import SummaryPanel from './SummaryPanel.svelte'
-  import Comments from './Comments.svelte'
   import ThemeToggle from './ThemeToggle.svelte'
 
   const bill = $derived(app.bill!)
@@ -34,7 +33,7 @@
   // The next step for a guest who has marked something and not paid yet.
   const payNudge = $derived(Boolean(me && me.due && (me.status === 'unpaid' || me.status === 'partially_paid')))
 
-  const tabs: { id: CheckTab; label: string }[] = [{ id: 'order', label: 'Позиции' }, { id: 'pay', label: 'Оплата' }, { id: 'chat', label: 'Чат' }]
+  const tabs: { id: CheckTab; label: string }[] = [{ id: 'order', label: 'Позиции' }, { id: 'pay', label: 'Оплата' }]
 
   function select(tab: CheckTab) {
     if (app.activeTab === tab) { window.scrollTo({ top: 0, behavior: 'smooth' }); return }
@@ -51,7 +50,6 @@
   <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
     {#if name === 'order'}<path d="M6 3h12v18l-3-2-3 2-3-2-3 2z" /><path d="M9 8h6M9 12h6M9 16h3" />
     {:else if name === 'pay'}<path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H17v2.5" /><path d="M4 7.5V17a2 2 0 0 0 2 2h13a1 1 0 0 0 1-1V9a1 1 0 0 0-1-1H6.5A2.5 2.5 0 0 1 4 7.5z" /><circle cx="16" cy="13.5" r="1" />
-    {:else if name === 'chat'}<path d="M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H9l-5 4z" />
     {:else}<circle cx="10" cy="8" r="3.4" /><path d="M3.5 19.5c.7-3.4 3.2-5.3 6.5-5.3 1.6 0 3 .4 4.1 1.2" /><path d="M18 14v6M15 17h6" />{/if}
   </svg>
 {/snippet}
@@ -74,7 +72,7 @@
     {#if app.isOwner}<button class="icon-button" aria-label="Настройки чека" title="Настройки чека" onclick={() => app.checkEditOpen = true}>✎</button>{/if}
   </header>
 
-  {#if app.unassignedTotal > 0 && app.activeTab !== 'chat'}
+  {#if app.unassignedTotal > 0}
     <button class="notice warning unassigned-notice" onclick={showUnassigned}><span aria-hidden="true">◌</span><div>{#if app.isOwner}<b>{formatUzs(app.unassignedTotal)} ещё не распределено</b><small>Отметьте, кто это ел</small>{:else}<b>{formatUzs(app.unassignedTotal)} ещё никто не отметил</b><small>Проверьте, нет ли вашего</small>{/if}</div>{#if app.activeTab !== 'order' || app.itemFilter !== 'open'}<span class="notice-action">Показать →</span>{/if}</button>
   {/if}
 
@@ -122,18 +120,16 @@
         </div>
       {/if}
     </div>
-  {:else if app.activeTab === 'pay'}
-    <SummaryPanel />
   {:else}
-    <Comments />
+    <SummaryPanel />
   {/if}
 
   <nav class="tab-bar" aria-label="Разделы чека">
     <div class="tab-list" role="tablist">
     {#each tabs as tab (tab.id)}
-      {@const badge = tab.id === 'pay' ? toConfirm : tab.id === 'chat' ? app.unreadComments : 0}
+      {@const badge = tab.id === 'pay' ? toConfirm : 0}
       <button role="tab" id="tab-{tab.id}" aria-controls="panel-{tab.id}" aria-selected={app.activeTab === tab.id} class:active={app.activeTab === tab.id} onclick={() => select(tab.id)}>
-        <span class="tab-icon">{@render icon(tab.id)}{#if badge}<span class="tab-badge" aria-label={tab.id === 'pay' ? `Ждут подтверждения: ${badge}` : `Новых сообщений: ${badge}`}>{badge > 9 ? '9+' : badge}</span>{:else if tab.id === 'pay' && payNudge && app.activeTab !== 'pay'}<span class="tab-dot" aria-hidden="true"></span>{/if}</span>
+        <span class="tab-icon">{@render icon(tab.id)}{#if badge}<span class="tab-badge" aria-label={`Ждут подтверждения: ${badge}`}>{badge > 9 ? '9+' : badge}</span>{:else if tab.id === 'pay' && payNudge && app.activeTab !== 'pay'}<span class="tab-dot" aria-hidden="true"></span>{/if}</span>
         <span class="tab-label">{tab.id === 'pay' ? payLabel : tab.label}</span>
       </button>
     {/each}

@@ -79,8 +79,6 @@ export const unshareRemoteItem = (checkId: string, itemId: string) => call('unsh
 export const unconfirmRemotePayment = (checkId: string, participantId: string) => call('unconfirm_payment', { p_check_id: checkId, p_participant_id: participantId })
 export const deleteRemoteItem = (checkId: string, itemId: string) => call('delete_item', { p_check_id: checkId, p_item_id: itemId })
 export const toggleRemoteUnit = (unitId: string, enabled: boolean) => call('toggle_unit_share', { p_item_unit: unitId, p_enabled: enabled })
-export const addRemoteComment = (checkId: string, itemId: string | null, body: string) => call('add_comment', { p_check_id: checkId, p_item_id: itemId, p_body: body })
-export const deleteRemoteComment = (commentId: string) => call('delete_comment', { p_comment_id: commentId })
 export const removeRemoteParticipant = (checkId: string, participantId: string) => call('remove_participant', { p_check_id: checkId, p_participant_id: participantId })
 export const setRemoteCustomShares = (unitId: string, allocations: Record<string, number>) => call('set_unit_custom_shares', { p_item_unit: unitId, p_allocations: allocations })
 export const resetRemoteCustomShares = (unitId: string) => call('reset_unit_custom_shares', { p_item_unit: unitId })
