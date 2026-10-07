@@ -84,10 +84,13 @@
   </div>
 {/snippet}
 
+<!-- For the creator the label is the switch, like «Моё»: a tap ends "split among everyone". -->
 {#snippet everyoneNote()}
-  <div class="unit-consumers shared-all">
+  {#if app.isOwner}
+    <button class="mine-toggle active" aria-pressed="true" title="Отключить" disabled={app.busy} onclick={() => { haptic.selection(); void app.unshareItem(item) }}>✓ На всех</button>
+  {:else}
     <span class="consumer-pill everyone-pill">На всех</span>
-  </div>
+  {/if}
 {/snippet}
 
 {#snippet mineButton(unit: number)}
@@ -107,9 +110,8 @@
       <b>{item.name}</b>
       <span class="muted">{formatUzs(item.unitPrice)}{item.quantity > 1 ? ` × ${item.quantity} = ${formatUzs(item.unitPrice * item.quantity)}` : ''}</span>
     </div>
-    {#if !stepper && sharedAll}{@render everyoneNote()}
-    {:else if !stepper}{@render people(0)}{/if}
-    {#if !stepper && !sharedAll}<div class="item-action">{@render mineButton(0)}</div>{/if}
+    {#if !stepper && sharedAll}<div class="item-action">{@render everyoneNote()}</div>
+    {:else if !stepper}{@render people(0)}<div class="item-action">{@render mineButton(0)}</div>{/if}
     {#if app.isOwner}
       <div class="item-menu" bind:this={menu}>
         <button class="icon-button" aria-haspopup="menu" aria-expanded={menuOpen} aria-label={`Действия с позицией «${item.name}»`} title="Действия" onclick={() => menuOpen = !menuOpen}>⋯</button>
@@ -117,8 +119,7 @@
           <div class="menu-popover" role="menu">
             <button role="menuitem" onclick={() => fromMenu(() => app.editingItem = item)}>✎ Изменить</button>
             {#if canShareAll}<button role="menuitem" disabled={app.busy} onclick={() => fromMenu(() => void shareWithEveryone())}>÷ Поровну на всех · {parts}</button>{/if}
-            {#if sharedAll}<button role="menuitem" disabled={app.busy} onclick={() => fromMenu(() => void app.unshareItem(item))}>✕ Убрать «на всех»</button>
-            {:else if !stepper}<button role="menuitem" onclick={() => fromMenu(() => toggleEditor('0'))}>⚖ Доли вручную</button>{/if}
+            {#if !stepper && !sharedAll}<button role="menuitem" onclick={() => fromMenu(() => toggleEditor('0'))}>⚖ Доли вручную</button>{/if}
             <button role="menuitem" class="danger" onclick={() => fromMenu(() => void remove())}>🗑 Удалить</button>
           </div>
         {/if}
@@ -126,7 +127,7 @@
     {/if}
   </div>
   {#if !stepper && !sharedAll && app.editingUnit === `${item.id}:0`}<CustomShareEditor {item} unit={0} />{/if}
-  <!-- Split among everyone: nothing to mark or split by hand until the creator ends it in the menu. -->
+  <!-- Split among everyone: nothing to mark or split by hand until the creator switches it off. -->
   {#if stepper && sharedAll}
     <div class="portion-summary">{@render everyoneNote()}</div>
   {:else if stepper}
