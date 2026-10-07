@@ -98,8 +98,6 @@ export function isUnitAssigned(item: BillItem, unit: number): boolean {
   return item.unitModes?.[key] === 'custom' || Boolean(item.unitSelections[key]?.length)
 }
 
-export const hasUnassignedUnit = (item: BillItem) => Array.from({ length: item.quantity }, (_, unit) => unit).some(unit => !isUnitAssigned(item, unit))
-
 /** What is already on someone's total; parts kept for guests who have not joined yet are not. */
 export function assignedSubtotal(bill: Pick<Bill, 'items' | 'participants'>): number {
   let sum = 0
@@ -107,17 +105,10 @@ export function assignedSubtotal(bill: Pick<Bill, 'items' | 'participants'>): nu
   return sum
 }
 
-/** "пополам", "на троих" … for a serving shared by that many people. */
-export function splitWord(people: number): string {
-  const words = ['', '', 'пополам', 'на троих', 'на четверых', 'на пятерых', 'на шестерых', 'на семерых', 'на восьмерых', 'на девятерых', 'на десятерых']
-  return words[people] ?? `на ${people}`
-}
-
-/** A shared_all item: how many parts each serving is cut into, how many people are here, and each one's share. */
+/** A shared_all item: how many parts each serving is cut into, and each one's share. */
 export function sharedAllInfo(item: BillItem, bill: Pick<Bill, 'participants' | 'expectedGuests'>) {
-  const present = bill.participants.length
-  const parts = Math.max(present, bill.expectedGuests ?? 0)
-  return { parts, present, waiting: parts - present, perPerson: Math.floor(item.unitPrice / Math.max(1, parts)) * item.quantity }
+  const parts = Math.max(bill.participants.length, bill.expectedGuests ?? 0)
+  return { parts, perPerson: Math.floor(item.unitPrice / Math.max(1, parts)) * item.quantity }
 }
 
 // ru-RU groups thousands with a non-breaking space everywhere; uz-UZ gives "60,134" in some browsers and "60 134" in others.

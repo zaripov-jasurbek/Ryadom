@@ -74,7 +74,6 @@ class AppStore {
   /** The creator paid the restaurant, so their own share counts as settled. */
   ownerId = $derived(this.bill ? ownerIdOf(this.bill) : undefined)
   allConfirmed = $derived(Boolean(this.bill && this.unassignedTotal <= 0 && this.bill.items.length && this.totals.every(person => person.id === this.ownerId || person.status === 'paid' || person.due === 0)))
-  currentParticipant = $derived(this.bill?.participants.find(person => person.id === this.selectedPerson))
   currentTotal = $derived(this.totals.find(person => person.id === this.selectedPerson))
   participantIndex = $derived(new Map(this.bill?.participants.map((person, index) => [person.id, index]) ?? []))
 
@@ -87,7 +86,6 @@ class AppStore {
 
   personIndex = (id: string) => this.participantIndex.get(id) ?? 0
   personName = (id: string) => this.bill?.participants[this.participantIndex.get(id) ?? -1]?.name ?? 'Участник'
-  dueOf = (id: string) => this.totals.find(person => person.id === id)?.due ?? 0
   personOf = (billId: string) => readStorage(personKey(billId))
   publicLink = () => this.bill ? `${location.origin}${checkPath(this.bill.id)}` : ''
 

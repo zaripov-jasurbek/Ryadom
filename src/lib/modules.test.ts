@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { billStanding, calculateTotals, personItems, type Bill, type BillItem, type PaymentStatus } from './calculations.ts'
 import { readOwnerToken, routeCheckId } from './routes.ts'
 import { errorMessage } from './errors.ts'
-import { safeFileName, summaryText } from './export.ts'
+import { detailLines, paymentLine, safeFileName } from './export.ts'
 import { paymentCopyValue, portionCount } from './format.ts'
 import { installHintFor } from './platform.ts'
 
@@ -48,7 +48,7 @@ describe('check summaries', () => {
     assert.deepEqual(personItems(halves, '1').map(line => line.sharedAll), [false])
     const everyone = withItems({ ...item('bread', 'Хлеб', 2, 3_000, { '0': ['0', '1'], '1': ['0', '1'] }), sharedAll: true })
     assert.deepEqual(personItems(everyone, '0').map(line => line.sharedAll), [true])
-    assert.match(summaryText(everyone, 6_000, calculateTotals(everyone), '0'), /• Хлеб \(на всех\) — 3\s000\sсум/)
+    assert.match(detailLines(everyone, calculateTotals(everyone)[0]).join('\n'), /^Хлеб \(на всех\) — 3\s000\sсум$/)
   })
 
   it('tells the creator what is still owed and a guest what they still owe', () => {
@@ -132,14 +132,16 @@ describe('export', () => {
   })
   it('says the creator paid the bill instead of what they still owe', () => {
     const bill = withItems(item('tea', 'Чай', 2, 10_000, { '0': ['0'], '1': ['1'] }))
-    const lines = summaryText(bill, 20_000, calculateTotals(bill), '0').split('\n')
-    assert.match(lines[3], /^Jasur: .* · платил по счёту$/)
-    assert.match(lines.find(line => line.startsWith('Aziz:'))!, /^Aziz: .* · осталось /)
+    const [jasur, aziz] = calculateTotals(bill)
+    assert.equal(paymentLine(jasur, '0'), 'платил по счёту')
+    assert.match(paymentLine(aziz, '0'), /^оплачено .* · осталось /)
   })
   it('lists what each amount is made of under the name', () => {
     const bill = { ...withItems(item('tea', 'Чай', 2, 10_000, { '0': ['0'], '1': ['0', '1'] })), servicePercent: 10 }
-    const text = summaryText(bill, 22_000, calculateTotals(bill), '0')
-    assert.match(text, /Jasur: [^\n]*\n {2}• Чай × 2 \(доля\) — 15\s000\sсум\n {2}• Обслуживание 10% — /)
-    assert.match(text, /Aziz: [^\n]*\n {2}• Чай \(доля\) — 5\s000\sсум/)
+    const [jasur, aziz] = calculateTotals(bill)
+    const [tea, service] = detailLines(bill, jasur)
+    assert.match(tea, /^Чай × 2 \(доля\) — 15\s000\sсум$/)
+    assert.match(service, /^Обслуживание 10% — /)
+    assert.match(detailLines(bill, aziz)[0], /^Чай \(доля\) — 5\s000\sсум$/)
   })
 })
