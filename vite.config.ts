@@ -1,4 +1,5 @@
 import { svelte } from '@sveltejs/vite-plugin-svelte'
+import { execSync } from 'node:child_process'
 import { createReadStream, readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
@@ -7,6 +8,11 @@ import { defineConfig, type Plugin } from 'vite'
 const [owner, repo] = process.env.GITHUB_REPOSITORY?.split('/') ?? []
 const isUserSite = Boolean(owner && repo === owner + '.github.io')
 const base = process.env.NODE_ENV === 'production' && repo && !isUserSite ? '/' + repo + '/' : '/'
+
+// The release workflow bumps package.json together with the vX.Y.Z tag; the commit tells builds of the same version apart.
+const { version } = JSON.parse(readFileSync(new URL('package.json', import.meta.url), 'utf8')) as { version: string }
+let commit = ''
+try { commit = execSync('git rev-parse --short HEAD', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() } catch {}
 
 /**
  * Receipt OCR runs entirely in the browser, so Tesseract's worker, WASM core and language models
@@ -47,4 +53,8 @@ function tesseractAssets(): Plugin {
 export default defineConfig({
   plugins: [svelte(), tesseractAssets()],
   base,
+  define: {
+    __APP_VERSION__: JSON.stringify(version),
+    __APP_COMMIT__: JSON.stringify(commit),
+  },
 })

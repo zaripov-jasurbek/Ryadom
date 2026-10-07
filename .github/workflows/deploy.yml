@@ -1,8 +1,19 @@
 name: Deploy to GitHub Pages
+# Публикуется только релиз: release.yml вызывает этот workflow с новым тегом. Вручную (Actions → Run workflow)
+# можно передеплоить любой тег или ветку.
 on:
-  push:
-    branches: [main, master]
+  workflow_call:
+    inputs:
+      ref:
+        description: Тег или ветка для публикации
+        type: string
+        required: true
   workflow_dispatch:
+    inputs:
+      ref:
+        description: Тег или ветка для публикации (пусто — выбранная выше ветка)
+        type: string
+        required: false
 permissions:
   contents: read
   pages: write
@@ -15,6 +26,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22

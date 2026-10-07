@@ -51,6 +51,20 @@ Unit tests проверяют разбор распознанного текст
 
 ## GitHub Pages
 
-Workflow `.github/workflows/deploy.yml` публикует `main` или `master` через GitHub Actions. В настройках репозитория откройте **Settings → Pages** и выберите **GitHub Actions** в качестве источника публикации. В **Settings → Secrets and variables → Actions → Variables** добавьте `VITE_SUPABASE_URL` и `VITE_SUPABASE_ANON_KEY` (Supabase project URL и publishable/anon key). Эти значения публичны в браузерном приложении; `service_role` key сюда добавлять нельзя.
+Сайт публикуется только при новом релизе (см. «Версии и релизы» ниже): `.github/workflows/release.yml` вызывает `.github/workflows/deploy.yml` с новым тегом. Передеплоить вручную можно в **Actions → Deploy to GitHub Pages → Run workflow**, указав тег (например, `v0.2.0`) или оставив поле пустым для выбранной ветки. В настройках репозитория откройте **Settings → Pages** и выберите **GitHub Actions** в качестве источника публикации. В **Settings → Secrets and variables → Actions → Variables** добавьте `VITE_SUPABASE_URL` и `VITE_SUPABASE_ANON_KEY` (Supabase project URL и publishable/anon key). Эти значения публичны в браузерном приложении; `service_role` key сюда добавлять нельзя.
 
 Для Supabase создайте проект и включите **Authentication → Sign In / Providers → Anonymous Sign-Ins**. Workflow `.github/workflows/supabase-migrations.yml` применяет новые миграции при изменениях в `supabase/migrations` на `main`/`master`; его также можно запустить вручную. Для подключения добавьте в **Settings → Secrets and variables → Actions** секреты `SUPABASE_ACCESS_TOKEN` (Supabase personal access token) и `SUPABASE_DB_PASSWORD` (пароль базы данных), а в **Variables** — `SUPABASE_PROJECT_REF` (ID проекта из URL панели Supabase). Если схему уже применяли вручную через SQL Editor, workflow сам это обнаружит (таблица `public.checks` есть, а в истории миграций нет `202610010001`), пометит начальную миграцию как применённую и затем применит остальные. Запустить его вручную можно в **Actions → Apply Supabase migrations**. В **Authentication → URL Configuration** добавьте URL опубликованного GitHub Pages сайта в **Site URL** и **Redirect URLs**. Для публикации сайта настройте переменные `VITE_SUPABASE_URL` и `VITE_SUPABASE_ANON_KEY`, затем запустите workflow Deploy to GitHub Pages.
+
+## Версии и релизы
+
+Версии ведёт [release-please](https://github.com/googleapis/release-please) по сообщениям коммитов ([Conventional Commits](https://www.conventionalcommits.org/ru/)):
+
+- `fix: …` поднимает patch (`0.2.0 → 0.2.1`), `feat: …` поднимает minor (`0.2.1 → 0.3.0`), `feat!: …` или `BREAKING CHANGE:` в теле поднимает major. Коммиты `chore:`, `docs:`, `refactor:`, `test:` версию не меняют.
+- После каждого мержа в `master` workflow **Release** открывает или обновляет PR `chore(master): release x.y.z` с новой версией в `package.json`, `.release-please-manifest.json` и записью в `CHANGELOG.md`.
+- Когда пора выпускать, смержите этот PR: появятся тег `vX.Y.Z` и GitHub Release, и тот же запуск опубликует сайт.
+
+Чтобы release-please мог открывать PR, включите **Settings → Actions → General → Workflow permissions → Allow GitHub Actions to create and approve pull requests**.
+
+Версия и короткий хеш коммита подставляются при сборке (`define` в `vite.config.ts`) и видны внизу главной страницы.
+
+Миграции Supabase по-прежнему применяются сразу после мержа в `master`, ещё до релиза, поэтому они должны быть совместимы с уже опубликованной версией сайта.

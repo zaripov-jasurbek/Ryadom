@@ -97,6 +97,8 @@
     <div><div class="eyebrow">Хороший вечер начинается здесь</div><h2>Первый чек — за вами</h2></div>
     <button class="primary-button" onclick={() => app.beginCreate()}>Создать чек <span aria-hidden="true">↗</span></button>
   </section>
+
+  <footer class="app-version muted">Версия {__APP_VERSION__}{__APP_COMMIT__ ? ` · ${__APP_COMMIT__}` : ''}</footer>
 </main>
 
 {#if hintOpen}<InstallHintModal onclose={() => hintOpen = false} />{/if}
