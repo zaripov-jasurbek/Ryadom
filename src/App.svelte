@@ -54,7 +54,7 @@
   {#if app.addItemOpen && app.bill}<AddItemModal />{/if}
   {#if app.editingItem && app.bill}{#key app.editingItem.id}<AddItemModal item={app.editingItem} />{/key}{/if}
   {#if app.checkEditOpen && app.bill}<EditCheckModal />{/if}
-  {#if app.scanOpen && app.bill && ScanReceiptModal}<ScanReceiptModal />{/if}
+  {#if app.scanOpen && (app.bill || app.mode === 'create') && ScanReceiptModal}<ScanReceiptModal />{/if}
   {#if app.qrOpen && app.bill}<ShareQrModal />{/if}
   {#if app.peopleOpen && app.bill}<PeopleModal />{/if}
   {#if app.payDetailsOpen && app.bill}<PayDetailsModal />{/if}

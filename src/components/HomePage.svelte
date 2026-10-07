@@ -3,6 +3,7 @@
   import { plural } from '../lib/format'
   import { install, installHint, promptInstall } from '../lib/pwa.svelte'
   import InstallHintModal from './InstallHintModal.svelte'
+  import { pickPhoto } from '../lib/photo'
   import { app, grandTotal } from '../lib/store.svelte'
 
   const standingText = (standing: BillStanding, owner: boolean) => {
@@ -21,6 +22,12 @@
   let hintOpen = $state(false)
   function installApp() { if (install.prompt) void promptInstall(); else hintOpen = true }
 
+  // A new check starts with the photo of the receipt; dismissing the picker leaves the table to type into.
+  function create() {
+    app.beginCreate()
+    void pickPhoto().then(file => { if (file && app.mode === 'create') app.scanPhoto(file) })
+  }
+
   async function forget(saved: Bill) {
     const body = saved.ownerToken
       ? 'У остальных чек останется, но управлять им отсюда будет нельзя.'
@@ -33,7 +40,7 @@
   <!-- Someone coming back is here for their checks; the introduction follows them. -->
   {#if app.bills.length}
     <section class="recent">
-      <div class="section-row"><div><h2>Ваши чеки</h2><span class="muted">{plural(app.bills.length, 'чек', 'чека', 'чеков')}</span></div><button class="accent-button" onclick={() => app.beginCreate()}>＋ Новый чек</button></div>
+      <div class="section-row"><div><h2>Ваши чеки</h2><span class="muted">{plural(app.bills.length, 'чек', 'чека', 'чеков')}</span></div><button class="accent-button" onclick={create}>＋ Новый чек</button></div>
       <div class="saved-list">
         {#each app.bills as saved (saved.id)}
           {@const owner = Boolean(saved.ownerToken)}
@@ -61,7 +68,7 @@
       <h1>Счёт на всех.<br /><span>Дружба цела.</span></h1>
       <p>Создайте чек, поделитесь ссылкой — и пусть каждый отметит своё. Остальное мы посчитаем.</p>
       <div class="hero-actions">
-        <button class="primary-button" onclick={() => app.beginCreate()}>Создать новый чек <span aria-hidden="true">↗</span></button>
+        <button class="primary-button" onclick={create}>Создать новый чек <span aria-hidden="true">↗</span></button>
         {#if install.prompt || installHint}<button class="soft-button" onclick={installApp}><span aria-hidden="true">📲</span> Установить приложение</button>{/if}
       </div>
       <div class="hero-note"><span class="note-avatars" aria-hidden="true"><b>J</b><b>A</b><b>B</b></span>Понятно каждому за пару секунд</div>
@@ -95,7 +102,7 @@
 
   <section class="bottom-cta">
     <div><div class="eyebrow">Хороший вечер начинается здесь</div><h2>Первый чек — за вами</h2></div>
-    <button class="primary-button" onclick={() => app.beginCreate()}>Создать чек <span aria-hidden="true">↗</span></button>
+    <button class="primary-button" onclick={create}>Создать чек <span aria-hidden="true">↗</span></button>
   </section>
 
   <footer class="app-version muted">Версия {__APP_VERSION__}{__APP_COMMIT__ ? ` · ${__APP_COMMIT__}` : ''}</footer>

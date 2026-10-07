@@ -5,6 +5,9 @@ export function plural(n: number, one: string, few: string, many: string) {
 
 export const initial = (name: string) => name.slice(0, 1).toUpperCase()
 
+/** Three letters for someone who has not given a name: "XMA". */
+export const randomName = () => Array.from({ length: 3 }, () => String.fromCharCode(65 + Math.floor(Math.random() * 26))).join('')
+
 const fractions: [number, string][] = [[1 / 2, '½'], [1 / 3, '⅓'], [2 / 3, '⅔'], [1 / 4, '¼'], [3 / 4, '¾'], [1 / 5, '⅕'], [1 / 6, '⅙'], [1 / 8, '⅛']]
 /** Servings someone has, with a shared one as a part: "3", "4½", "⅓"; an odd sum of parts is rounded to tenths. */
 export function portionCount(count: number) {

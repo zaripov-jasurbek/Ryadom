@@ -4,9 +4,12 @@ import { addRemoteItem, addRemoteItems, updateRemoteCheck, updateRemoteItem, sha
 import { checkPath, homePath, readOwnerToken, routeCheckId } from './routes'
 import { preloadSupabase } from './supabase'
 import { expiresAt } from './limits'
+import { defaultTitle, randomName } from './format'
 import { shareOr } from './share'
 
 export type Mode = 'home' | 'create' | 'join' | 'check'
+/** A line of the check being made: what was typed or scanned, checked only when the check is created. */
+export type DraftRow = { id: number; name: string; quantity: number | null; price: number | null }
 export type ConfirmRequest = { title: string; body?: string; action: string; danger?: boolean; resolve: (answer: boolean) => void }
 const billsKey = 'billsplit:v1'
 const personKey = (billId: string) => `billsplit:person:${billId}`
@@ -46,6 +49,13 @@ class AppStore {
   // Overlays live here so Escape can close whichever one is open.
   addItemOpen = $state(false)
   scanOpen = $state(false)
+  /** A photo already chosen for the scanner, so it starts at the frame instead of asking for one. */
+  scanFile = $state<File | null>(null)
+  /** The check being made on the create page, before it exists on the server. */
+  draft = $state<DraftRow[]>([])
+  /** What the scanned receipt says the dishes add up to, to compare with the table. */
+  draftTotal = $state<number | null>(null)
+  draftService = $state<number | null>(null)
   qrOpen = $state(false)
   editingItem = $state<BillItem | null>(null)
   checkEditOpen = $state(false)
@@ -132,7 +142,7 @@ class AppStore {
     request?.resolve(answer)
   }
 
-  closeOverlays() { this.answerConfirm(false); this.addItemOpen = false; this.scanOpen = false; this.qrOpen = false; this.editingItem = null; this.checkEditOpen = false; this.peopleOpen = false; this.payDetailsOpen = false }
+  closeOverlays() { this.answerConfirm(false); this.addItemOpen = false; this.scanOpen = false; this.scanFile = null; this.qrOpen = false; this.editingItem = null; this.checkEditOpen = false; this.peopleOpen = false; this.payDetailsOpen = false }
 
   private rememberName(name: string) { this.savedName = name; writeStorage(nameKey, name) }
 
@@ -160,7 +170,10 @@ class AppStore {
   }
 
   goHome() { this.disconnect(); this.closeOverlays(); this.mode = 'home'; history.pushState({}, '', homePath()) }
-  beginCreate() { this.mode = 'create'; preloadSupabase() }
+  beginCreate() {
+    this.mode = 'create'; this.draft = [this.newDraftRow()]; this.draftTotal = null; this.draftService = null
+    preloadSupabase()
+  }
 
   openCheck(id: string) {
     const found = this.bills.find(entry => entry.id === id)
@@ -262,20 +275,41 @@ class AppStore {
 
   // ---- create and join ----
 
-  async createBill(title: string, ownerName: string, servicePercent: number, paymentDetails: string, expectedGuests: number | null = null) {
+  /** The check typed or scanned on the create page, with nothing asked besides; then the invitation opens. */
+  async createBill(servicePercent: number, items: { name: string; quantity: number; unitPrice: number }[]) {
     const ownerToken = crypto.randomUUID()
+    // A name typed in an earlier check, or letters nobody has to make up; the title is the meal and the date.
+    const ownerName = this.savedName || randomName(), title = defaultTitle()
     let bill: Bill
-    this.rememberName(ownerName)
     this.busy = true
     try {
-      const created = await createRemoteCheck(title, servicePercent, ownerName, ownerToken, paymentDetails, expectedGuests)
-      bill = { id: created.public_id, dbId: created.id, title, servicePercent, paymentDetails: paymentDetails || undefined, expectedGuests: expectedGuests ?? undefined, ownerId: created.participant_id, participants: [{ id: created.participant_id, name: ownerName, paid: 0, status: 'unpaid' }], items: [], createdAt: new Date().toISOString(), ownerToken }
+      const created = await createRemoteCheck(title, servicePercent, ownerName, ownerToken, '', null)
+      bill = { id: created.public_id, dbId: created.id, title, servicePercent, ownerId: created.participant_id, participants: [{ id: created.participant_id, name: ownerName, paid: 0, status: 'unpaid' }], items: [], createdAt: new Date().toISOString(), ownerToken }
     } catch (error) { this.fail(error, 'Не удалось создать чек'); return } finally { this.busy = false }
     this.bill = bill; this.isOwner = true; this.token = ownerToken; this.mode = 'check'
     this.selectedPerson = bill.participants[0].id; writeStorage(personKey(bill.id), this.selectedPerson)
     history.pushState({}, '', checkPath(bill.id))
     this.save()
+    this.draft = []; this.draftTotal = null; this.draftService = null
     await this.connect(bill)
+    await this.addItems(items)
+    this.qrOpen = true
+  }
+
+  // ---- the check being made ----
+
+  private draftSeq = 0
+  newDraftRow = (): DraftRow => ({ id: this.draftSeq++, name: '', quantity: 1, price: null })
+
+  /** Opens the scanner on a photo; on the create page its rows land in the draft. */
+  scanPhoto(file: File) { this.scanFile = file; this.scanOpen = true }
+
+  /** Scanned rows replace the empty ones; what was typed by hand stays. */
+  fillDraft(items: { name: string; quantity: number; unitPrice: number }[], total: number | null, servicePercent: number | null) {
+    const typed = this.draft.filter(row => row.name.trim() || row.price)
+    this.draft = [...typed, ...items.map(item => ({ id: this.draftSeq++, name: item.name, quantity: item.quantity, price: item.unitPrice })), this.newDraftRow()]
+    this.draftTotal = total
+    if (servicePercent !== null && servicePercent <= 30) this.draftService = servicePercent
   }
 
   /** What the invitation shows before joining: null when the check is gone, undefined when it could not be loaded. */

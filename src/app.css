@@ -316,6 +316,23 @@ button.car.with-me { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--brand); }
 .bill-sum > div { display: flex; justify-content: space-between; gap: 12px; }
 .bill-sum dd { margin: 0; font-variant-numeric: tabular-nums; }
 .bill-sum .bill-total { margin-top: 4px; font-size: 17px; font-weight: 700; color: var(--ink); }
+/* The check being made: the same table, every cell a field. */
+.create-page { max-width: 640px; }
+.draft { margin-top: 12px; gap: 0; }
+.draft-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.draft-top h1 { font-size: 30px; }
+.bill-line.draft-line, .bill.owner .bill-line.draft-line { grid-template-columns: minmax(0, 1fr) 60px 104px 32px; }
+.draft-rows { display: grid; }
+.draft-row { padding: 6px 0; border-bottom: 1px dashed var(--line); }
+.draft-row input { width: 100%; min-width: 0; min-height: 42px; padding: 0 10px; border: 0; border-radius: 10px; background: var(--field); box-shadow: var(--inset-sm); font-size: 16px; color: var(--ink); outline: none; }
+.draft-row input:focus { box-shadow: var(--inset-sm), var(--focus); }
+.draft-row .draft-qty, .draft-row .draft-price { text-align: right; font-variant-numeric: tabular-nums; }
+.draft-row.invalid input { box-shadow: var(--inset-sm), inset 0 0 0 2px var(--danger); }
+.draft .add-more { margin: 4px 0 6px; }
+.draft-service { align-items: center; }
+.draft-service .suffix-input { width: 110px; }
+.draft-service input { min-height: 40px; text-align: right; }
+.draft .primary-button { margin-top: 18px; }
 .item-search { width: 100%; min-height: 46px; padding: 0 16px; border: 0; border-radius: 14px; background: var(--field); box-shadow: var(--inset-sm); font-size: 16px; color: var(--ink); outline: none; }
 .item-search:focus { box-shadow: var(--inset-sm), var(--focus); }
 .item-search::placeholder { color: var(--muted); opacity: .8; }
@@ -518,6 +535,8 @@ button.summary-person-main:active { box-shadow: var(--inset-sm); }
   .bill-line { grid-template-columns: minmax(0, 1fr) 52px 74px; column-gap: 6px; }
   .bill.owner .bill-line { grid-template-columns: minmax(0, 1fr) 52px 74px 32px; }
   .bill-head { letter-spacing: .03em; }
+  .bill-line.draft-line, .bill.owner .bill-line.draft-line { grid-template-columns: minmax(0, 1fr) 46px 86px 28px; column-gap: 5px; }
+  .draft-row input { padding: 0 8px; }
   .bill-row.mine::before { left: -16px; }
   .bill-controls .mine-toggle { min-width: 72px; padding: 0 12px; }
   .summary-card { padding: 18px 16px; }

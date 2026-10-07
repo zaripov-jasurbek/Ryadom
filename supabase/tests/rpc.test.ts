@@ -89,6 +89,14 @@ describe('check RPCs', () => {
     assert.equal((await names()).length, 3)
   })
 
+  it('keeps a scanned receipt in its order', async () => {
+    const s = await setup(db)
+    const order = ['Шашлык', 'Чай', 'Самса', 'Лагман', 'Компот', 'Нон', 'Салат', 'Кола']
+    await db.rpc(s.owner, 'add_items', { p_check_id: s.check.id, p_items: order.map(name => ({ name, quantity: 1, unit_price: 1_000 })) })
+    const snapshot = await db.rpc<{ items: { name: string }[] }>(s.owner, 'get_check', { p_public_id: s.check.public_id })
+    assert.deepEqual(snapshot.items.map(item => item.name), ['Хлеб', ...order])
+  })
+
   it('rejects a wrong owner token', async () => {
     const s = await setup(db)
     const stranger = await db.newUser()

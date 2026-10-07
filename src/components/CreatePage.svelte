@@ -1,42 +1,92 @@
 <script lang="ts">
-  import { defaultTitle } from '../lib/format'
+  import { tick } from 'svelte'
+  import { formatUzs, serviceFee } from '../lib/calculations'
+  import { plural } from '../lib/format'
   import { limits } from '../lib/limits'
-  import { app } from '../lib/store.svelte'
-  import GuestsStepper from './GuestsStepper.svelte'
+  import { pickPhoto } from '../lib/photo'
+  import { scanLimits } from '../lib/receipt'
+  import { app, type DraftRow } from '../lib/store.svelte'
 
-  // Only the name is required: the bill is already on the table, so everything else can wait.
-  // An empty title becomes «Ужин 4 октября»; the card for transfers is asked for in the summary.
-  let title = $state('')
-  const fallbackTitle = defaultTitle()
-  let ownerName = $state(app.savedName)
-  let fee = $state<number | null>(10)
-  // Asked up front: people arrive at different times, and "split among everyone" must count those still on the way.
-  let guests = $state(2)
-  // The database stores numeric(5,2) between 0 and 100; an emptied field must not become NaN totals.
-  const feeValid = $derived(typeof fee === 'number' && Number.isFinite(fee) && fee >= 0 && fee <= 100)
-  const ready = $derived(Boolean(ownerName.trim() && feeValid))
+  // Same limits as add_item on the server.
+  const blank = (row: DraftRow) => !row.name.trim() && !row.price
+  const valid = (row: DraftRow) => Boolean(row.name.trim()) && Number.isInteger(row.quantity) && row.quantity! >= 1 && row.quantity! <= scanLimits.maxQuantity && Number.isInteger(row.price) && row.price! >= 1 && row.price! <= limits.maxUnitPrice
+  const filled = $derived(app.draft.filter(row => !blank(row)))
+  const ready = $derived(filled.length > 0 && filled.every(valid))
+  const food = $derived(filled.reduce((sum, row) => sum + (valid(row) ? row.quantity! * row.price! : 0), 0))
+  // An empty field is no service; the database keeps two decimals between 0 and 100.
+  const percent = $derived(app.draftService ?? 0)
+  const serviceValid = $derived(Number.isFinite(percent) && percent >= 0 && percent <= 100)
+  // Weighed goods are rounded to whole sums, so each row may be off by one.
+  const totalOff = $derived(app.draftTotal !== null && filled.length > 0 && Math.abs(food - app.draftTotal) > filled.length)
+  // A row is checked once it is left, not while it is being typed.
+  let touched = $state(new Set<number>())
+
+  let table: HTMLDivElement | undefined = $state()
+  // Typing in the last line opens the next one, like a list in notes.
+  function typed(row: DraftRow) {
+    if (row === app.draft.at(-1) && !blank(row)) app.draft.push(app.newDraftRow())
+  }
+  async function addRow() {
+    if (!app.draft.length || !blank(app.draft.at(-1)!)) app.draft.push(app.newDraftRow())
+    await tick()
+    table?.querySelector<HTMLInputElement>('.draft-row:last-of-type .draft-name')?.focus()
+  }
+  function removeRow(row: DraftRow) {
+    app.draft = app.draft.filter(entry => entry.id !== row.id)
+    if (!app.draft.length) app.draft = [app.newDraftRow()]
+  }
+  // Enter in a price moves to the next line's name instead of submitting half a check.
+  async function next(event: KeyboardEvent, index: number) {
+    if (event.key !== 'Enter' || event.isComposing) return
+    event.preventDefault()
+    if (index === app.draft.length - 1) await addRow()
+    else table?.querySelectorAll<HTMLInputElement>('.draft-name')[index + 1]?.focus()
+  }
+
+  async function scan() {
+    const file = await pickPhoto()
+    if (file && app.mode === 'create') app.scanPhoto(file)
+  }
 
   function submit() {
-    if (!ready || app.busy) return
-    void app.createBill(title.trim() || fallbackTitle, ownerName.trim(), Math.round(fee! * 100) / 100, '', guests)
+    if (!ready || !serviceValid || app.busy) { touched = new Set(app.draft.map(row => row.id)); return }
+    void app.createBill(Math.round(percent * 100) / 100, filled.map(row => ({ name: row.name.trim(), quantity: row.quantity!, unitPrice: row.price! })))
   }
 </script>
 
-<main class="form-page">
+<main class="form-page create-page">
   <button class="back-link" onclick={() => app.goHome()}>← Назад</button>
-  <form class="panel form-card" onsubmit={(e) => { e.preventDefault(); submit() }}>
-    <h1>Новый чек</h1>
-    <p class="lead">Позиции добавите на следующем шаге.</p>
-    <label class="field">Ваше имя<input bind:value={ownerName} placeholder="Как к вам обращаться?" maxlength={limits.nameLength} autocomplete="given-name" required /></label>
-    <GuestsStepper bind:value={guests} />
-    <label class="field"><span>Название <span class="label-hint">по желанию</span></span><input bind:value={title} placeholder={fallbackTitle} maxlength={limits.titleLength} /></label>
-    <label class="field"><span>Обслуживание <span class="label-hint">{feeValid ? 'если есть в счёте' : 'от 0 до 100%'}</span></span>
-      <span class="suffix-input"><input type="number" bind:value={fee} min="0" max="100" step="0.01" inputmode="decimal" aria-invalid={!feeValid} /><span>%</span></span>
-    </label>
-    <div class="chip-row" role="group" aria-label="Быстрый выбор процента">
-      {#each [0, 10, 12, 15] as preset (preset)}<button type="button" class="chip" class:active={fee === preset} onclick={() => fee = preset}>{preset ? `${preset}%` : 'Нет'}</button>{/each}
+  <form class="panel bill draft" onsubmit={(e) => { e.preventDefault(); submit() }}>
+    <div class="draft-top">
+      <h1>Новый чек</h1>
+      <button type="button" class="soft-button" onclick={scan}>📷 Скан</button>
     </div>
-    <button class="primary-button wide" disabled={app.busy || !ready}>{app.busy ? 'Создаём…' : 'Создать чек'} <span aria-hidden="true">↗</span></button>
-    <div class="privacy-note">🔒 Без регистрации</div>
+    <div class="bill-line bill-head draft-line" aria-hidden="true"><span>Название</span><span class="bill-qty">Кол-во</span><span class="bill-price">Цена</span><span></span></div>
+    <div class="draft-rows" bind:this={table}>
+      {#each app.draft as row, i (row.id)}
+        <div class="bill-line draft-line draft-row" class:invalid={touched.has(row.id) && !blank(row) && !valid(row)} onfocusout={() => { touched.add(row.id); touched = new Set(touched) }}>
+          <input class="draft-name" bind:value={row.name} oninput={() => typed(row)} maxlength={scanLimits.nameLength} placeholder={i === 0 ? 'Плов' : ''} aria-label={`Название, строка ${i + 1}`} enterkeyhint="next" />
+          <input class="draft-qty" type="number" bind:value={row.quantity} oninput={() => typed(row)} min="1" max={scanLimits.maxQuantity} step="1" inputmode="numeric" aria-label={`Количество, строка ${i + 1}`} enterkeyhint="next" />
+          <input class="draft-price" type="number" bind:value={row.price} oninput={() => typed(row)} onkeydown={(e) => next(e, i)} min="1" max={limits.maxUnitPrice} step="1" inputmode="numeric" placeholder={i === 0 ? '45000' : ''} aria-label={`Цена за штуку, строка ${i + 1}`} enterkeyhint="next" />
+          {#if blank(row) && i === app.draft.length - 1}<span></span>
+          {:else}<button type="button" class="icon-button small" aria-label={`Убрать строку ${i + 1}`} onclick={() => removeRow(row)}>×</button>{/if}
+        </div>
+      {/each}
+    </div>
+    <button type="button" class="add-more" onclick={addRow}>＋ Строка</button>
+
+    <dl class="bill-sum">
+      <div><dt>Блюда</dt><dd>{formatUzs(food)}</dd></div>
+      <div class="draft-service">
+        <dt><label for="draft-service">Обслуживание</label></dt>
+        <dd><span class="suffix-input"><input id="draft-service" type="number" bind:value={app.draftService} min="0" max="100" step="0.01" inputmode="decimal" placeholder="0" aria-invalid={!serviceValid} /><span>%</span></span></dd>
+      </div>
+      <div class="bill-total"><dt>Итого</dt><dd>{formatUzs(food + (serviceValid ? serviceFee(food, percent) : 0))}</dd></div>
+    </dl>
+    {#if totalOff && app.draftTotal !== null}
+      <p class="scan-diff" role="status">В чеке {formatUzs(app.draftTotal)}: {food < app.draftTotal ? `не хватает ${formatUzs(app.draftTotal - food)}` : `лишние ${formatUzs(food - app.draftTotal)}`}.</p>
+    {/if}
+
+    <button class="primary-button wide" disabled={app.busy}>{app.busy ? 'Создаём…' : filled.length ? `Готово · ${plural(filled.length, 'позиция', 'позиции', 'позиций')}` : 'Готово'} <span aria-hidden="true">↗</span></button>
   </form>
 </main>
