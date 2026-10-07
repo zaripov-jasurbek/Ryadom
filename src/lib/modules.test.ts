@@ -4,7 +4,7 @@ import { billStanding, calculateTotals, personItems, type Bill, type BillItem, t
 import { readOwnerToken, routeCheckId } from './routes.ts'
 import { errorMessage } from './errors.ts'
 import { safeFileName, summaryText } from './export.ts'
-import { formatPaymentDetails, paymentCopyValue } from './format.ts'
+import { formatPaymentDetails, paymentCopyValue, portionCount } from './format.ts'
 import { installHintFor } from './platform.ts'
 
 const people = ['Jasur', 'Aziz', 'Bekzod'].map((name, i) => ({ id: `${i}`, name, paid: 0, status: 'unpaid' as const }))
@@ -75,6 +75,12 @@ describe('payment details', () => {
     assert.equal(paymentCopyValue('8600 1234 5678 9012'), '8600123456789012')
     assert.equal(paymentCopyValue('+998 (90) 123-45-67'), '+998901234567')
     assert.equal(paymentCopyValue('Humo 9860 … Jasur'), 'Humo 9860 … Jasur')
+  })
+})
+
+describe('portions', () => {
+  it('counts a shared serving as a part', () => {
+    assert.deepEqual([0, 1, 3, 4.5, 0.5, 1 / 3 + 1 / 3, 1 / 3 * 3, 1 / 7].map(portionCount), ['0', '1', '3', '4½', '½', '⅔', '1', '0,1'])
   })
 })
 

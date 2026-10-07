@@ -1,6 +1,6 @@
 import { assignedSubtotal, calculateTotals, ownerIdOf, serviceFee, withSelection, type Bill, type BillItem, type Participant } from './calculations'
 import { errorMessage } from './errors'
-import { addRemoteItem, addRemoteItems, updateRemoteCheck, updateRemoteItem, shareRemoteItemEqually, unshareRemoteItem, claimRemoteCheckOwner, confirmRemotePayment, createRemoteCheck, deleteRemoteCheck, deleteRemoteItem, ensureAnonymousSession, isRemoteCheckGone, joinRemoteCheck, loadRemoteCheck, previewRemoteCheck, removeRemoteParticipant, resetRemoteCustomShares, setRemoteCustomShares, submitRemotePayment, subscribeToRemoteCheck, toggleRemoteUnit, unconfirmRemotePayment, type PresenceUser, type RemoteBill, type RemoteSubscription } from './remote'
+import { addRemoteItem, addRemoteItems, updateRemoteCheck, updateRemoteItem, shareRemoteItemEqually, unshareRemoteItem, claimRemoteCheckOwner, confirmRemotePayment, createRemoteCheck, deleteRemoteCheck, deleteRemoteItem, ensureAnonymousSession, isRemoteCheckGone, joinRemoteCheck, loadRemoteCheck, previewRemoteCheck, removeRemoteParticipant, submitRemotePayment, subscribeToRemoteCheck, toggleRemoteUnit, unconfirmRemotePayment, type PresenceUser, type RemoteBill, type RemoteSubscription } from './remote'
 import { checkPath, homePath, readOwnerToken, routeCheckId } from './routes'
 import { preloadSupabase } from './supabase'
 import { expiresAt } from './limits'
@@ -13,9 +13,6 @@ const personKey = (billId: string) => `billsplit:person:${billId}`
 /** A guest's join token: this browser gets its participant back after losing its Supabase session. */
 const guestKey = (billId: string) => `billsplit:guest:${billId}`
 const nameKey = 'billsplit:name'
-
-/** The check page's bottom menu: items and payment; its third button invites people. */
-export type CheckTab = 'order' | 'pay'
 
 function parseBills(raw: string | null): Bill[] | null {
   if (raw === null) return null
@@ -45,14 +42,11 @@ class AppStore {
   /** False while the device has no network: taps would fail, so the page says so up front. */
   online = $state(typeof navigator === 'undefined' || navigator.onLine)
   toast = $state('')
-  activeTab = $state<CheckTab>('order')
   pendingUnits = $state<Record<string, true>>({})
   // Overlays live here so Escape can close whichever one is open.
   addItemOpen = $state(false)
   scanOpen = $state(false)
   qrOpen = $state(false)
-  paymentFor = $state<string | null>(null)
-  editingUnit = $state('')
   editingItem = $state<BillItem | null>(null)
   checkEditOpen = $state(false)
   /** The sheet with everyone at the table, opened from the avatars under the check's name. */
@@ -61,7 +55,6 @@ class AppStore {
   payDetailsOpen = $state(false)
   /** The open confirmation sheet; it replaces window.confirm, which looks foreign on phones. */
   confirmRequest = $state<ConfirmRequest | null>(null)
-  itemFilter = $state<'all' | 'mine' | 'open'>('all')
   /** The name typed last time, so the next check does not ask for it again. */
   savedName = $state(readStorage(nameKey) ?? '')
 
@@ -139,7 +132,7 @@ class AppStore {
     request?.resolve(answer)
   }
 
-  closeOverlays() { this.answerConfirm(false); this.addItemOpen = false; this.scanOpen = false; this.qrOpen = false; this.paymentFor = null; this.editingUnit = ''; this.editingItem = null; this.checkEditOpen = false; this.peopleOpen = false; this.payDetailsOpen = false }
+  closeOverlays() { this.answerConfirm(false); this.addItemOpen = false; this.scanOpen = false; this.qrOpen = false; this.editingItem = null; this.checkEditOpen = false; this.peopleOpen = false; this.payDetailsOpen = false }
 
   private rememberName(name: string) { this.savedName = name; writeStorage(nameKey, name) }
 
@@ -161,7 +154,7 @@ class AppStore {
   }
 
   private show(bill: Bill, owner: boolean) {
-    this.bill = bill; this.isOwner = owner; this.mode = 'check'; this.activeTab = 'order'; this.itemFilter = 'all'
+    this.bill = bill; this.isOwner = owner; this.mode = 'check'
     this.selectedPerson = readStorage(personKey(bill.id))
     void this.connect(bill)
   }
@@ -278,7 +271,7 @@ class AppStore {
       const created = await createRemoteCheck(title, servicePercent, ownerName, ownerToken, paymentDetails, expectedGuests)
       bill = { id: created.public_id, dbId: created.id, title, servicePercent, paymentDetails: paymentDetails || undefined, expectedGuests: expectedGuests ?? undefined, ownerId: created.participant_id, participants: [{ id: created.participant_id, name: ownerName, paid: 0, status: 'unpaid' }], items: [], createdAt: new Date().toISOString(), ownerToken }
     } catch (error) { this.fail(error, 'Не удалось создать чек'); return } finally { this.busy = false }
-    this.bill = bill; this.isOwner = true; this.token = ownerToken; this.mode = 'check'; this.activeTab = 'order'
+    this.bill = bill; this.isOwner = true; this.token = ownerToken; this.mode = 'check'
     this.selectedPerson = bill.participants[0].id; writeStorage(personKey(bill.id), this.selectedPerson)
     history.pushState({}, '', checkPath(bill.id))
     this.save()
@@ -302,7 +295,7 @@ class AppStore {
       else { sessionToken = readStorage(guestKey(this.joinPublicId)) ?? sessionToken; writeStorage(guestKey(this.joinPublicId), sessionToken) }
       await joinRemoteCheck(this.joinPublicId, name, sessionToken)
       const loaded = await loadRemoteCheck(this.joinPublicId)
-      this.applyRemote(loaded); this.mode = 'check'; this.activeTab = 'order'
+      this.applyRemote(loaded); this.mode = 'check'
       history.replaceState({}, '', checkPath(loaded.id))
       await this.connect(loaded)
       return ''
@@ -396,14 +389,6 @@ class AppStore {
     catch (error) { this.fail(error, 'Не удалось обновить позицию') }
     finally { const { [unitId]: _, ...rest } = this.pendingUnits; this.pendingUnits = rest }
     await this.refresh()
-  }
-
-  saveCustomShares(item: BillItem, unit: number, amounts: Record<string, number>) {
-    return this.mutate('Не удалось сохранить доли', () => setRemoteCustomShares(item.unitIds?.[unit] ?? '', amounts))
-  }
-
-  resetCustomShares(item: BillItem, unit: number) {
-    return this.mutate('Не удалось сбросить доли', () => resetRemoteCustomShares(item.unitIds?.[unit] ?? ''))
   }
 
   submitPayment(amount: number) {

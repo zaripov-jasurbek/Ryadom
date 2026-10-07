@@ -237,6 +237,20 @@ describe('check RPCs', () => {
     await db.rpc(s.owner, 'confirm_payment', { p_check_id: s.check.id, p_participant_id: s.guestParticipant })
     assert.equal(await status(), 'paid')
   })
+
+  it('takes the confirmation off when the guest changes a confirmed amount', async () => {
+    const s = await setup(db)
+    await db.rpc(s.guest, 'toggle_unit_share', { p_item_unit: s.unitIds[0], p_enabled: true })
+    const payment = async () => (await db.query<{ status: string; amount_paid: string; confirmed: boolean }>('select status::text, amount_paid::text, confirmed_at is not null as confirmed from public.payments where participant_id = $1', [s.guestParticipant])).rows[0]
+    await db.rpc(s.guest, 'submit_payment', { p_check_id: s.check.id, p_amount: 22_000 })
+    await db.rpc(s.owner, 'confirm_payment', { p_check_id: s.check.id, p_participant_id: s.guestParticipant })
+    await db.rpc(s.guest, 'submit_payment', { p_check_id: s.check.id, p_amount: 10_000 })
+    assert.deepEqual(await payment(), { status: 'partially_paid', amount_paid: '10000', confirmed: false })
+    await db.rpc(s.guest, 'submit_payment', { p_check_id: s.check.id, p_amount: 22_000 })
+    await db.rpc(s.owner, 'confirm_payment', { p_check_id: s.check.id, p_participant_id: s.guestParticipant })
+    await db.rpc(s.guest, 'submit_payment', { p_check_id: s.check.id, p_amount: 25_000 })
+    assert.deepEqual(await payment(), { status: 'proof_submitted', amount_paid: '25000', confirmed: false })
+  })
 })
 
 describe('limits and expiry', () => {

@@ -9,7 +9,6 @@
   import CheckPage from './components/CheckPage.svelte'
   import AddItemModal from './components/AddItemModal.svelte'
   import EditCheckModal from './components/EditCheckModal.svelte'
-  import PaymentModal from './components/PaymentModal.svelte'
   import ShareQrModal from './components/ShareQrModal.svelte'
   import ConfirmSheet from './components/ConfirmSheet.svelte'
   import PeopleModal from './components/PeopleModal.svelte'
@@ -38,7 +37,7 @@
 <svelte:window onkeydown={(e) => { if (e.key === 'Escape') app.closeOverlays() }} />
 
 <div class="app-shell">
-  <!-- A check is its own small app: its top bar and bottom menu replace the site header. -->
+  <!-- A check is its own small app: its top bar replaces the site header. -->
   {#if app.mode !== 'check' || !app.bill}<Header />{/if}
   {#if !app.online}<div class="offline-banner" role="status">Нет интернета — изменения не сохранятся, пока связь не вернётся</div>{/if}
 
@@ -59,7 +58,6 @@
   {#if app.qrOpen && app.bill}<ShareQrModal />{/if}
   {#if app.peopleOpen && app.bill}<PeopleModal />{/if}
   {#if app.payDetailsOpen && app.bill}<PayDetailsModal />{/if}
-  {#if app.paymentFor && app.bill}<PaymentModal personId={app.paymentFor} />{/if}
   {#if app.confirmRequest}{#key app.confirmRequest}<ConfirmSheet />{/key}{/if}
   {#if app.toast}<div class="toast" role="status" aria-live="polite">{app.toast}</div>{/if}
 </div>
