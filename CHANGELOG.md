@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.0](https://github.com/zaripov-jasurbek/Ryadom/compare/v0.2.0...v0.3.0) (2026-10-07)
+
+
+### Новое
+
+* Design/receipt style ([#10](https://github.com/zaripov-jasurbek/Ryadom/issues/10)) ([7a99393](https://github.com/zaripov-jasurbek/Ryadom/commit/7a99393ffbef81a2d0c07fb3e11e3bcf849c45b2))
+* expected guests and «на всех» for late arrivals ([#8](https://github.com/zaripov-jasurbek/Ryadom/issues/8)) ([7b0c454](https://github.com/zaripov-jasurbek/Ryadom/commit/7b0c454486191b132fde1afc6111decd56638d0f))
+
 ## [0.2.0](https://github.com/zaripov-jasurbek/Ryadom/compare/v0.1.0...v0.2.0) (2026-10-07)
 
 
