@@ -217,6 +217,9 @@ p { margin: 0; }
 .suffix-input > span { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); font-size: 13px; font-weight: 500; color: var(--muted); pointer-events: none; }
 .suffix-input.compact input { min-height: 40px; font-size: 16px; text-align: right; padding-right: 46px; }
 .form-card .chip-row { margin: 6px 0 4px; }
+.guests-field { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.guests-field .portion-stepper { margin-left: 0; }
+.guests-field .portion-stepper span { min-width: 92px; }
 .join-preview { display: grid; gap: 10px; margin: 2px 0 14px; padding: 14px 16px; border-radius: var(--radius-sm); box-shadow: var(--inset-sm); font-size: 15px; font-weight: 600; }
 .join-people { display: flex; align-items: center; }
 .join-people .person-avatar { margin-right: -6px; box-shadow: 0 0 0 2px var(--bg); }
@@ -318,6 +321,7 @@ button.notice:active { transform: translateY(1px); }
 .consumer-pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px 3px 3px; border-radius: 999px; font-size: 13px; background: var(--bg); box-shadow: var(--raise-sm); }
 .unit-empty { font-size: 13px; color: var(--muted); font-style: italic; }
 .unit-note { font-size: 12px; color: var(--muted); }
+.everyone-pill { padding: 3px 10px; font-weight: 600; color: var(--ink-soft); }
 .unit-actions { display: flex; align-items: center; gap: 6px; margin-left: auto; }
 .mine-toggle { min-height: 38px; min-width: 96px; padding: 0 14px; border: 0; border-radius: 11px; background: var(--bg); box-shadow: var(--raise-sm); font-size: 14px; font-weight: 650; color: var(--ink-soft); transition: box-shadow .18s, background-color .18s, color .18s; }
 .mine-toggle.active { background: var(--accent); color: var(--accent-ink); box-shadow: none; }
@@ -336,6 +340,7 @@ button.notice:active { transform: translateY(1px); }
 .danger-button.confirm-danger { background: var(--danger-bg); }
 .portion-summary { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 12px; border-radius: 14px; box-shadow: var(--inset-sm); transition: background-color .2s; }
 .portion-summary .unit-consumers { min-width: 0; }
+.portion-summary .mine-toggle { margin-left: auto; }
 .portion-stepper { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; padding: 4px; border-radius: 13px; background: var(--bg); box-shadow: var(--raise-sm); }
 .portion-stepper button { width: 38px; height: 38px; border: 0; border-radius: 10px; background: transparent; font-size: 20px; font-weight: 600; color: var(--ink-soft); }
 .portion-stepper button:not(:disabled):active { box-shadow: var(--inset-sm); }
@@ -387,6 +392,7 @@ button.notice:active { transform: translateY(1px); }
 .status-unpaid { background: var(--danger-bg); color: var(--danger); }
 .status-partially_paid { background: var(--warn-bg); color: var(--warn-ink); }
 .status-proof_submitted { background: var(--info-bg); color: var(--info); }
+.status-overpaid { display: inline-block; margin-top: 4px; background: var(--warn-bg); color: var(--warn-ink); }
 .status-paid, .status-payer { background: var(--ok-bg); color: var(--ok); }
 .pay-card { padding: 16px 18px; }
 .pay-details { display: flex; align-items: center; gap: 14px; }

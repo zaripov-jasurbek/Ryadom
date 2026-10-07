@@ -37,10 +37,18 @@ describe('check summaries', () => {
   it('lists what each participant pays for', () => {
     const bill = withItems(item('bread', 'Хлеб', 1, 30_000, { '0': ['0', '1'] }), item('tea', 'Чай', 2, 5_000, { '0': ['0'], '1': ['0'] }))
     assert.deepEqual(personItems(bill, '0'), [
-      { id: 'bread', name: 'Хлеб', amount: 15_000, units: 1, shared: true },
-      { id: 'tea', name: 'Чай', amount: 10_000, units: 2, shared: false },
+      { id: 'bread', name: 'Хлеб', amount: 15_000, units: 1, shared: true, sharedAll: false },
+      { id: 'tea', name: 'Чай', amount: 10_000, units: 2, shared: false, sharedAll: false },
     ])
     assert.deepEqual(personItems(bill, '2'), [])
+  })
+
+  it('labels only "split among everyone" items with a word of their own', () => {
+    const halves = withItems(item('bread', 'Хлеб', 2, 3_000, { '0': ['0', '1'], '1': ['0', '1'] }))
+    assert.deepEqual(personItems(halves, '1').map(line => line.sharedAll), [false])
+    const everyone = withItems({ ...item('bread', 'Хлеб', 2, 3_000, { '0': ['0', '1'], '1': ['0', '1'] }), sharedAll: true })
+    assert.deepEqual(personItems(everyone, '0').map(line => line.sharedAll), [true])
+    assert.match(summaryText(everyone, 6_000, calculateTotals(everyone), '0'), /• Хлеб \(на всех\) — 3\s000\sсум/)
   })
 
   it('tells the creator what is still owed and a guest what they still owe', () => {

@@ -1,6 +1,6 @@
 import { assignedSubtotal, calculateTotals, ownerIdOf, serviceFee, withSelection, type Bill, type BillItem, type CommentMessage, type Participant } from './calculations'
 import { errorMessage } from './errors'
-import { addRemoteComment, addRemoteItem, addRemoteItems, updateRemoteCheck, updateRemoteItem, shareRemoteItemEqually, claimRemoteCheckOwner, confirmRemotePayment, createRemoteCheck, deleteRemoteCheck, deleteRemoteComment, deleteRemoteItem, ensureAnonymousSession, isRemoteCheckGone, joinRemoteCheck, loadRemoteCheck, previewRemoteCheck, removeRemoteParticipant, resetRemoteCustomShares, setRemoteCustomShares, submitRemotePayment, subscribeToRemoteCheck, toggleRemoteUnit, unconfirmRemotePayment, type PresenceUser, type RemoteBill, type RemoteSubscription } from './remote'
+import { addRemoteComment, addRemoteItem, addRemoteItems, updateRemoteCheck, updateRemoteItem, shareRemoteItemEqually, unshareRemoteItem, claimRemoteCheckOwner, confirmRemotePayment, createRemoteCheck, deleteRemoteCheck, deleteRemoteComment, deleteRemoteItem, ensureAnonymousSession, isRemoteCheckGone, joinRemoteCheck, loadRemoteCheck, previewRemoteCheck, removeRemoteParticipant, resetRemoteCustomShares, setRemoteCustomShares, submitRemotePayment, subscribeToRemoteCheck, toggleRemoteUnit, unconfirmRemotePayment, type PresenceUser, type RemoteBill, type RemoteSubscription } from './remote'
 import { checkPath, homePath, readOwnerToken, routeCheckId } from './routes'
 import { preloadSupabase } from './supabase'
 import { expiresAt } from './limits'
@@ -75,7 +75,7 @@ class AppStore {
   /** The creator paid the restaurant, so their own share counts as settled. */
   ownerId = $derived(this.bill ? ownerIdOf(this.bill) : undefined)
   paidAll = $derived(this.totals.reduce((sum, person) => sum + (person.id === this.ownerId ? person.due : person.paid), 0))
-  allConfirmed = $derived(Boolean(this.bill && this.unassignedTotal === 0 && this.bill.items.length && this.totals.every(person => person.id === this.ownerId || person.status === 'paid' || person.due === 0)))
+  allConfirmed = $derived(Boolean(this.bill && this.unassignedTotal <= 0 && this.bill.items.length && this.totals.every(person => person.id === this.ownerId || person.status === 'paid' || person.due === 0)))
   currentParticipant = $derived(this.bill?.participants.find(person => person.id === this.selectedPerson))
   currentTotal = $derived(this.totals.find(person => person.id === this.selectedPerson))
   // Server timestamps share one ISO format, so they compare as strings.
@@ -283,14 +283,14 @@ class AppStore {
 
   // ---- create and join ----
 
-  async createBill(title: string, ownerName: string, servicePercent: number, paymentDetails: string) {
+  async createBill(title: string, ownerName: string, servicePercent: number, paymentDetails: string, expectedGuests: number | null = null) {
     const ownerToken = crypto.randomUUID()
     let bill: Bill
     this.rememberName(ownerName)
     this.busy = true
     try {
-      const created = await createRemoteCheck(title, servicePercent, ownerName, ownerToken, paymentDetails)
-      bill = { id: created.public_id, dbId: created.id, title, servicePercent, paymentDetails: paymentDetails || undefined, ownerId: created.participant_id, participants: [{ id: created.participant_id, name: ownerName, paid: 0, status: 'unpaid' }], items: [], createdAt: new Date().toISOString(), ownerToken }
+      const created = await createRemoteCheck(title, servicePercent, ownerName, ownerToken, paymentDetails, expectedGuests)
+      bill = { id: created.public_id, dbId: created.id, title, servicePercent, paymentDetails: paymentDetails || undefined, expectedGuests: expectedGuests ?? undefined, ownerId: created.participant_id, participants: [{ id: created.participant_id, name: ownerName, paid: 0, status: 'unpaid' }], items: [], createdAt: new Date().toISOString(), ownerToken }
     } catch (error) { this.fail(error, 'Не удалось создать чек'); return } finally { this.busy = false }
     this.bill = bill; this.isOwner = true; this.token = ownerToken; this.mode = 'check'; this.activeTab = 'order'; this.commentsSeen = ''
     this.selectedPerson = bill.participants[0].id; writeStorage(personKey(bill.id), this.selectedPerson)
@@ -373,12 +373,17 @@ class AppStore {
     return this.mutate('Не удалось сохранить позицию', dbId => updateRemoteItem(dbId, item.id, name, quantity, unitPrice), 'Позиция обновлена')
   }
 
-  updateCheck(title: string, servicePercent: number, paymentDetails: string) {
-    return this.mutate('Не удалось сохранить чек', dbId => updateRemoteCheck(dbId, title, servicePercent, paymentDetails), 'Чек обновлён')
+  /** expectedGuests: undefined keeps the number, null clears it. */
+  updateCheck(title: string, servicePercent: number, paymentDetails: string, expectedGuests?: number | null) {
+    return this.mutate('Не удалось сохранить чек', dbId => updateRemoteCheck(dbId, title, servicePercent, paymentDetails, expectedGuests), 'Чек обновлён')
   }
 
   shareItemEqually(item: BillItem) {
     return this.mutate('Не удалось разделить позицию', dbId => shareRemoteItemEqually(dbId, item.id), `«${item.name}» делится на всех`)
+  }
+
+  unshareItem(item: BillItem) {
+    return this.mutate('Не удалось изменить позицию', dbId => unshareRemoteItem(dbId, item.id), `«${item.name}» больше не на всех`)
   }
 
   unconfirm(personId: string) {
@@ -391,7 +396,8 @@ class AppStore {
 
   async toggleUnit(item: BillItem, unit: number) {
     const bill = this.bill, me = this.selectedPerson
-    if (!bill || !me) return
+    // An item split among everyone is the creator's until they end it; the server refuses the tap too.
+    if (!bill || !me || item.sharedAll) return
     const unitId = item.unitIds?.[unit]
     if (!unitId || this.pendingUnits[unitId]) return
     const enabled = !(item.unitSelections[String(unit)] ?? []).includes(me)

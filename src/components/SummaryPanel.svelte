@@ -19,6 +19,7 @@
   const myNote = $derived.by(() => {
     if (!mine) return ''
     if (!mine.due) return 'Отметьте свои блюда в «Позициях».'
+    if (mine.overpaid) return `Вы переплатили ${formatUzs(mine.overpaid)}.`
     if (mine.status === 'paid') return 'Оплата подтверждена.'
     if (mine.status === 'proof_submitted') return `Ждём подтверждения${ownerName ? ` от ${ownerName}` : ''}.`
     if (mine.paid > 0) return `Отдали ${formatUzs(mine.paid)} · осталось ${formatUzs(mine.remaining)}.`
@@ -89,13 +90,14 @@
           <div class="person-progress">
             <div class="progress-track slim" class:done={payer || person.status === 'paid'} role="progressbar" aria-label={`${person.name}: оплачено`} aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(done)}><i style={`width:${done}%`}></i></div>
             <small>{payer ? '' : person.remaining ? `оплачено ${formatUzs(person.paid)} · осталось ${formatUzs(person.remaining)}` : `оплачено ${formatUzs(person.paid)}`}</small>
+            {#if !payer && person.overpaid}<span class="status-badge status-overpaid">переплатил {formatUzs(person.overpaid)}</span>{/if}
           </div>
         {/if}
         {#if lines.length}
           <details class="person-items" open={printing || (!app.isOwner && app.selectedPerson === person.id)}>
             <summary>Из чего сумма · {plural(lines.length, 'позиция', 'позиции', 'позиций')}</summary>
             <ul>
-              {#each lines as line (line.id)}<li><span>{line.name}{line.units > 1 ? ` × ${line.units}` : ''}{line.shared ? ' · доля' : ''}</span><b>{formatUzs(line.amount)}</b></li>{/each}
+              {#each lines as line (line.id)}<li><span>{line.name}{line.sharedAll ? ' · на всех' : `${line.units > 1 ? ` × ${line.units}` : ''}${line.shared ? ' · доля' : ''}`}</span><b>{formatUzs(line.amount)}</b></li>{/each}
               {#if person.service}<li class="service-line"><span>Обслуживание {bill.servicePercent}%</span><b>{formatUzs(person.service)}</b></li>{/if}
             </ul>
           </details>

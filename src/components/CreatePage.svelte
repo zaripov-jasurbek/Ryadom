@@ -2,6 +2,7 @@
   import { defaultTitle } from '../lib/format'
   import { limits } from '../lib/limits'
   import { app } from '../lib/store.svelte'
+  import GuestsStepper from './GuestsStepper.svelte'
 
   // Only the name is required: the bill is already on the table, so everything else can wait.
   // An empty title becomes «Ужин 4 октября»; the card for transfers is asked for in the summary.
@@ -9,13 +10,15 @@
   const fallbackTitle = defaultTitle()
   let ownerName = $state(app.savedName)
   let fee = $state<number | null>(10)
+  // Asked up front: people arrive at different times, and "split among everyone" must count those still on the way.
+  let guests = $state(2)
   // The database stores numeric(5,2) between 0 and 100; an emptied field must not become NaN totals.
   const feeValid = $derived(typeof fee === 'number' && Number.isFinite(fee) && fee >= 0 && fee <= 100)
   const ready = $derived(Boolean(ownerName.trim() && feeValid))
 
   function submit() {
     if (!ready || app.busy) return
-    void app.createBill(title.trim() || fallbackTitle, ownerName.trim(), Math.round(fee! * 100) / 100, '')
+    void app.createBill(title.trim() || fallbackTitle, ownerName.trim(), Math.round(fee! * 100) / 100, '', guests)
   }
 </script>
 
@@ -25,6 +28,7 @@
     <h1>Новый чек</h1>
     <p class="lead">Позиции добавите на следующем шаге.</p>
     <label class="field">Ваше имя<input bind:value={ownerName} placeholder="Как к вам обращаться?" maxlength={limits.nameLength} autocomplete="given-name" required /></label>
+    <GuestsStepper bind:value={guests} />
     <label class="field"><span>Название <span class="label-hint">по желанию</span></span><input bind:value={title} placeholder={fallbackTitle} maxlength={limits.titleLength} /></label>
     <label class="field"><span>Обслуживание <span class="label-hint">{feeValid ? 'если есть в счёте' : 'от 0 до 100%'}</span></span>
       <span class="suffix-input"><input type="number" bind:value={fee} min="0" max="100" step="0.01" inputmode="decimal" aria-invalid={!feeValid} /><span>%</span></span>

@@ -3,11 +3,13 @@ import { shareOr } from './share.ts'
 
 /** The creator paid the restaurant, so their line says so instead of what is left to pay. */
 const paymentLine = (person: ParticipantTotal, ownerId?: string) =>
-  person.id === ownerId ? 'платил по счёту' : `оплачено ${formatUzs(person.paid)} · осталось ${formatUzs(person.remaining)}`
+  person.id === ownerId ? 'платил по счёту'
+    : person.overpaid ? `оплачено ${formatUzs(person.paid + person.overpaid)} · переплатил ${formatUzs(person.overpaid)}`
+    : `оплачено ${formatUzs(person.paid)} · осталось ${formatUzs(person.remaining)}`
 
 /** What each person's amount is made of: their dishes, shares and service, as lines under their name. */
 function detailLines(bill: Bill, person: ParticipantTotal) {
-  const lines = personItems(bill, person.id).map(line => `${line.name}${line.units > 1 ? ` × ${line.units}` : ''}${line.shared ? ' (доля)' : ''} — ${formatUzs(line.amount)}`)
+  const lines = personItems(bill, person.id).map(line => `${line.name}${line.sharedAll ? ' (на всех)' : `${line.units > 1 ? ` × ${line.units}` : ''}${line.shared ? ' (доля)' : ''}`} — ${formatUzs(line.amount)}`)
   if (person.service) lines.push(`Обслуживание ${bill.servicePercent}% — ${formatUzs(person.service)}`)
   return lines
 }
