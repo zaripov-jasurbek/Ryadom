@@ -90,7 +90,7 @@
 
 {#snippet faces(group: Group)}
   <span class="faces" aria-hidden="true">
-    {#each group.people.slice(0, group.people.length > maxFaces ? maxFaces - 1 : maxFaces) as person (person.id)}<b class="tone-{app.personIndex(person.id) % 5}">{initial(person.name)}</b>{/each}
+    {#each group.people.slice(0, group.people.length > maxFaces ? maxFaces - 1 : maxFaces) as person (person.id)}<b class="tone-{app.tone(person.id)}">{app.avatar(person)}</b>{/each}
     {#if group.people.length > maxFaces}<b class="more">+{group.people.length - maxFaces + 1}</b>{/if}
   </span>
 {/snippet}
