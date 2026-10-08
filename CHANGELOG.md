@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.0](https://github.com/zaripov-jasurbek/Ryadom/compare/v1.0.0...v1.1.0) (2026-10-08)
+
+
+### Новое
+
+* одна таблица позиций для создания, скана и редактирования ([#13](https://github.com/zaripov-jasurbek/Ryadom/issues/13)) ([1359cb2](https://github.com/zaripov-jasurbek/Ryadom/commit/1359cb29cd9cda63af115eb2b11172243d4a3971))
+
 ## [1.0.0](https://github.com/zaripov-jasurbek/Ryadom/compare/v0.3.0...v1.0.0) (2026-10-07)
 
 
