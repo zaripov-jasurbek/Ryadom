@@ -57,7 +57,7 @@ describe('split among everyone, with guests arriving later', () => {
     await t.shareAll(tea)
     const aziz = await t.join('Aziz')
     assert.equal(calculateTotals(await assertSameTotals(t))[1].due, 5_500)
-    await db.rpc(aziz.user, 'submit_payment', { p_check_id: t.check.id, p_amount: 5_500 })
+    await db.rpc(aziz.user, 'mark_paid', { p_check_id: t.check.id, p_paid: true })
     await t.join('Bekzod')
     const bill = await assertSameTotals(t)
     const azizTotal = calculateTotals(bill)[1]

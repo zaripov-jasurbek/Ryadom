@@ -377,11 +377,10 @@ button.summary-person-main:active { box-shadow: var(--inset-sm); }
 /* ✓ said paid, ✓✓ confirmed by the creator, like a read message in Telegram. */
 .pay-mark { min-width: 22px; font-size: 15px; font-weight: 800; letter-spacing: -.28em; color: var(--muted); }
 .pay-mark.double { color: var(--ok); }
-.pay-mark.part { color: var(--warn-ink); }
 .confirm-hint { width: 100%; padding-left: 44px; font-size: 13px; font-weight: 650; color: var(--brand); }
-.pay-inline { display: flex; gap: 8px; padding: 0 0 12px 44px; }
-.pay-inline .suffix-input { flex: 1; min-width: 0; }
-.pay-inline .accent-button { flex: none; min-height: 48px; }
+.pay-check { display: inline-grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 2px solid var(--muted); border-radius: 50%; background: none; font-size: 14px; font-weight: 800; color: var(--muted); cursor: pointer; }
+.pay-check.double { border-color: var(--ok); color: var(--ok); letter-spacing: -.28em; cursor: default; }
+.pay-check:disabled:not(.double) { opacity: .5; }
 /* The card number stays a tap away while a guest still owes, wherever they scrolled. */
 /* Floating at the bottom: your name, and next to it the card button. */
 .dock { position: fixed; z-index: 7; left: 50%; bottom: calc(14px + env(safe-area-inset-bottom)); transform: translateX(-50%); width: max-content; max-width: calc(100% - 32px); display: flex; gap: 8px; pointer-events: none; }
@@ -499,7 +498,7 @@ button.summary-person-main:active { box-shadow: var(--inset-sm); }
   .draft-row input { padding: 0 8px; }
   .bill-row.mine::before { left: -16px; }
   .summary-person.is-me::before { left: -16px; }
-  .confirm-hint, .pay-inline { padding-left: 0; }
+  .confirm-hint { padding-left: 0; }
   .modal-backdrop { place-items: end center; padding: 0; }
   .modal-card { width: 100%; max-height: 92vh; max-height: 92dvh; border-radius: 24px 24px 0 0; padding: 26px 20px calc(24px + env(safe-area-inset-bottom)); animation: sheet .25s ease-out; }
 }
@@ -515,7 +514,7 @@ button.summary-person-main:active { box-shadow: var(--inset-sm); }
 /* ─── Print: white paper, no controls ──────────────────────── */
 @media print {
   :root { --bg: #fff; --ink: #111; --ink-soft: #333; --muted: #666; --line: #ddd; --surface: #fff; --paper: #fff; --border: #ddd; }
-  .topbar, .check-bar .icon-button, .notice, .primary-button, .back-link, .export-card, .bill-controls, .bill-tools, .item-menu, .item-search, .pay-inline, .confirm-hint, .dock { display: none !important; }
+  .topbar, .check-bar .icon-button, .notice, .primary-button, .back-link, .export-card, .bill-controls, .bill-tools, .item-menu, .item-search, .pay-check, .confirm-hint, .dock { display: none !important; }
   .app-shell, .check-page { max-width: none; padding: 0; }
   .check-bar { position: static; }
   .panel, .summary-person { box-shadow: none !important; break-inside: avoid; }
