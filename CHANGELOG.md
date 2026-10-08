@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.0](https://github.com/zaripov-jasurbek/Ryadom/compare/v2.0.0...v2.1.0) (2026-10-08)
+
+
+### Новое
+
+* **scan:** удобная рамка и несколько фото одного чека ([#23](https://github.com/zaripov-jasurbek/Ryadom/issues/23)) ([2e8409d](https://github.com/zaripov-jasurbek/Ryadom/commit/2e8409de50804f20894d9dfbea1073aaaa736825))
+
 ## [2.0.0](https://github.com/zaripov-jasurbek/Ryadom/compare/v1.2.0...v2.0.0) (2026-10-08)
 
 
