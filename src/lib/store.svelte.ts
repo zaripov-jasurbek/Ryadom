@@ -314,7 +314,8 @@ class AppStore {
   fillDraft(items: { name: string; quantity: number; unitPrice: number; unsure?: boolean }[], total: number | null, servicePercent: number | null) {
     const typed = this.draft.filter(row => row.name.trim() || row.price)
     this.draft = [...typed, ...items.map(item => ({ id: this.draftSeq++, name: item.name, quantity: item.quantity, price: item.unitPrice, suspect: Boolean(item.unsure) })), this.newDraftRow()]
-    this.draftTotal = total
+    // A further photo adds to the rows already there (the next part of a long receipt, or another receipt), so its total adds up too.
+    this.draftTotal = typed.length && this.draftTotal !== null ? this.draftTotal + (total ?? 0) : total
     if (servicePercent !== null && servicePercent <= 30) this.draftService = servicePercent
   }
 

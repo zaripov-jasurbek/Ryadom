@@ -32,7 +32,7 @@
   <form class="panel bill draft" onsubmit={(e) => { e.preventDefault(); submit() }}>
     <div class="draft-top">
       <h1>Новый чек</h1>
-      <button type="button" class="soft-button" onclick={scan}>📷 Скан</button>
+      <button type="button" class="soft-button" onclick={scan}>{filled.length ? '📷 Ещё фото' : '📷 Скан'}</button>
     </div>
     <ItemTable bind:this={table} bind:rows={app.draft} newRow={app.newDraftRow} />
 
