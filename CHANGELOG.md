@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.0.0](https://github.com/zaripov-jasurbek/Ryadom/compare/v0.3.0...v1.0.0) (2026-10-07)
+
+
+### ⚠ BREAKING CHANGES
+
+* поля ввода без рамок и чистка неиспользуемого кода ([#11](https://github.com/zaripov-jasurbek/Ryadom/issues/11))
+
+### Новое
+
+* поля ввода без рамок и чистка неиспользуемого кода ([#11](https://github.com/zaripov-jasurbek/Ryadom/issues/11)) ([93e1954](https://github.com/zaripov-jasurbek/Ryadom/commit/93e195499ff8213443c95e265cf672d1a507f040))
+
 ## [0.3.0](https://github.com/zaripov-jasurbek/Ryadom/compare/v0.2.0...v0.3.0) (2026-10-07)
 
 
