@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { formatAmount, isUnitAssigned, sharedAllInfo, type BillItem } from '../lib/calculations'
-  import { portionCount } from '../lib/format'
+  import { formatAmount, isUnitAssigned, sharedAllInfo, type BillItem, type Participant } from '../lib/calculations'
+  import { initial, portionCount } from '../lib/format'
   import { app } from '../lib/store.svelte'
   import { haptic } from '../lib/haptics'
 
@@ -25,16 +25,39 @@
 
   // Each person's servings: a shared one counts as a part, so "Бек 4½" when one of five is split in two.
   const counts = $derived(everyone.map(person => ({ person, count: units.reduce((sum, unit) => { const list = consumers(unit); return list.some(entry => entry.id === person.id) ? sum + 1 / list.length : sum }, 0) })).filter(entry => entry.count > 0))
-  const others = $derived(counts.filter(entry => entry.person.id !== me))
   const mine = $derived(counts.find(entry => entry.person.id === me)?.count ?? 0)
   const free = $derived(units.filter(unit => tappable(unit) && !consumers(unit).length))
   // A serving nobody has marked yet: the line gets a pulsing dot, like an unread chat.
   const open = $derived(units.some(unit => !isUnitAssigned(item, unit)))
   // "−" first gives back a serving this person had alone, the last one first.
   const giveBack = $derived(me ? units.filter(unit => tappable(unit) && has(unit, me)).sort((a, b) => consumers(a).length - consumers(b).length || b - a)[0] : undefined)
-  const sharing = (id: string) => me ? units.find(unit => tappable(unit) && has(unit, id) && has(unit, me)) : undefined
-  // A tap on someone's name splits one of their servings with them: the one they have to themselves, if any.
-  const joinable = (id: string) => me ? units.filter(unit => tappable(unit) && has(unit, id) && !has(unit, me)).sort((a, b) => consumers(a).length - consumers(b).length)[0] : undefined
+  // Servings eaten by the same people form one group: one stack of avatars shows who shares with whom.
+  // Servings the viewer has alone are left to the stepper and the "Я" toggle.
+  type Group = { key: string; people: Participant[]; units: number[] }
+  const groups = $derived.by(() => {
+    const byPeople = new Map<string, Group>()
+    for (const unit of units) {
+      const people = consumers(unit)
+      if (!people.length || (people.length === 1 && people[0].id === me)) continue
+      const key = people.map(person => person.id).join(',')
+      const group = byPeople.get(key)
+      if (group) group.units.push(unit)
+      else byPeople.set(key, { key, people, units: [unit] })
+    }
+    return [...byPeople.values()]
+  })
+  const maxFaces = 4
+  const withMe = (group: Group) => Boolean(me) && group.people.some(person => person.id === me)
+  // "⅓" when a serving is split, "× 2" when there are several such servings.
+  function groupLabel(group: Group) {
+    const share = group.people.length > 1 ? portionCount(1 / group.people.length) : ''
+    const times = group.units.length > 1 ? `× ${group.units.length}` : ''
+    return [share, times].filter(Boolean).join(' ')
+  }
+  const groupNames = (group: Group) => group.people.map(person => person.id === me ? 'вы' : person.name).join(', ')
+  // A tap on a group the viewer is in gives back one of its servings; on anyone else's, joins one of them.
+  const groupUnit = (group: Group) => group.units.filter(tappable).at(withMe(group) ? -1 : 0)
+  const tapGroup = (group: Group) => tap(`group:${group.key}`, groupUnit(group))
 
   // Which control was just tapped: only that one answers with motion, not everything already marked on load.
   let tapped = $state('')
@@ -46,7 +69,6 @@
     clearTimeout(tapTimer); tapTimer = setTimeout(() => tapped = '', 320)
     void app.toggleUnit(item, unit)
   }
-  const tapPerson = (id: string) => tap(`person:${id}`, sharing(id) ?? joinable(id))
 
   // The creator's item actions live in one "⋯" menu.
   let menuOpen = $state(false)
@@ -65,6 +87,13 @@
 </script>
 
 <svelte:window onclick={(e) => { if (menuOpen && !menu?.contains(e.target as Node)) menuOpen = false }} onkeydown={(e) => { if (e.key === 'Escape') menuOpen = false }} />
+
+{#snippet faces(group: Group)}
+  <span class="faces" aria-hidden="true">
+    {#each group.people.slice(0, group.people.length > maxFaces ? maxFaces - 1 : maxFaces) as person (person.id)}<b class="tone-{app.personIndex(person.id) % 5}">{initial(person.name)}</b>{/each}
+    {#if group.people.length > maxFaces}<b class="more">+{group.people.length - maxFaces + 1}</b>{/if}
+  </span>
+{/snippet}
 
 <div class="bill-row" class:mine={mine > 0} class:open data-item={item.id}>
   <div class="bill-line">
@@ -88,14 +117,15 @@
     {#if sharedAll}
       <span class="train-note">На всех · по {formatAmount(share.perPerson)}</span>
     {:else}
-      <!-- Everyone's names one after another like train cars; a long train scrolls sideways instead of shrinking the names. -->
+      <!-- One stack of avatars per group of servings; the groups wrap to a new line instead of scrolling sideways. -->
       <div class="train" role="group" aria-label="Кто отметил">
-        {#each others as { person, count } (person.id)}
-          {@const label = `${person.name}${count === 1 ? '' : ` ${portionCount(count)}`}`}
+        {#each groups as group (group.key)}
+          {@const label = groupLabel(group)}
+          {@const names = groupNames(group)}
           {#if stepper && me}
-            <button type="button" class="car tone-{app.personIndex(person.id) % 5}" class:with-me={sharing(person.id) !== undefined} class:pop={tapped === `person:${person.id}`} title={sharing(person.id) !== undefined ? `Не делить с ${person.name}` : `Поделить порцию с ${person.name}`} disabled={sharing(person.id) === undefined && joinable(person.id) === undefined} onclick={() => tapPerson(person.id)}>{label}</button>
+            <button type="button" class="car group" class:with-me={withMe(group)} class:pop={tapped === `group:${group.key}`} aria-label={label ? `${names} · ${label}` : names} title={withMe(group) ? 'Не делить эту порцию' : `Поделить порцию: ${names}`} disabled={groupUnit(group) === undefined} onclick={() => tapGroup(group)}>{@render faces(group)}{#if label}<span class="group-share">{label}</span>{/if}</button>
           {:else}
-            <span class="car tone-{app.personIndex(person.id) % 5}">{label}</span>
+            <span class="car group" class:with-me={withMe(group)} role="img" aria-label={label ? `${names} · ${label}` : names} title={names}>{@render faces(group)}{#if label}<span class="group-share">{label}</span>{/if}</span>
           {/if}
         {/each}
       </div>
