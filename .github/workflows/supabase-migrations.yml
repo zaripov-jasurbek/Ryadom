@@ -26,7 +26,7 @@ jobs:
       # Первая миграция создаёт схему и не идемпотентна; остальные безопасно выполнять повторно.
       BASELINE_VERSION: '202610010001'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: supabase/setup-cli@v3
         with:
           version: 2.84.2
