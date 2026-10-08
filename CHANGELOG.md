@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.2.0](https://github.com/zaripov-jasurbek/Ryadom/compare/v2.1.0...v2.2.0) (2026-10-08)
+
+
+### Новое
+
+* две серые галочки для подтверждения оплаты ([#25](https://github.com/zaripov-jasurbek/Ryadom/issues/25)) ([018c336](https://github.com/zaripov-jasurbek/Ryadom/commit/018c336ec5fc80e07307f02dbb69587f97dc0bf7))
+
 ## [2.1.0](https://github.com/zaripov-jasurbek/Ryadom/compare/v2.0.0...v2.1.0) (2026-10-08)
 
 
