@@ -80,7 +80,8 @@ export const unconfirmRemotePayment = (checkId: string, participantId: string) =
 export const deleteRemoteItem = (checkId: string, itemId: string) => call('delete_item', { p_check_id: checkId, p_item_id: itemId })
 export const toggleRemoteUnit = (unitId: string, enabled: boolean) => call('toggle_unit_share', { p_item_unit: unitId, p_enabled: enabled })
 export const removeRemoteParticipant = (checkId: string, participantId: string) => call('remove_participant', { p_check_id: checkId, p_participant_id: participantId })
-export const submitRemotePayment = (checkId: string, amount: number) => call('submit_payment', { p_check_id: checkId, p_amount: amount })
+/** The guest's own ✓ "I paid", or taking it off. */
+export const markRemotePaid = (checkId: string, paid: boolean) => call('mark_paid', { p_check_id: checkId, p_paid: paid })
 export const confirmRemotePayment = (checkId: string, participantId: string) => call('confirm_payment', { p_check_id: checkId, p_participant_id: participantId })
 export const deleteRemoteCheck = (checkId: string) => call('delete_check', { p_check_id: checkId })
 export const renameRemoteParticipant = (checkId: string, name: string) => call('rename_participant', { p_check_id: checkId, p_name: name })

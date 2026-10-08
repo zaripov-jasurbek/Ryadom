@@ -22,7 +22,7 @@ export interface Database {
       toggle_unit_share: { Args: { p_item_unit: string; p_enabled: boolean }; Returns: undefined }
       set_unit_custom_shares: { Args: { p_item_unit: string; p_allocations: Json }; Returns: undefined }
       reset_unit_custom_shares: { Args: { p_item_unit: string }; Returns: undefined }
-      submit_payment: { Args: { p_check_id: string; p_amount: number }; Returns: undefined }
+      mark_paid: { Args: { p_check_id: string; p_paid: boolean }; Returns: undefined }
       confirm_payment: { Args: { p_check_id: string; p_participant_id: string }; Returns: undefined }
       remove_participant: { Args: { p_check_id: string; p_participant_id: string }; Returns: undefined }
       rename_participant: { Args: { p_check_id: string; p_name: string }; Returns: undefined }

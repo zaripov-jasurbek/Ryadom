@@ -1,6 +1,6 @@
 import { assignedSubtotal, calculateTotals, ownerIdOf, serviceFee, withSelection, type Bill, type BillItem, type Participant } from './calculations'
 import { errorMessage } from './errors'
-import { addRemoteItem, addRemoteItems, updateRemoteCheck, updateRemoteItem, shareRemoteItemEqually, unshareRemoteItem, claimRemoteCheckOwner, confirmRemotePayment, createRemoteCheck, deleteRemoteCheck, deleteRemoteItem, ensureAnonymousSession, isRemoteCheckGone, joinRemoteCheck, loadRemoteCheck, removeRemoteParticipant, renameRemoteParticipant, submitRemotePayment, subscribeToRemoteCheck, toggleRemoteUnit, unconfirmRemotePayment, type PresenceUser, type RemoteBill, type RemoteSubscription } from './remote'
+import { addRemoteItem, addRemoteItems, updateRemoteCheck, updateRemoteItem, shareRemoteItemEqually, unshareRemoteItem, claimRemoteCheckOwner, confirmRemotePayment, createRemoteCheck, deleteRemoteCheck, deleteRemoteItem, ensureAnonymousSession, isRemoteCheckGone, joinRemoteCheck, loadRemoteCheck, removeRemoteParticipant, renameRemoteParticipant, markRemotePaid, subscribeToRemoteCheck, toggleRemoteUnit, unconfirmRemotePayment, type PresenceUser, type RemoteBill, type RemoteSubscription } from './remote'
 import { checkPath, homePath, readOwnerToken, routeCheckId } from './routes'
 import { preloadSupabase } from './supabase'
 import { expiresAt } from './limits'
@@ -429,8 +429,9 @@ class AppStore {
     await this.refresh()
   }
 
-  submitPayment(amount: number) {
-    return this.mutate('Не удалось отправить оплату', dbId => submitRemotePayment(dbId, amount), 'Оплата отправлена')
+  /** Your own ✓ "I paid"; the creator then puts ✓✓. */
+  markPaid(paid: boolean) {
+    return this.mutate('Не удалось отметить оплату', dbId => markRemotePaid(dbId, paid), paid ? 'Отмечено: оплатил' : 'Отметка снята')
   }
 
   /** Your own name in the check; it is kept for the next checks too. */

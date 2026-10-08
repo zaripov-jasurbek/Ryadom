@@ -134,7 +134,9 @@ describe('export', () => {
     const bill = withItems(item('tea', 'Чай', 2, 10_000, { '0': ['0'], '1': ['1'] }))
     const [jasur, aziz] = calculateTotals(bill)
     assert.equal(paymentLine(jasur, '0'), 'платил по счёту')
-    assert.match(paymentLine(aziz, '0'), /^оплачено .* · осталось /)
+    assert.equal(paymentLine(aziz, '0'), 'не оплачено')
+    assert.equal(paymentLine({ ...aziz, status: 'proof_submitted' }, '0'), 'отметил оплату ✓')
+    assert.equal(paymentLine({ ...aziz, status: 'paid' }, '0'), 'оплачено ✓✓')
   })
   it('lists what each amount is made of under the name', () => {
     const bill = { ...withItems(item('tea', 'Чай', 2, 10_000, { '0': ['0'], '1': ['0', '1'] })), servicePercent: 10 }
