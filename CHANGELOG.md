@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.0](https://github.com/zaripov-jasurbek/Ryadom/compare/v1.1.0...v1.2.0) (2026-10-08)
+
+
+### Новое
+
+* **items:** аватарки вместо никнеймов, группировка по общей порции ([#15](https://github.com/zaripov-jasurbek/Ryadom/issues/15)) ([feec5b0](https://github.com/zaripov-jasurbek/Ryadom/commit/feec5b07cd71bd7c324cea26da2901ad59066ac2))
+
 ## [1.1.0](https://github.com/zaripov-jasurbek/Ryadom/compare/v1.0.0...v1.1.0) (2026-10-08)
 
 
