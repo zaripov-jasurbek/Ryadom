@@ -5,10 +5,10 @@
   import { blankRow, validRow, type ItemRow } from '../lib/rows'
 
   /**
-   * The table of items as on the create page. `fixed` edits the given rows only (one item being changed);
-   * `selectable` adds a tick per row for the scanner, where doubtful rows start unticked.
+   * The table of items as on the create page. `fixed` edits the given rows only (one item being changed).
+   * Doubtful scanned rows (`suspect`) get a yellow frame until they are corrected or removed with ×.
    */
-  let { rows = $bindable(), newRow, fixed = false, selectable = false }: { rows: ItemRow[]; newRow: () => ItemRow; fixed?: boolean; selectable?: boolean } = $props()
+  let { rows = $bindable(), newRow, fixed = false }: { rows: ItemRow[]; newRow: () => ItemRow; fixed?: boolean } = $props()
 
   // A row is checked once it is left, not while it is being typed.
   let touched = $state(new Set<number>())
@@ -18,6 +18,7 @@
   let table: HTMLDivElement | undefined = $state()
   // Typing in the last line opens the next one, like a list in notes.
   function typed(row: ItemRow) {
+    row.suspect = false
     if (!fixed && row === rows.at(-1) && !blankRow(row)) rows.push(newRow())
   }
   async function addRow() {
@@ -38,12 +39,11 @@
   }
 </script>
 
-<div class="item-table" class:selectable>
-  <div class="bill-line bill-head draft-line" aria-hidden="true">{#if selectable}<span></span>{/if}<span>Название</span><span class="bill-qty">Кол-во</span><span class="bill-price">Цена</span><span></span></div>
+<div class="item-table">
+  <div class="bill-line bill-head draft-line" aria-hidden="true"><span>Название</span><span class="bill-qty">Кол-во</span><span class="bill-price">Цена</span><span></span></div>
   <div class="draft-rows" bind:this={table}>
     {#each rows as row, i (row.id)}
-      <div class="bill-line draft-line draft-row" class:off={row.include === false} class:suspect={row.suspect} class:invalid={touched.has(row.id) && !blankRow(row) && row.include !== false && !validRow(row)} onfocusout={() => { touched.add(row.id); touched = new Set(touched) }}>
-        {#if selectable}<input class="draft-check" type="checkbox" checked={row.include !== false} onchange={(e) => row.include = e.currentTarget.checked} aria-label={`Добавить строку ${i + 1}`} />{/if}
+      <div class="bill-line draft-line draft-row" class:suspect={row.suspect} class:invalid={touched.has(row.id) && !blankRow(row) && !validRow(row)} onfocusout={() => { touched.add(row.id); touched = new Set(touched) }}>
         <input class="draft-name" bind:value={row.name} oninput={() => typed(row)} maxlength={scanLimits.nameLength} placeholder={i === 0 ? 'Плов' : ''} aria-label={`Название, строка ${i + 1}`} enterkeyhint="next" />
         <input class="draft-qty" type="number" bind:value={row.quantity} oninput={() => typed(row)} min="1" max={scanLimits.maxQuantity} step="1" inputmode="numeric" aria-label={`Количество, строка ${i + 1}`} enterkeyhint="next" />
         <input class="draft-price" type="number" bind:value={row.price} oninput={() => typed(row)} onkeydown={(e) => next(e, i)} min="1" max={limits.maxUnitPrice} step="1" inputmode="numeric" placeholder={i === 0 ? '45000' : ''} aria-label={`Цена за штуку, строка ${i + 1}`} enterkeyhint={fixed ? 'done' : 'next'} />

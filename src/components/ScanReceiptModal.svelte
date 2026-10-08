@@ -10,7 +10,7 @@
   import Modal from './Modal.svelte'
   import { haptic } from '../lib/haptics'
 
-  /** `suspect` rows were left unticked because the receipt's total adds up without them. */
+  /** `suspect` rows are framed in yellow: the receipt's total adds up without them, so they are likely misread. */
   type Row = ItemRow
 
   let step = $state<'pick' | 'area' | 'reading' | 'review'>('pick')
@@ -33,7 +33,7 @@
   let camera: HTMLInputElement, gallery: HTMLInputElement
   let controller: AbortController | null = null
 
-  const newRow = (): Row => ({ id: nextId++, include: true, suspect: false, name: '', quantity: 1, price: null })
+  const newRow = (): Row => ({ id: nextId++, name: '', quantity: 1, price: null })
   let table: ItemTable | undefined = $state()
   const chosen = $derived(filledRows(rows))
   const ready = $derived(chosen.length > 0 && chosen.every(validRow))
@@ -132,10 +132,10 @@
       const readings = await recognizeReceipt(file, $state.snapshot(area) as Area, (stage, value) => { if (controller === current) { status = stage; progress = value } }, current.signal, settled)
       if (controller !== current) return
       const { text, result } = bestReading(readings)
-      // On the create page the rows go straight into its table, which is where they are checked.
-      // Rows the total adds up without are most likely misread, so they are left out there.
+      // On the create page the rows go straight into its table, which is where they are checked;
+      // rows the total adds up without are framed in yellow there too.
       if (app.mode === 'create') {
-        const found = result.items.filter(entry => !entry.unsure)
+        const found = result.items
         app.fillDraft(found, result.total, result.servicePercent)
         app.notify(found.length ? `Распознано ${plural(found.length, 'позиция', 'позиции', 'позиций')} — сверьте с чеком` : 'Позиции не найдены — впишите их в таблицу')
         found.length ? haptic.success() : haptic.error()
@@ -143,7 +143,7 @@
         return
       }
       rawText = text; receiptTotal = result.total; receiptService = result.servicePercent
-      rows = [...result.items.map(entry => ({ id: nextId++, include: !entry.unsure, suspect: Boolean(entry.unsure), name: entry.name, quantity: entry.quantity, price: entry.unitPrice })), newRow()]
+      rows = [...result.items.map(entry => ({ id: nextId++, suspect: Boolean(entry.unsure), name: entry.name, quantity: entry.quantity, price: entry.unitPrice })), newRow()]
       photoZoomed = false
       step = 'review'
       haptic.success()
@@ -240,7 +240,7 @@
     <button type="button" class="soft-button wide" onclick={reframe}>Отменить</button>
   {:else}
     {#if rows.length > 1}
-      <p class="lead">Исправьте ошибки и уберите лишнее.{#if hasSuspects} Строки без галочки, скорее всего, распознаны с ошибкой.{/if}</p>
+      <p class="lead">Исправьте ошибки и уберите лишнее крестиком.{#if hasSuspects} Строки в жёлтой рамке, скорее всего, распознаны с ошибкой.{/if}</p>
     {:else}
       <div class="notice warning"><span aria-hidden="true">◌</span><div><b>Позиции не найдены</b><small>Переснимите чек ровнее или добавьте строки вручную.</small></div></div>
     {/if}
@@ -253,7 +253,7 @@
         </div>
       </details>
     {/if}
-    <ItemTable bind:this={table} bind:rows {newRow} selectable={rows.some(row => row.suspect || row.include === false)} />
+    <ItemTable bind:this={table} bind:rows {newRow} />
     <div class="modal-total">
       <span>Выбрано {plural(chosen.length, 'позиция', 'позиции', 'позиций')}{#if receiptTotal}<small class:off-total={totalOff}>{` · в чеке ${formatUzs(receiptTotal)}`}</small>{/if}</span>
       <b>{formatUzs(chosenTotal)}</b>

@@ -303,9 +303,9 @@ class AppStore {
   scanPhoto(file: File) { this.scanFile = file; this.scanOpen = true }
 
   /** Scanned rows replace the empty ones; what was typed by hand stays. */
-  fillDraft(items: { name: string; quantity: number; unitPrice: number }[], total: number | null, servicePercent: number | null) {
+  fillDraft(items: { name: string; quantity: number; unitPrice: number; unsure?: boolean }[], total: number | null, servicePercent: number | null) {
     const typed = this.draft.filter(row => row.name.trim() || row.price)
-    this.draft = [...typed, ...items.map(item => ({ id: this.draftSeq++, name: item.name, quantity: item.quantity, price: item.unitPrice })), this.newDraftRow()]
+    this.draft = [...typed, ...items.map(item => ({ id: this.draftSeq++, name: item.name, quantity: item.quantity, price: item.unitPrice, suspect: Boolean(item.unsure) })), this.newDraftRow()]
     this.draftTotal = total
     if (servicePercent !== null && servicePercent <= 30) this.draftService = servicePercent
   }
