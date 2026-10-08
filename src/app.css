@@ -430,20 +430,37 @@ button.summary-person-main:active { box-shadow: var(--inset-sm); }
 /* ─── Receipt scan ─────────────────────────────────────────── */
 .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 .scan-actions { display: grid; gap: 2px; }
-/* The frame on the photo: corners as large round handles, the photo outside it dimmed. */
-.scan-area { position: relative; margin: 4px auto 14px; touch-action: none; user-select: none; -webkit-user-select: none; }
-.scan-area img { display: block; width: 100%; height: 100%; border-radius: var(--radius-sm); -webkit-touch-callout: none; }
-.scan-area svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+/* The frame step fills the card's height: one line of text, the photo in all the room left, the buttons at the bottom. */
+.modal-card.fill { height: calc(100vh - 32px); height: calc(100dvh - 32px); display: flex; flex-direction: column; overscroll-behavior: contain; }
+.modal-card.fill .modal-form { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.modal-card.fill .modal-form > .ghost-button { align-self: center; }
+.scan-stage { position: relative; flex: 1; min-height: 220px; display: grid; place-items: center; margin: 0 -8px; touch-action: none; }
+/* The frame on the photo: round handles on the corners, flat ones on the sides, the photo outside it dimmed. */
+.scan-area { position: relative; touch-action: none; user-select: none; -webkit-user-select: none; }
+.scan-area img, .scan-loupe img { display: block; width: 100%; height: 100%; -webkit-touch-callout: none; }
+.scan-area img { border-radius: var(--radius-sm); }
+.scan-area svg, .scan-loupe svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
 .scan-area-shade { fill: rgb(0 0 0 / .55); }
 .scan-area-edge { fill: none; stroke: var(--accent); stroke-width: 2.5px; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
-.scan-corner { position: absolute; width: 44px; height: 44px; margin: -22px 0 0 -22px; padding: 0; border: 0; border-radius: 50%; background: transparent; touch-action: none; cursor: grab; }
-.scan-corner::after { content: ''; position: absolute; inset: 12px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--accent-ink), 0 2px 6px rgb(0 0 0 / .35); transition: transform .12s; }
-.scan-corner.active { cursor: grabbing; }
-.scan-corner.active::after, .scan-corner:focus-visible::after { transform: scale(1.3); }
-.scan-corner:focus-visible { outline: none; box-shadow: var(--focus); }
-.scan-loupe { position: absolute; width: 96px; height: 96px; margin: -48px 0 0 -48px; border-radius: 50%; background-repeat: no-repeat; background-color: var(--bg); box-shadow: 0 0 0 3px var(--accent), 0 4px 14px rgb(0 0 0 / .4); pointer-events: none; }
-.scan-loupe::after { content: ''; position: absolute; left: 50%; top: 50%; width: 12px; height: 12px; margin: -6px 0 0 -6px; border: 2px solid var(--accent); border-radius: 50%; }
-.scan-again { display: flex; justify-content: center; gap: 8px; }
+.scan-corner, .scan-side { position: absolute; width: 44px; height: 44px; margin: -22px 0 0 -22px; padding: 0; border: 0; border-radius: 50%; background: transparent; touch-action: none; cursor: grab; }
+.scan-corner::after, .scan-side::after { content: ''; position: absolute; left: 50%; top: 50%; width: 20px; height: 20px; margin: -10px 0 0 -10px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--accent-ink), 0 2px 6px rgb(0 0 0 / .35); transform: rotate(var(--angle)); transition: transform .12s; }
+.scan-side::after { width: 28px; height: 8px; margin: -4px 0 0 -14px; border-radius: 4px; }
+.scan-corner.active, .scan-side.active { cursor: grabbing; }
+.scan-corner.active::after, .scan-corner:focus-visible::after, .scan-side.active::after, .scan-side:focus-visible::after { transform: rotate(var(--angle)) scale(1.3); }
+.scan-corner:focus-visible, .scan-side:focus-visible { outline: none; box-shadow: var(--focus); }
+/* Until the first touch the top and bottom handles nudge inwards, with an arrow, to show what to pull. */
+.scan-lead { margin: 0 -8px 6px; padding: 6px 8px; border-radius: 10px; }
+.scan-lead.beckon { animation: glow 1.1s ease-in-out .5s 3; }
+@keyframes glow { 50% { background: color-mix(in srgb, var(--accent) 60%, transparent); color: var(--ink); } }
+.scan-side.beckon::after { animation: beckon 1.1s ease-in-out .5s 3; }
+.scan-side.beckon::before { content: ''; position: absolute; left: 50%; top: 50%; width: 9px; height: 9px; margin: -5px 0 0 -5px; border: solid var(--accent-ink); border-width: 0 3px 3px 0; opacity: 0; transform: rotate(var(--angle)) translateY(16px) rotate(45deg); animation: beckon-arrow 1.1s ease-in-out .5s 3; }
+@keyframes beckon { 50% { transform: rotate(var(--angle)) translateY(7px) scale(1.15); } }
+@keyframes beckon-arrow { 50% { opacity: 1; transform: rotate(var(--angle)) translateY(22px) rotate(45deg); } }
+.scan-loupe { position: absolute; z-index: 1; top: 0; right: 0; overflow: hidden; border-radius: 50%; background: var(--bg); box-shadow: 0 0 0 3px var(--accent), 0 4px 14px rgb(0 0 0 / .4); pointer-events: none; }
+.scan-loupe.left { right: auto; left: 0; }
+.scan-loupe > div { position: absolute; }
+.scan-loupe::after { content: ''; position: absolute; left: 50%; top: 50%; width: 12px; height: 12px; margin: -6px 0 0 -6px; border: 2px solid var(--accent-ink); border-radius: 50%; }
+.scan-again { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 8px; }
 .scan-reading { display: grid; justify-items: center; gap: 12px; margin: 10px 0 6px; font-size: 14px; color: var(--muted); }
 .scan-preview { max-width: 100%; max-height: 240px; border-radius: var(--radius-sm); box-shadow: var(--raise-sm); object-fit: contain; }
 .scan-progress { width: 100%; height: 10px; border-radius: 999px; box-shadow: var(--inset-sm); overflow: hidden; }
@@ -501,6 +518,7 @@ button.summary-person-main:active { box-shadow: var(--inset-sm); }
   .confirm-hint { padding-left: 0; }
   .modal-backdrop { place-items: end center; padding: 0; }
   .modal-card { width: 100%; max-height: 92vh; max-height: 92dvh; border-radius: 24px 24px 0 0; padding: 26px 20px calc(24px + env(safe-area-inset-bottom)); animation: sheet .25s ease-out; }
+  .modal-card.fill { height: 92vh; height: 92dvh; }
 }
 @media (max-width: 420px) {
   .steps-grid { grid-template-columns: 1fr; }
