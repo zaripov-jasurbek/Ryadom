@@ -181,12 +181,12 @@ input:not([type=checkbox]):focus-visible { box-shadow: none !important; }
 .field { display: grid; gap: 8px; margin: 12px 0 4px; font-size: 14px; font-weight: 600; color: var(--ink-soft); }
 .label-hint { font-weight: 400; color: var(--muted); }
 .field-note { font-size: 12px; line-height: 1.45; color: var(--muted); }
-.field input, .suffix-input input, .stepper input {
+.field input, .suffix-input input {
   width: 100%; min-height: 48px; padding: 0 14px; border: 0; border-radius: var(--radius-sm);
   background: var(--field); font-size: 16px; outline: none; transition: background-color .18s;
 }
 .field input::placeholder { color: var(--muted); opacity: .8; }
-.field input:focus, .suffix-input input:focus, .stepper input:focus { background: var(--field-focus); }
+.field input:focus, .suffix-input input:focus { background: var(--field-focus); }
 .suffix-input { position: relative; display: block; }
 .suffix-input input { padding-right: 52px; }
 .suffix-input > span { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); font-size: 13px; font-weight: 500; color: var(--muted); pointer-events: none; }
@@ -306,7 +306,13 @@ button.car.with-me { box-shadow: 0 0 0 2px var(--paper), 0 0 0 4px var(--brand);
 .draft-row input:focus { background: var(--field-focus); }
 .draft-row .draft-qty, .draft-row .draft-price { text-align: right; font-variant-numeric: tabular-nums; }
 .draft-row.invalid input { background: var(--danger-bg); }
-.draft .add-more { margin: 4px 0 6px; }
+.item-table { display: grid; }
+.item-table .add-more { margin: 4px 0 6px; }
+.item-table.selectable .bill-line.draft-line { grid-template-columns: 22px minmax(0, 1fr) 60px 104px 32px; }
+.draft-row .draft-check { width: 20px; min-height: 0; height: 20px; padding: 0; accent-color: var(--brand); }
+.draft-row.off { opacity: .5; }
+.draft-row.suspect.off { opacity: .7; }
+.draft-row.suspect.off .draft-name { box-shadow: inset 0 0 0 1px var(--warn-ink); }
 .draft-service { align-items: center; }
 .draft-service .suffix-input { width: 110px; }
 .draft-service input { min-height: 40px; text-align: right; }
@@ -366,7 +372,6 @@ button.summary-person-main:active { box-shadow: var(--inset-sm); }
 /* The card number stays a tap away while a guest still owes, wherever they scrolled. */
 .card-dock { position: fixed; z-index: 7; left: 50%; bottom: calc(14px + env(safe-area-inset-bottom)); transform: translateX(-50%); max-width: calc(100% - 32px); min-height: 52px; padding: 0 22px; border: 0; border-radius: 999px; background: var(--accent); color: var(--accent-ink); box-shadow: 0 8px 24px rgb(0 0 0 / .18); font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .card-dock:active { transform: translateX(-50%) translateY(1px); }
-.added-note { margin-top: 10px; padding: 10px 14px; border-radius: var(--radius-sm); background: var(--ok-bg); color: var(--ok); font-size: 13px; font-weight: 600; }
 .export-card { position: relative; padding: 18px 20px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px; }
 /* The summary speaks the same way as the dishes: no coloured fills, a stripe at the left edge.
    Brand green marks your own row, the calmer "paid" green marks what is settled. */
@@ -393,11 +398,6 @@ button.summary-person-main:active { box-shadow: var(--inset-sm); }
 .modal-form { display: grid; gap: 4px; }
 .modal-close { position: absolute; right: 16px; top: 16px; width: 36px; height: 36px; border: 0; border-radius: 11px; background: var(--field); color: var(--muted); font-size: 22px; line-height: 1; }
 .modal-close:active { background: var(--border); }
-.modal-fields { display: grid; grid-template-columns: .9fr 1.1fr; gap: 14px; }
-.stepper { display: flex; align-items: center; gap: 6px; }
-.stepper input { text-align: center; padding: 0 6px; min-width: 0; }
-.stepper button { width: 40px; height: 40px; flex: none; border: 0; border-radius: 11px; background: var(--field); font-size: 18px; color: var(--ink-soft); }
-.stepper button:active:not(:disabled) { background: var(--border); }
 .modal-total { display: flex; justify-content: space-between; align-items: center; margin-top: 14px; padding: 14px 16px; border-radius: var(--radius-sm); box-shadow: var(--inset-sm); font-size: 14px; color: var(--muted); }
 .modal-total b { font-size: 17px; color: var(--ink); white-space: nowrap; }
 .modal-card .chip-row { margin-top: 4px; }
@@ -430,21 +430,6 @@ button.summary-person-main:active { box-shadow: var(--inset-sm); }
 .scan-preview { max-width: 100%; max-height: 240px; border-radius: var(--radius-sm); box-shadow: var(--raise-sm); object-fit: contain; }
 .scan-progress { width: 100%; height: 10px; border-radius: 999px; box-shadow: var(--inset-sm); overflow: hidden; }
 .scan-progress i { display: block; height: 100%; border-radius: inherit; background: var(--accent); transition: width .3s; }
-.scan-rows { display: grid; gap: 10px; margin: 6px 0; }
-.scan-row { display: grid; grid-template-columns: auto 92px 1fr auto; grid-template-areas: "check name name remove" ". qty price price"; gap: 8px; align-items: center; padding: 10px; border-radius: var(--radius-sm); box-shadow: var(--raise-sm); transition: opacity .18s; }
-.scan-row.off { opacity: .5; }
-.scan-row.invalid { box-shadow: var(--raise-sm), inset 0 0 0 2px var(--danger); }
-.scan-row.suspect.off { opacity: .7; box-shadow: var(--raise-sm), inset 0 0 0 1px var(--warn-ink); }
-.scan-row input[type=checkbox] { grid-area: check; width: 20px; height: 20px; accent-color: var(--brand); }
-.scan-row .icon-button { grid-area: remove; }
-.scan-row input:not([type=checkbox]) { width: 100%; min-width: 0; min-height: 40px; padding: 0 10px; border: 0; border-radius: 10px; background: var(--field); font-size: 16px; outline: none; }
-.scan-row input:not([type=checkbox]):focus { background: var(--field-focus); }
-.scan-name { grid-area: name; }
-.scan-qty, .scan-price { position: relative; display: block; }
-.scan-qty { grid-area: qty; }
-.scan-price { grid-area: price; }
-.scan-row .scan-qty input, .scan-row .scan-price input { text-align: right; padding-right: 40px; }
-.scan-qty > span, .scan-price > span { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); font-size: 12px; color: var(--muted); pointer-events: none; }
 .modal-total small { font-size: 13px; }
 .modal-total small.off-total { color: var(--danger); }
 .scan-diff { margin: -4px 0 6px; font-size: 13px; line-height: 1.45; color: var(--danger); }
@@ -492,6 +477,7 @@ button.summary-person-main:active { box-shadow: var(--inset-sm); }
   .bill.owner .bill-line { grid-template-columns: minmax(0, 1fr) 52px 74px 32px; }
   .bill-head { letter-spacing: .03em; }
   .bill-line.draft-line, .bill.owner .bill-line.draft-line { grid-template-columns: minmax(0, 1fr) 46px 86px 28px; column-gap: 5px; }
+  .item-table.selectable .bill-line.draft-line { grid-template-columns: 20px minmax(0, 1fr) 46px 86px 28px; }
   .draft-row input { padding: 0 8px; }
   .bill-row.mine::before { left: -16px; }
   .summary-person.is-me::before { left: -16px; }
@@ -501,7 +487,6 @@ button.summary-person-main:active { box-shadow: var(--inset-sm); }
 }
 @media (max-width: 420px) {
   .steps-grid { grid-template-columns: 1fr; }
-  .modal-fields { grid-template-columns: 1fr; gap: 0; }
 }
 @keyframes sheet { from { translate: 0 40px; opacity: .4; } }
 

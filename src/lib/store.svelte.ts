@@ -6,10 +6,11 @@ import { preloadSupabase } from './supabase'
 import { expiresAt } from './limits'
 import { defaultTitle, randomName } from './format'
 import { shareOr } from './share'
+import type { ItemRow } from './rows'
 
 export type Mode = 'home' | 'create' | 'join' | 'check'
 /** A line of the check being made: what was typed or scanned, checked only when the check is created. */
-export type DraftRow = { id: number; name: string; quantity: number | null; price: number | null }
+export type DraftRow = ItemRow
 export type ConfirmRequest = { title: string; body?: string; action: string; danger?: boolean; resolve: (answer: boolean) => void }
 const billsKey = 'billsplit:v1'
 const personKey = (billId: string) => `billsplit:person:${billId}`

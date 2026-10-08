@@ -1,71 +1,59 @@
 <script lang="ts">
   import { untrack } from 'svelte'
   import { formatUzs, isUnitAssigned, type BillItem } from '../lib/calculations'
-  import { limits } from '../lib/limits'
+  import { plural } from '../lib/format'
+  import { filledRows, rowsTotal, toItems, validRow, type ItemRow } from '../lib/rows'
   import { app } from '../lib/store.svelte'
+  import ItemTable from './ItemTable.svelte'
   import Modal from './Modal.svelte'
 
-  /** Without an item the modal adds a new one; with one it edits it. */
+  /** Without an item the modal adds new ones, several at once like the create page; with one it edits it. */
   let { item = null }: { item?: BillItem | null } = $props()
   // The form edits a copy taken when it opens; refreshes from other devices do not reset what is typed.
   const editing = untrack(() => item)
 
-  let name = $state(editing?.name ?? '')
-  let quantity = $state<number | null>(editing?.quantity ?? 1)
-  let price = $state<number | null>(editing?.unitPrice ?? null)
-  // Same limits as add_item on the server.
-  const qty = $derived(Math.floor(Number(quantity) || 0))
-  const valid = $derived(Boolean(name.trim()) && qty >= 1 && qty <= 99 && typeof price === 'number' && price >= 1 && price <= limits.maxUnitPrice)
-  const unitPrice = $derived(Math.floor(price ?? 0))
-  const changed = $derived(!editing || name.trim() !== editing.name || qty !== editing.quantity || unitPrice !== editing.unitPrice)
+  let seq = 0
+  const newRow = (): ItemRow => ({ id: seq++, name: '', quantity: 1, price: null })
+  let rows = $state<ItemRow[]>(editing ? [{ id: seq++, name: editing.name, quantity: editing.quantity, price: editing.unitPrice }] : [newRow()])
+  let table: ItemTable | undefined = $state()
+
+  const filled = $derived(filledRows(rows))
+  const ready = $derived(filled.length > 0 && filled.every(validRow))
+  const total = $derived(rowsTotal(filled))
+  const row = $derived(rows[0])
+  const changed = $derived(!editing || row.name.trim() !== editing.name || row.quantity !== editing.quantity || row.price !== editing.unitPrice)
 
   // What the server will do to the marks, so the creator is not surprised.
   const warnings = $derived.by(() => {
-    if (!editing || !valid) return []
+    if (!editing || !ready) return []
+    const qty = row.quantity!
     const list: string[] = []
     const units = Array.from({ length: editing.quantity }, (_, unit) => unit)
     if (units.some(unit => unit >= qty && isUnitAssigned(editing, unit))) list.push('Отметки на убранных порциях пропадут.')
-    if (unitPrice !== editing.unitPrice && units.some(unit => unit < qty && editing.unitModes?.[String(unit)] === 'custom')) list.push('Доли, распределённые вручную, станут поровну.')
+    if (row.price !== editing.unitPrice && units.some(unit => unit < qty && editing.unitModes?.[String(unit)] === 'custom')) list.push('Доли, распределённые вручную, станут поровну.')
     return list
   })
-
-  // A new item keeps the sheet open for the next one: a receipt typed by hand is several items in a row.
-  let added = $state<string[]>([])
-  let nameInput: HTMLInputElement | undefined = $state()
 
   function close() { if (editing) app.editingItem = null; else app.addItemOpen = false }
 
   async function submit() {
-    if (!valid || app.busy) return
+    if (!ready || app.busy) { table?.touchAll(); return }
     if (!changed) { close(); return }
-    if (editing) { if (await app.updateItem(editing, name.trim(), qty, unitPrice)) close(); return }
-    if (!await app.addItem(name.trim(), qty, unitPrice)) return
-    added = [...added, name.trim()]
-    name = ''; quantity = 1; price = null
-    nameInput?.focus()
+    if (editing) { if (await app.updateItem(editing, row.name.trim(), row.quantity!, row.price!)) close(); return }
+    const items = toItems(filled)
+    const added = await app.addItems(items)
+    if (added === items.length) { app.notify(`Добавлено ${plural(added, 'позиция', 'позиции', 'позиций')}`); close(); return }
+    // Keep what was not added so the owner can retry without typing again.
+    const addedIds = new Set(filled.slice(0, added).map(entry => entry.id))
+    rows = rows.filter(entry => !addedIds.has(entry.id))
   }
 </script>
 
 <Modal labelledby="add-item-title" onclose={close} onsubmit={() => void submit()}>
-  <div class="eyebrow">{editing ? 'Изменить позицию' : 'Новая позиция'}</div>
+  <div class="eyebrow">{editing ? 'Изменить позицию' : 'Новые позиции'}</div>
   <h2 id="add-item-title">{editing ? 'Исправим позицию' : 'Что было на столе?'}</h2>
-  <!-- svelte-ignore a11y_autofocus -->
-  <label class="field">Название<input bind:this={nameInput} bind:value={name} placeholder="Например, Пицца пепперони" maxlength={limits.itemNameLength} autofocus /></label>
-  <div class="modal-fields">
-    <label class="field">Количество
-      <span class="stepper">
-        <button type="button" aria-label="Меньше" disabled={qty <= 1} onclick={() => quantity = Math.max(1, qty - 1)}>−</button>
-        <input type="number" bind:value={quantity} min="1" max="99" step="1" inputmode="numeric" aria-invalid={qty < 1 || qty > 99} />
-        <button type="button" aria-label="Больше" disabled={qty >= 99} onclick={() => quantity = Math.min(99, qty + 1)}>+</button>
-      </span>
-    </label>
-    <label class="field">Цена за штуку<span class="suffix-input"><input type="number" bind:value={price} min="1" max={limits.maxUnitPrice} step="1" inputmode="numeric" placeholder="0" /><span>сум</span></span></label>
-  </div>
-  <div class="modal-total">Сумма позиции <b>{formatUzs(Math.max(0, qty * unitPrice))}</b></div>
+  <ItemTable bind:this={table} bind:rows {newRow} fixed={Boolean(editing)} />
+  <div class="modal-total">{editing ? 'Сумма позиции' : 'Сумма'} <b>{formatUzs(total)}</b></div>
   {#each warnings as warning (warning)}<p class="modal-warning">{warning}</p>{/each}
-  {#if added.length}
-    <p class="added-note" role="status">✓ Добавлено: {added.slice(-3).join(', ')}{added.length > 3 ? ` и ещё ${added.length - 3}` : ''}</p>
-  {/if}
-  <button class="primary-button wide" disabled={app.busy || !valid}>{#if editing}Сохранить <span aria-hidden="true">✓</span>{:else}{added.length ? 'Добавить ещё' : 'Добавить позицию'} <span aria-hidden="true">＋</span>{/if}</button>
-  {#if added.length}<button type="button" class="soft-button wide" onclick={close}>Готово</button>{/if}
+  <button class="primary-button wide" disabled={app.busy}>{#if editing}Сохранить <span aria-hidden="true">✓</span>{:else}{app.busy ? 'Добавляем…' : filled.length ? `Добавить ${plural(filled.length, 'позицию', 'позиции', 'позиций')}` : 'Добавить'} <span aria-hidden="true">＋</span>{/if}</button>
 </Modal>
