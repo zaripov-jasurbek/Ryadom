@@ -31,6 +31,11 @@
   --tone-2: #dcd1e9; --tone-2-ink: #5e4f75;
   --tone-3: #efd4c8; --tone-3-ink: #764b3d;
   --tone-4: #c7e0dd; --tone-4-ink: #3f6661;
+  --tone-5: #f1dfa6; --tone-5-ink: #6b5418;
+  --tone-6: #c9d6ee; --tone-6-ink: #3c4f78;
+  --tone-7: #ecc8d8; --tone-7-ink: #7a3f5a;
+  --tone-8: #bfe0c4; --tone-8-ink: #2f6239;
+  --tone-9: #d9d2c6; --tone-9-ink: #55493a;
   --raise-sm: inset 0 0 0 1px var(--border);
   --raise: 0 0 0 1px var(--border), 0 1px 2px rgb(0 0 0 / .04);
   --raise-lg: 0 0 0 1px var(--border), 0 12px 32px rgb(0 0 0 / .12);
@@ -229,6 +234,11 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 .tone-2 { background: var(--tone-2); color: var(--tone-2-ink); }
 .tone-3 { background: var(--tone-3); color: var(--tone-3-ink); }
 .tone-4 { background: var(--tone-4); color: var(--tone-4-ink); }
+.tone-5 { background: var(--tone-5); color: var(--tone-5-ink); }
+.tone-6 { background: var(--tone-6); color: var(--tone-6-ink); }
+.tone-7 { background: var(--tone-7); color: var(--tone-7-ink); }
+.tone-8 { background: var(--tone-8); color: var(--tone-8-ink); }
+.tone-9 { background: var(--tone-9); color: var(--tone-9-ink); }
 
 .empty-items { padding: 52px 24px; text-align: center; display: grid; justify-items: center; gap: 10px; }
 .empty-illustration { width: 76px; height: 76px; border-radius: 24px; display: grid; place-items: center; font-size: 36px; box-shadow: var(--inset); margin-bottom: 8px; }
@@ -361,9 +371,6 @@ button.summary-person-main { cursor: pointer; border-radius: var(--radius-sm); }
 button.summary-person-main:active { box-shadow: var(--inset-sm); }
 .summary-person-name { flex: 1; min-width: 0; display: grid; gap: 2px; }
 .summary-person-name b { font-size: 15px; }
-.name-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.name-input { flex: 1 1 auto; min-width: 0; min-height: 36px; padding: 0; border: 0; background: transparent; font-size: 16px; font-weight: 600; color: var(--ink); outline: none; }
-.name-input::placeholder { color: var(--ink-soft); opacity: .7; }
 .summary-person-name small { font-size: 12px; color: var(--muted); }
 .summary-person-total { display: flex; align-items: center; gap: 6px; }
 .summary-person-total b { font-size: 16px; font-variant-numeric: tabular-nums; }
@@ -376,8 +383,14 @@ button.summary-person-main:active { box-shadow: var(--inset-sm); }
 .pay-inline .suffix-input { flex: 1; min-width: 0; }
 .pay-inline .accent-button { flex: none; min-height: 48px; }
 /* The card number stays a tap away while a guest still owes, wherever they scrolled. */
-.card-dock { position: fixed; z-index: 7; left: 50%; bottom: calc(14px + env(safe-area-inset-bottom)); transform: translateX(-50%); max-width: calc(100% - 32px); min-height: 52px; padding: 0 22px; border: 0; border-radius: 999px; background: var(--accent); color: var(--accent-ink); box-shadow: 0 8px 24px rgb(0 0 0 / .18); font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.card-dock:active { transform: translateX(-50%) translateY(1px); }
+/* Floating at the bottom: your name, and next to it the card button. */
+.dock { position: fixed; z-index: 7; left: 50%; bottom: calc(14px + env(safe-area-inset-bottom)); transform: translateX(-50%); width: max-content; max-width: calc(100% - 32px); display: flex; gap: 8px; pointer-events: none; }
+.dock > * { pointer-events: auto; }
+.dock-name { flex: 0 1 auto; min-width: 0; max-width: 45vw; min-height: 52px; padding: 0 16px 0 10px; border: 0; border-radius: 999px; display: flex; align-items: center; gap: 8px; background: var(--surface); color: var(--ink); box-shadow: 0 0 0 1px var(--border), 0 8px 24px rgb(0 0 0 / .14); font-size: 15px; font-weight: 600; }
+.dock-name .person-avatar.mini { width: 28px; height: 28px; font-size: 12px; }
+.dock-name-text { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dock-name:active, .card-dock:active { transform: translateY(1px); }
+.card-dock { flex: 0 1 auto; min-width: 0; min-height: 52px; padding: 0 22px; border: 0; border-radius: 999px; background: var(--accent); color: var(--accent-ink); box-shadow: 0 8px 24px rgb(0 0 0 / .18); font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .export-card { position: relative; padding: 18px 20px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px; }
 /* The summary speaks the same way as the dishes: no coloured fills, a stripe at the left edge.
    Brand green marks your own row, the calmer "paid" green marks what is settled. */
@@ -502,7 +515,7 @@ button.summary-person-main:active { box-shadow: var(--inset-sm); }
 /* ─── Print: white paper, no controls ──────────────────────── */
 @media print {
   :root { --bg: #fff; --ink: #111; --ink-soft: #333; --muted: #666; --line: #ddd; --surface: #fff; --paper: #fff; --border: #ddd; }
-  .topbar, .check-bar .icon-button, .notice, .primary-button, .back-link, .export-card, .bill-controls, .bill-tools, .item-menu, .item-search, .pay-inline, .confirm-hint, .card-dock { display: none !important; }
+  .topbar, .check-bar .icon-button, .notice, .primary-button, .back-link, .export-card, .bill-controls, .bill-tools, .item-menu, .item-search, .pay-inline, .confirm-hint, .dock { display: none !important; }
   .app-shell, .check-page { max-width: none; padding: 0; }
   .check-bar { position: static; }
   .panel, .summary-person { box-shadow: none !important; break-inside: avoid; }

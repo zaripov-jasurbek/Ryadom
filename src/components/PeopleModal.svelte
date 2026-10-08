@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Participant } from '../lib/calculations'
-  import { initial, plural } from '../lib/format'
+  import { plural } from '../lib/format'
   import { app } from '../lib/store.svelte'
   import Modal from './Modal.svelte'
 
@@ -17,13 +17,13 @@
   <div class="eyebrow">За столом</div>
   <h2 id="people-title">{plural(bill.participants.length, 'человек', 'человека', 'человек')}</h2>
   <ul class="people-list">
-    {#each bill.participants as person, i (person.id)}
+    {#each bill.participants as person (person.id)}
       {@const here = online.has(person.id)}
       <li>
-        <span class="person-avatar tone-{i % 5}" class:online={here}>{initial(person.name)}</span>
+        <span class="person-avatar tone-{app.tone(person.id)}" class:online={here}>{app.avatar(person)}</span>
         <div class="people-text">
-          <b>{person.name}{app.selectedPerson === person.id ? ' · вы' : ''}</b>
-          <small>{[person.id === app.ownerId ? 'платит по счёту' : '', here ? 'в сети' : 'не в сети'].filter(Boolean).join(' · ')}</small>
+          <b>{app.label(person)}</b>
+          <small>{[app.isMe(person.id) ? `для остальных: ${person.name}` : '', person.id === app.ownerId ? 'платит по счёту' : '', here ? 'в сети' : 'не в сети'].filter(Boolean).join(' · ')}</small>
         </div>
         {#if app.isOwner && person.id !== app.ownerId}<button type="button" class="icon-button small danger" aria-label={`Убрать ${person.name} из чека`} title="Убрать из чека" onclick={() => removeParticipant(person)}>×</button>{/if}
       </li>

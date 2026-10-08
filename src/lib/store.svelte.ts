@@ -4,7 +4,7 @@ import { addRemoteItem, addRemoteItems, updateRemoteCheck, updateRemoteItem, sha
 import { checkPath, homePath, readOwnerToken, routeCheckId } from './routes'
 import { preloadSupabase } from './supabase'
 import { expiresAt } from './limits'
-import { defaultTitle, randomName } from './format'
+import { defaultTitle, initial, randomName } from './format'
 import { shareOr } from './share'
 import type { ItemRow } from './rows'
 
@@ -64,6 +64,8 @@ class AppStore {
   peopleOpen = $state(false)
   /** The creator's sheet for the card or phone guests transfer to. */
   payDetailsOpen = $state(false)
+  /** The sheet where you change the name others see, opened from the button next to the card. */
+  nameOpen = $state(false)
   /** The open confirmation sheet; it replaces window.confirm, which looks foreign on phones. */
   confirmRequest = $state<ConfirmRequest | null>(null)
   /** The name typed last time, so the next check does not ask for it again. */
@@ -86,6 +88,12 @@ class AppStore {
   private toastTimer: ReturnType<typeof setTimeout> | undefined
 
   personIndex = (id: string) => this.participantIndex.get(id) ?? 0
+  /** Avatar colour: one of ten, in the order people joined, so the first ten at a table never share one. */
+  tone = (id: string) => this.personIndex(id) % 10
+  isMe = (id: string) => id === this.selectedPerson
+  /** You see yourself as «Я»; everyone else by name. */
+  label = (person: { id: string; name: string }) => this.isMe(person.id) ? 'Я' : person.name
+  avatar = (person: { id: string; name: string }) => this.isMe(person.id) ? 'Я' : initial(person.name)
   personName = (id: string) => this.bill?.participants[this.participantIndex.get(id) ?? -1]?.name ?? 'Участник'
   personOf = (billId: string) => readStorage(personKey(billId))
   publicLink = () => this.bill ? `${location.origin}${checkPath(this.bill.id)}` : ''
@@ -140,7 +148,7 @@ class AppStore {
     request?.resolve(answer)
   }
 
-  closeOverlays() { this.answerConfirm(false); this.addItemOpen = false; this.scanOpen = false; this.scanFile = null; this.qrOpen = false; this.editingItem = null; this.checkEditOpen = false; this.peopleOpen = false; this.payDetailsOpen = false }
+  closeOverlays() { this.answerConfirm(false); this.addItemOpen = false; this.scanOpen = false; this.scanFile = null; this.qrOpen = false; this.editingItem = null; this.checkEditOpen = false; this.peopleOpen = false; this.payDetailsOpen = false; this.nameOpen = false }
 
   private rememberName(name: string) { this.savedName = name; writeStorage(nameKey, name) }
 
@@ -312,12 +320,12 @@ class AppStore {
 
   /**
    * Opening the link is joining: nobody is asked for a name. A name typed in an earlier check is used,
-   * otherwise three random letters, which the guest may change later in the summary.
+   * otherwise the server picks three letters nobody else at this table has; the guest may change them later.
    * Returns an error message for the page, or '' on success.
    */
   async joinSharedCheck() {
     if (!this.joinPublicId) return ''
-    const name = this.savedName || randomName()
+    const name = this.savedName
     this.busy = true
     try {
       let sessionToken: string = crypto.randomUUID()

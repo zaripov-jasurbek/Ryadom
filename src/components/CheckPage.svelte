@@ -1,6 +1,6 @@
 <script lang="ts">
   import { formatAmount, formatUzs, serviceFee } from '../lib/calculations'
-  import { expiryDate, initial, paymentCopyValue } from '../lib/format'
+  import { expiryDate, paymentCopyValue } from '../lib/format'
   import { expiresAt } from '../lib/limits'
   import { app, totalFood } from '../lib/store.svelte'
   import { saveImage } from '../lib/export'
@@ -26,16 +26,18 @@
   const me = $derived(app.isOwner ? undefined : app.currentTotal)
   const cardDock = $derived(Boolean(bill.paymentDetails && bill.items.length && (app.isOwner || (me && me.remaining > 0))))
   const addCard = $derived(app.isOwner && bill.items.length > 0 && !bill.paymentDetails)
+  // Your name sits next to the card button: the name others see, changed in a small sheet.
+  const myName = $derived(app.selectedPerson ? app.personName(app.selectedPerson) : '')
 </script>
 
-<main class="check-page" class:with-dock={cardDock || addCard}>
+<main class="check-page" class:with-dock={Boolean(myName) || cardDock || addCard}>
   <header class="check-bar">
     <button class="icon-button" aria-label="Все чеки" title="Все чеки" onclick={() => app.goHome()}>←</button>
     <div class="check-bar-title">
       <h1>{bill.title}</h1>
       <div class="check-bar-meta">
-        <button class="face-stack" aria-label={`За столом: ${bill.participants.map(person => person.name).join(', ')}`} title="Кто за столом" onclick={() => app.peopleOpen = true}>
-          {#each faces as person, i (person.id)}<span class="person-avatar mini tone-{i % 5}" class:online={online.has(person.id)}>{initial(person.name)}</span>{/each}
+        <button class="face-stack" aria-label={`За столом: ${bill.participants.map(person => app.label(person)).join(', ')}`} title="Кто за столом" onclick={() => app.peopleOpen = true}>
+          {#each faces as person (person.id)}<span class="person-avatar mini tone-{app.tone(person.id)}" class:online={online.has(person.id)}>{app.avatar(person)}</span>{/each}
           {#if bill.participants.length > faces.length}<span class="face-more">+{bill.participants.length - faces.length}</span>{/if}
         </button>
         {#if expiresSoon}<small class="soon">⏳ Удалится {expiryDate.format(expiresAt(bill.createdAt))}</small>
@@ -95,9 +97,12 @@
     </div>
   {/if}
 
-  {#if cardDock}
-    <button class="card-dock" onclick={() => app.copy(paymentCopyValue(bill.paymentDetails!), 'Номер скопирован')}><span aria-hidden="true">💳</span> Скопировать карту{me ? ` · ${formatAmount(me.remaining)}` : ''}</button>
-  {:else if addCard}
-    <button class="card-dock" onclick={() => app.payDetailsOpen = true}><span aria-hidden="true">💳</span> Добавить карту</button>
-  {/if}
+  <div class="dock">
+    {#if myName}<button class="dock-name" aria-label={`Ваше имя: ${myName}. Изменить`} title="Изменить имя" onclick={() => app.nameOpen = true}><span class="person-avatar mini tone-{app.tone(app.selectedPerson!)}" aria-hidden="true">{myName.slice(0, 1).toUpperCase()}</span><span class="dock-name-text">{myName}</span></button>{/if}
+    {#if cardDock}
+      <button class="card-dock" onclick={() => app.copy(paymentCopyValue(bill.paymentDetails!), 'Номер скопирован')}><span aria-hidden="true">💳</span> Скопировать карту{me ? ` · ${formatAmount(me.remaining)}` : ''}</button>
+    {:else if addCard}
+      <button class="card-dock" onclick={() => app.payDetailsOpen = true}><span aria-hidden="true">💳</span> Добавить карту</button>
+    {/if}
+  </div>
 </main>

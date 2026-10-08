@@ -479,3 +479,18 @@ describe('check snapshot and broadcasts', () => {
     assert.deepEqual((await messages()).map(m => m.payload.table), ['items', 'participants', 'checks'])
   })
 })
+
+describe('guest names', () => {
+  it('gives guests without a name unique letters with distinct first letters', async () => {
+    const db = await createDb()
+    const owner = await db.newUser()
+    const check = await db.rpc<Created>(owner, 'create_check', { p_title: 'Ужин', p_service_percent: 0, p_owner_name: 'Jasur', p_owner_token: token() })
+    for (let i = 0; i < 8; i++) await db.rpc<Created>(await db.newUser(), 'join_check', { p_public_id: check.public_id, p_name: '', p_session_token: token() })
+    const { rows } = await db.query<{ name: string }>('select name from public.participants where check_id = $1', [check.id])
+    const names = rows.map(row => row.name)
+    assert.equal(names.length, 9)
+    assert.equal(new Set(names.map(name => name.toUpperCase())).size, 9)
+    assert.equal(new Set(names.map(name => name[0].toUpperCase())).size, 9)
+    for (const name of names.filter(name => name !== 'Jasur')) assert.match(name, /^[A-Z]{3}$/)
+  })
+})

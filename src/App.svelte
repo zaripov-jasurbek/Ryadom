@@ -12,6 +12,7 @@
   import ConfirmSheet from './components/ConfirmSheet.svelte'
   import PeopleModal from './components/PeopleModal.svelte'
   import PayDetailsModal from './components/PayDetailsModal.svelte'
+  import NameModal from './components/NameModal.svelte'
 
   onMount(() => app.init())
 
@@ -57,6 +58,7 @@
   {#if app.qrOpen && app.bill}<ShareQrModal />{/if}
   {#if app.peopleOpen && app.bill}<PeopleModal />{/if}
   {#if app.payDetailsOpen && app.bill}<PayDetailsModal />{/if}
+  {#if app.nameOpen && app.bill}<NameModal />{/if}
   {#if app.confirmRequest}{#key app.confirmRequest}<ConfirmSheet />{/key}{/if}
   {#if app.toast}<div class="toast" role="status" aria-live="polite">{app.toast}</div>{/if}
 </div>
