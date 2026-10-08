@@ -367,20 +367,18 @@ button.car:disabled { opacity: 1; cursor: default; }
 /* ─── Summary ──────────────────────────────────────────────── */
 .summary-person { position: relative; display: grid; gap: 10px; padding: 4px 0; border-top: 1px solid var(--line); }
 .summary-person-main { width: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 10px 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; }
-button.summary-person-main { cursor: pointer; border-radius: var(--radius-sm); }
-button.summary-person-main:active { box-shadow: var(--inset-sm); }
 .summary-person-name { flex: 1; min-width: 0; display: grid; gap: 2px; }
 .summary-person-name b { font-size: 15px; }
-.summary-person-name small { font-size: 12px; color: var(--muted); }
 .summary-person-total { display: flex; align-items: center; gap: 6px; }
 .summary-person-total b { font-size: 16px; font-variant-numeric: tabular-nums; }
-/* ✓ said paid, ✓✓ confirmed by the creator, like a read message in Telegram. */
-.pay-mark { min-width: 22px; font-size: 15px; font-weight: 800; letter-spacing: -.28em; color: var(--muted); }
-.pay-mark.double { color: var(--ok); }
-.confirm-hint { width: 100%; padding-left: 44px; font-size: 13px; font-weight: 650; color: var(--brand); }
-.pay-check { display: inline-grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 2px solid var(--muted); border-radius: 50%; background: none; font-size: 14px; font-weight: 800; color: var(--muted); cursor: pointer; }
-.pay-check.double { border-color: var(--ok); color: var(--ok); letter-spacing: -.28em; cursor: default; }
-.pay-check:disabled:not(.double) { opacity: .5; }
+/* Two ticks, grey until set: the guest turns the first green, the creator's confirmation turns both green. */
+.pay-marks { display: inline-flex; align-items: center; min-width: 28px; min-height: 28px; padding: 0 2px; border: 0; background: none; font: inherit; font-size: 15px; font-weight: 800; color: var(--muted); opacity: .55; }
+.pay-marks span + span { margin-left: -.32em; }
+.pay-marks.first span:first-child, .pay-marks.both span { color: var(--ok); }
+.pay-marks.first, .pay-marks.both { opacity: 1; }
+button.pay-marks { cursor: pointer; border-radius: var(--radius-sm); }
+button.pay-marks:active { box-shadow: var(--inset-sm); }
+button.pay-marks:disabled { cursor: default; }
 /* The card number stays a tap away while a guest still owes, wherever they scrolled. */
 /* Floating at the bottom: your name, and next to it the card button. */
 .dock { position: fixed; z-index: 7; left: 50%; bottom: calc(14px + env(safe-area-inset-bottom)); transform: translateX(-50%); width: max-content; max-width: calc(100% - 32px); display: flex; gap: 8px; pointer-events: none; }
@@ -515,7 +513,6 @@ button.summary-person-main:active { box-shadow: var(--inset-sm); }
   .draft-row input { padding: 0 8px; }
   .bill-row.mine::before { left: -16px; }
   .summary-person.is-me::before { left: -16px; }
-  .confirm-hint { padding-left: 0; }
   .modal-backdrop { place-items: end center; padding: 0; }
   .modal-card { width: 100%; max-height: 92vh; max-height: 92dvh; border-radius: 24px 24px 0 0; padding: 26px 20px calc(24px + env(safe-area-inset-bottom)); animation: sheet .25s ease-out; }
   .modal-card.fill { height: 92vh; height: 92dvh; }
@@ -532,7 +529,7 @@ button.summary-person-main:active { box-shadow: var(--inset-sm); }
 /* ─── Print: white paper, no controls ──────────────────────── */
 @media print {
   :root { --bg: #fff; --ink: #111; --ink-soft: #333; --muted: #666; --line: #ddd; --surface: #fff; --paper: #fff; --border: #ddd; }
-  .topbar, .check-bar .icon-button, .notice, .primary-button, .back-link, .export-card, .bill-controls, .bill-tools, .item-menu, .item-search, .pay-check, .confirm-hint, .dock { display: none !important; }
+  .topbar, .check-bar .icon-button, .notice, .primary-button, .back-link, .export-card, .bill-controls, .bill-tools, .item-menu, .item-search, .dock { display: none !important; }
   .app-shell, .check-page { max-width: none; padding: 0; }
   .check-bar { position: static; }
   .panel, .summary-person { box-shadow: none !important; break-inside: avoid; }
