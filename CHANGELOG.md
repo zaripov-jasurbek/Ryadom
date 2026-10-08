@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.0.0](https://github.com/zaripov-jasurbek/Ryadom/compare/v1.2.0...v2.0.0) (2026-10-08)
+
+
+### ⚠ BREAKING CHANGES
+
+* оплата галочками ✓ / ✓✓ вместо поля суммы ([#18](https://github.com/zaripov-jasurbek/Ryadom/issues/18))
+
+### Новое
+
+* оплата галочками ✓ / ✓✓ вместо поля суммы ([#18](https://github.com/zaripov-jasurbek/Ryadom/issues/18)) ([8117ce1](https://github.com/zaripov-jasurbek/Ryadom/commit/8117ce151bcc6ea9e801eb9d6ea237a7321819f4))
+
 ## [1.2.0](https://github.com/zaripov-jasurbek/Ryadom/compare/v1.1.0...v1.2.0) (2026-10-08)
 
 
