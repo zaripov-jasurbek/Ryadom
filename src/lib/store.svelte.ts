@@ -6,10 +6,11 @@ import { preloadSupabase } from './supabase'
 import { expiresAt } from './limits'
 import { defaultTitle, randomName } from './format'
 import { shareOr } from './share'
+import type { ItemRow } from './rows'
 
 export type Mode = 'home' | 'create' | 'join' | 'check'
 /** A line of the check being made: what was typed or scanned, checked only when the check is created. */
-export type DraftRow = { id: number; name: string; quantity: number | null; price: number | null }
+export type DraftRow = ItemRow
 export type ConfirmRequest = { title: string; body?: string; action: string; danger?: boolean; resolve: (answer: boolean) => void }
 const billsKey = 'billsplit:v1'
 const personKey = (billId: string) => `billsplit:person:${billId}`
@@ -302,9 +303,9 @@ class AppStore {
   scanPhoto(file: File) { this.scanFile = file; this.scanOpen = true }
 
   /** Scanned rows replace the empty ones; what was typed by hand stays. */
-  fillDraft(items: { name: string; quantity: number; unitPrice: number }[], total: number | null, servicePercent: number | null) {
+  fillDraft(items: { name: string; quantity: number; unitPrice: number; unsure?: boolean }[], total: number | null, servicePercent: number | null) {
     const typed = this.draft.filter(row => row.name.trim() || row.price)
-    this.draft = [...typed, ...items.map(item => ({ id: this.draftSeq++, name: item.name, quantity: item.quantity, price: item.unitPrice })), this.newDraftRow()]
+    this.draft = [...typed, ...items.map(item => ({ id: this.draftSeq++, name: item.name, quantity: item.quantity, price: item.unitPrice, suspect: Boolean(item.unsure) })), this.newDraftRow()]
     this.draftTotal = total
     if (servicePercent !== null && servicePercent <= 30) this.draftService = servicePercent
   }

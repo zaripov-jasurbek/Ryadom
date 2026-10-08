@@ -2,15 +2,16 @@
   import { onDestroy, onMount } from 'svelte'
   import { formatUzs } from '../lib/calculations'
   import { recognizeReceipt, stopReceiptEngine, suggestArea, type Area } from '../lib/ocr'
-  import { bestReading, scanLimits, settled } from '../lib/receipt'
+  import { bestReading, settled } from '../lib/receipt'
   import { plural } from '../lib/format'
-  import { limits } from '../lib/limits'
+  import { filledRows, rowsTotal, toItems, validRow, type ItemRow } from '../lib/rows'
+  import ItemTable from './ItemTable.svelte'
   import { app } from '../lib/store.svelte'
   import Modal from './Modal.svelte'
   import { haptic } from '../lib/haptics'
 
-  /** `suspect` rows were left unchecked because the receipt's total adds up without them. */
-  type Row = { id: number; include: boolean; suspect: boolean; name: string; quantity: number | null; price: number | null }
+  /** `suspect` rows are framed in yellow: the receipt's total adds up without them, so they are likely misread. */
+  type Row = ItemRow
 
   let step = $state<'pick' | 'area' | 'reading' | 'review'>('pick')
   let status = $state('')
@@ -32,10 +33,11 @@
   let camera: HTMLInputElement, gallery: HTMLInputElement
   let controller: AbortController | null = null
 
-  const valid = (row: Row) => Boolean(row.name.trim()) && Number.isInteger(row.quantity) && row.quantity! >= 1 && row.quantity! <= scanLimits.maxQuantity && Number.isInteger(row.price) && row.price! >= 1 && row.price! <= limits.maxUnitPrice
-  const chosen = $derived(rows.filter(row => row.include))
-  const ready = $derived(chosen.length > 0 && chosen.every(valid))
-  const chosenTotal = $derived(chosen.reduce((sum, row) => sum + (valid(row) ? row.quantity! * row.price! : 0), 0))
+  const newRow = (): Row => ({ id: nextId++, name: '', quantity: 1, price: null })
+  let table: ItemTable | undefined = $state()
+  const chosen = $derived(filledRows(rows))
+  const ready = $derived(chosen.length > 0 && chosen.every(validRow))
+  const chosenTotal = $derived(rowsTotal(chosen))
   // Weighed goods are rounded to whole sums, so each row may be off by one.
   const totalOff = $derived(receiptTotal !== null && Math.abs(chosenTotal - receiptTotal) > chosen.length)
   const hasSuspects = $derived(rows.some(row => row.suspect))
@@ -130,10 +132,10 @@
       const readings = await recognizeReceipt(file, $state.snapshot(area) as Area, (stage, value) => { if (controller === current) { status = stage; progress = value } }, current.signal, settled)
       if (controller !== current) return
       const { text, result } = bestReading(readings)
-      // On the create page the rows go straight into its table, which is where they are checked.
-      // Rows the total adds up without are most likely misread, so they are left out there.
+      // On the create page the rows go straight into its table, which is where they are checked;
+      // rows the total adds up without are framed in yellow there too.
       if (app.mode === 'create') {
-        const found = result.items.filter(entry => !entry.unsure)
+        const found = result.items
         app.fillDraft(found, result.total, result.servicePercent)
         app.notify(found.length ? `Распознано ${plural(found.length, 'позиция', 'позиции', 'позиций')} — сверьте с чеком` : 'Позиции не найдены — впишите их в таблицу')
         found.length ? haptic.success() : haptic.error()
@@ -141,7 +143,7 @@
         return
       }
       rawText = text; receiptTotal = result.total; receiptService = result.servicePercent
-      rows = result.items.map(entry => ({ id: nextId++, include: !entry.unsure, suspect: Boolean(entry.unsure), name: entry.name, quantity: entry.quantity, price: entry.unitPrice }))
+      rows = [...result.items.map(entry => ({ id: nextId++, suspect: Boolean(entry.unsure), name: entry.name, quantity: entry.quantity, price: entry.unitPrice })), newRow()]
       photoZoomed = false
       step = 'review'
       haptic.success()
@@ -161,15 +163,14 @@
     if (file) void choose(file)
   }
 
-  function addRow() { rows = [...rows, { id: nextId++, include: true, suspect: false, name: '', quantity: 1, price: null }] }
-  function removeRow(row: Row) { rows = rows.filter(entry => entry.id !== row.id) }
   function restart() { controller?.abort(); controller = null; setPreview(null); photo = null; rows = []; rawText = ''; receiptTotal = null; receiptService = null; error = ''; step = 'pick' }
   /** Back to the frame on the same photo, to read another part or the same part framed better. */
   function reframe() { controller?.abort(); controller = null; error = ''; step = 'area' }
 
   async function submit() {
-    if (step !== 'review' || !ready || app.busy) return
-    const items = chosen.map(row => ({ name: row.name.trim(), quantity: row.quantity!, unitPrice: row.price! }))
+    if (step !== 'review' || app.busy) return
+    if (!ready) { table?.touchAll(); return }
+    const items = toItems(chosen)
     const added = await app.addItems(items)
     if (added === items.length) { haptic.success(); app.notify(`Добавлено ${plural(added, 'позиция', 'позиции', 'позиций')}`); close(); return }
     // Keep what was not added so the owner can retry without scanning again.
@@ -238,8 +239,8 @@
     </div>
     <button type="button" class="soft-button wide" onclick={reframe}>Отменить</button>
   {:else}
-    {#if rows.length}
-      <p class="lead">Исправьте ошибки и снимите галочку с лишнего.{#if hasSuspects} Строки без галочки, скорее всего, распознаны с ошибкой.{/if}</p>
+    {#if rows.length > 1}
+      <p class="lead">Исправьте ошибки и уберите лишнее крестиком.{#if hasSuspects} Строки в жёлтой рамке, скорее всего, распознаны с ошибкой.{/if}</p>
     {:else}
       <div class="notice warning"><span aria-hidden="true">◌</span><div><b>Позиции не найдены</b><small>Переснимите чек ровнее или добавьте строки вручную.</small></div></div>
     {/if}
@@ -252,18 +253,7 @@
         </div>
       </details>
     {/if}
-    <div class="scan-rows">
-      {#each rows as row, i (row.id)}
-        <div class="scan-row" class:off={!row.include} class:suspect={row.suspect} class:invalid={row.include && !valid(row)}>
-          <input type="checkbox" bind:checked={row.include} aria-label={`Добавить позицию ${i + 1}`} />
-          <input class="scan-name" bind:value={row.name} maxlength={scanLimits.nameLength} placeholder="Название" aria-label="Название" />
-          <span class="scan-qty"><input type="number" bind:value={row.quantity} min="1" max={scanLimits.maxQuantity} step="1" inputmode="numeric" aria-label="Количество" /><span>шт</span></span>
-          <span class="scan-price"><input type="number" bind:value={row.price} min="1" max={limits.maxUnitPrice} step="1" inputmode="numeric" placeholder="0" aria-label="Цена за штуку" /><span>сум</span></span>
-          <button type="button" class="icon-button small danger" aria-label="Убрать строку" onclick={() => removeRow(row)}>×</button>
-        </div>
-      {/each}
-    </div>
-    <button type="button" class="add-more" onclick={addRow}>＋ Добавить строку</button>
+    <ItemTable bind:this={table} bind:rows {newRow} />
     <div class="modal-total">
       <span>Выбрано {plural(chosen.length, 'позиция', 'позиции', 'позиций')}{#if receiptTotal}<small class:off-total={totalOff}>{` · в чеке ${formatUzs(receiptTotal)}`}</small>{/if}</span>
       <b>{formatUzs(chosenTotal)}</b>
@@ -277,7 +267,7 @@
     {#if rawText}
       <details class="scan-raw"><summary>Распознанный текст</summary><pre>{rawText}</pre></details>
     {/if}
-    <button class="primary-button wide" disabled={app.busy || !ready}>{app.busy ? 'Добавляем…' : `Добавить ${plural(chosen.length, 'позицию', 'позиции', 'позиций')}`} <span aria-hidden="true">＋</span></button>
+    <button class="primary-button wide" disabled={app.busy}>{app.busy ? 'Добавляем…' : `Добавить ${plural(chosen.length, 'позицию', 'позиции', 'позиций')}`} <span aria-hidden="true">＋</span></button>
     <div class="scan-again">
       <button type="button" class="ghost-button" onclick={reframe}>Изменить рамку</button>
       <button type="button" class="ghost-button" onclick={restart}>Переснять</button>
