@@ -25,27 +25,45 @@
   async function addRow() {
     if (!rows.length || !blankRow(rows.at(-1)!)) rows.push(newRow())
     await tick()
-    table?.querySelector<HTMLInputElement>('.draft-row:last-of-type .draft-name')?.focus()
+    table?.querySelector<HTMLElement>('.draft-row:last-of-type .draft-name')?.focus()
   }
   function removeRow(row: ItemRow) {
     rows = rows.filter(entry => entry.id !== row.id)
     if (!rows.length) rows = [newRow()]
+  }
+  // A long name wraps onto more lines, as on the printed check; it stays one line of text, so a line break
+  // pasted into it becomes a space and Enter moves on to the quantity.
+  function fit(field: HTMLTextAreaElement) {
+    field.style.height = 'auto'
+    if (field.scrollHeight) field.style.height = `${field.scrollHeight}px`
+  }
+  const refit = () => table?.querySelectorAll<HTMLTextAreaElement>('textarea.draft-name').forEach(fit)
+  function named(event: Event & { currentTarget: HTMLTextAreaElement }, row: ItemRow) {
+    row.name = event.currentTarget.value.replace(/\s*\n+\s*/g, ' ')
+    typed(row)
+  }
+  function nameKey(event: KeyboardEvent & { currentTarget: HTMLTextAreaElement }) {
+    if (event.key !== 'Enter' || event.isComposing) return
+    event.preventDefault()
+    event.currentTarget.parentElement?.querySelector<HTMLInputElement>('.draft-qty')?.focus()
   }
   // Enter in a price moves to the next line's name instead of submitting half a check.
   async function next(event: KeyboardEvent, index: number) {
     if (fixed || event.key !== 'Enter' || event.isComposing) return
     event.preventDefault()
     if (index === rows.length - 1) await addRow()
-    else table?.querySelectorAll<HTMLInputElement>('.draft-name')[index + 1]?.focus()
+    else table?.querySelectorAll<HTMLElement>('.draft-name')[index + 1]?.focus()
   }
 </script>
+
+<svelte:window onresize={refit} />
 
 <div class="item-table">
   <div class="bill-line bill-head draft-line" aria-hidden="true"><span>Название</span><span class="bill-qty">Кол-во</span><span class="bill-price">Цена</span><span></span></div>
   <div class="draft-rows" bind:this={table}>
     {#each rows as row, i (row.id)}
-      <div class="bill-line draft-line draft-row" class:suspect={row.suspect} class:invalid={touched.has(row.id) && !blankRow(row) && !validRow(row)} onfocusout={() => { touched.add(row.id); touched = new Set(touched) }}>
-        <input class="draft-name" bind:value={row.name} oninput={() => typed(row)} maxlength={scanLimits.nameLength} placeholder={i === 0 ? 'Плов' : ''} aria-label={`Название, строка ${i + 1}`} enterkeyhint="next" />
+      <div class="bill-line draft-line draft-row" class:suspect={row.suspect} class:invalid={touched.has(row.id) && !blankRow(row) && !validRow(row)} onfocusout={(e) => { if (e.currentTarget.contains(e.relatedTarget as Node | null)) return; touched.add(row.id); touched = new Set(touched) }}>
+        <textarea class="draft-name" rows="1" value={row.name} oninput={(e) => named(e, row)} onkeydown={nameKey} {@attach field => { void row.name; fit(field) }} maxlength={scanLimits.nameLength} placeholder={i === 0 ? 'Плов' : ''} aria-label={`Название, строка ${i + 1}`} enterkeyhint="next"></textarea>
         <input class="draft-qty" type="number" bind:value={row.quantity} oninput={() => typed(row)} min="1" max={scanLimits.maxQuantity} step="1" inputmode="numeric" aria-label={`Количество, строка ${i + 1}`} enterkeyhint="next" />
         <input class="draft-price" type="number" bind:value={row.price} oninput={() => typed(row)} onkeydown={(e) => next(e, i)} min="1" max={limits.maxUnitPrice} step="1" inputmode="numeric" placeholder={i === 0 ? '45000' : ''} aria-label={`Цена за штуку, строка ${i + 1}`} enterkeyhint={fixed ? 'done' : 'next'} />
         {#if fixed || (blankRow(row) && i === rows.length - 1)}<span></span>

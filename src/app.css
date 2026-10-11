@@ -65,9 +65,9 @@ h1, h2, h3 { font-family: var(--serif); font-weight: 500; letter-spacing: -.02em
 p { margin: 0; }
 :focus-visible { outline: none; box-shadow: var(--focus) !important; }
 /* Fields have no frame until focused: then a darker fill and a thin green edge say where you type. */
-input:not([type=checkbox]):focus-visible { box-shadow: inset 0 0 0 2px var(--brand) !important; }
+:is(input:not([type=checkbox]), textarea):focus-visible { box-shadow: inset 0 0 0 2px var(--brand) !important; }
 /* Placeholders are examples in the muted grey, which is still readable on a field. */
-input::placeholder { color: var(--muted); opacity: 1; }
+:is(input, textarea)::placeholder { color: var(--muted); opacity: 1; }
 /* Small controls keep their drawn size; an invisible margin around them makes a finger-sized (44px) target. */
 .icon-button, .portion-stepper button, .mine-toggle, .face-stack, button.pay-marks, .ghost-button, .chip, .add-more, .back-link, .modal-close { position: relative; }
 :is(.icon-button, .portion-stepper button, .mine-toggle, .face-stack, button.pay-marks, .ghost-button, .chip, .add-more, .back-link, .modal-close)::after { content: ''; position: absolute; inset: var(--hit, 0); }
@@ -326,16 +326,18 @@ button.car:disabled { opacity: 1; cursor: default; }
 .bill-line.draft-line, .bill.owner .bill-line.draft-line { grid-template-columns: minmax(0, 1fr) 60px 104px 32px; }
 .draft-rows { display: grid; }
 .draft-row { padding: 6px 0; border-bottom: 1px dashed var(--line); }
-.draft-row input { width: 100%; min-width: 0; min-height: 42px; padding: 0 10px; border: 0; border-radius: 10px; background: var(--field); font-size: 16px; color: var(--ink); outline: none; }
-.draft-row input:focus { background: var(--field-focus); }
+.draft-row :is(input, textarea) { width: 100%; min-width: 0; min-height: 42px; padding: 0 10px; border: 0; border-radius: 10px; background: var(--field); font-size: 16px; color: var(--ink); outline: none; }
+/* The name grows a line at a time; 10px above and below keep one line as tall as the number fields. */
+.draft-row textarea { display: block; padding-top: 10px; padding-bottom: 10px; line-height: 22px; resize: none; overflow: hidden; overflow-wrap: anywhere; }
+.draft-row :is(input, textarea):focus { background: var(--field-focus); }
 .draft-row .draft-qty, .draft-row .draft-price { text-align: right; font-variant-numeric: tabular-nums; }
-.draft-row.invalid input { background: var(--danger-bg); }
+.draft-row.invalid :is(input, textarea) { background: var(--danger-bg); }
 /* Next to the price field the remove button's target stops short of it. */
 .draft-row .icon-button.small { --hit: -7px -3px; }
 .item-table { display: grid; }
 .item-table .add-more { margin: 4px 0 6px; }
 /* A scanned row that is likely misread: yellow frame until it is fixed or removed. */
-.draft-row.suspect input { box-shadow: inset 0 0 0 2px var(--suspect); }
+.draft-row.suspect :is(input, textarea) { box-shadow: inset 0 0 0 2px var(--suspect); }
 .draft-service { align-items: center; }
 .draft-service .suffix-input { width: 110px; }
 .draft-service input { min-height: 40px; text-align: right; }
@@ -517,7 +519,7 @@ button.pay-marks:disabled { cursor: default; }
   .bill.owner .bill-line { grid-template-columns: minmax(0, 1fr) 52px 74px 32px; }
   .bill-head { letter-spacing: .03em; }
   .bill-line.draft-line, .bill.owner .bill-line.draft-line { grid-template-columns: minmax(0, 1fr) 46px 86px 28px; column-gap: 5px; }
-  .draft-row input { padding: 0 8px; }
+  .draft-row :is(input, textarea) { padding-left: 8px; padding-right: 8px; }
   .bill-row.mine::before { left: -16px; }
   .summary-person.is-me::before { left: -16px; }
   .modal-backdrop { place-items: end center; padding: 0; }
