@@ -9,12 +9,16 @@
 
 <Modal labelledby="install-title" {onclose} onsubmit={onclose}>
   <div class="eyebrow">Приложение</div>
-  <h2 id="install-title">{installHint === 'mac' ? 'Добавьте «Рядом» в Dock' : 'Добавьте «Рядом» на экран «Домой»'}</h2>
+  <h2 id="install-title">{installHint === 'mac' ? 'Добавьте «Рядом» в Dock' : installHint === 'android' ? 'Добавьте «Рядом» на главный экран' : 'Добавьте «Рядом» на экран «Домой»'}</h2>
   <p class="lead">Чеки будут открываться одним касанием.</p>
   <ol class="install-steps">
     {#if installHint === 'mac'}
       <li>В строке меню Safari откройте <b>Файл</b>.</li>
       <li>Выберите <b>Добавить в Dock</b> и нажмите <b>Добавить</b>.</li>
+    {:else if installHint === 'android'}
+      <li>Откройте меню браузера <span class="share-glyph" aria-hidden="true">⋮</span> — справа вверху или внизу.</li>
+      <li>Выберите <b>Установить приложение</b> или <b>Добавить на главный экран</b>.</li>
+      <li>Нажмите <b>Установить</b>.</li>
     {:else}
       <li>Нажмите <b>Поделиться</b> <span class="share-glyph" aria-hidden="true">⬆︎</span> — внизу экрана или рядом с адресом.</li>
       <li>Пролистайте и выберите <b>На экран «Домой»</b>.</li>

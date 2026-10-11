@@ -119,10 +119,13 @@ describe('platform', () => {
     assert.equal(installHintFor(ua.oldMacSafari, 0, false), null)
     assert.equal(installHintFor(ua.macChrome, 0, false), null)
   })
-  it('leaves Windows and Android to their own install prompt, and hides once installed', () => {
+  it('leaves Windows to its own install prompt, and hides once installed', () => {
     assert.equal(installHintFor(ua.windowsEdge, 0, false), null)
-    assert.equal(installHintFor(ua.android, 5, false), null)
     assert.equal(installHintFor(ua.iphone, 5, true), null)
+    assert.equal(installHintFor(ua.android, 5, true), null)
+  })
+  it("shows the browser-menu steps on Android when Chrome's own prompt does not come", () => {
+    assert.equal(installHintFor(ua.android, 5, false), 'android')
   })
   it("opens the scanner's own camera button on Android, whose photo picker has no camera", () => {
     assert.equal(pickerHasCamera(ua.android), false)
