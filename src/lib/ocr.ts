@@ -1,14 +1,20 @@
 // On-device receipt recognition. Tesseract and its models load only when a scan starts and are served
 // by the app itself (see tesseractAssets in vite.config.ts); the photo never leaves the device.
 
-export type OcrProgress = (status: string, progress: number) => void
+/**
+ * What a scan is doing: loading the engine and its language models (a download the first time, from the cache after),
+ * reading the photo, then reading it again in other ways until the readings agree. `progress` is 0–1 within the phase.
+ */
+export type ScanPhase = 'load' | 'read' | 'check'
+export type OcrProgress = (phase: ScanPhase, progress: number) => void
 
-const stages: Record<string, string> = {
-  'loading tesseract core': 'Готовим сканер',
-  'initializing tesseract': 'Готовим сканер',
-  'loading language traineddata': 'Готовим сканер — в первый раз чуть дольше',
-  'initializing api': 'Почти готово',
-  'recognizing text': 'Читаем чек',
+// Each loading step's share of the whole load, so its bar fills once instead of starting over at every step;
+// the language models are most of it.
+const loadSteps: Record<string, [number, number]> = {
+  'loading tesseract core': [0, .25],
+  'initializing tesseract': [.25, .3],
+  'loading language traineddata': [.3, .95],
+  'initializing api': [.95, 1],
 }
 
 /** Receipt text this wide reads best; narrower crops are scaled up, wider ones down. */
@@ -378,19 +384,33 @@ const passes: { draw: (scan: Scan) => HTMLCanvasElement | null; column?: boolean
 // Its logger reports to whichever scan is running.
 let engine: Promise<import('tesseract.js').Worker> | null = null
 let report: (status: string, progress: number) => void = () => {}
+// How far the engine has loaded, 0–1; it keeps loading while nobody is listening.
+let loaded = 0
 
 function startEngine() {
   if (engine) return engine
+  loaded = 0
   const root = new URL(`${import.meta.env.BASE_URL}tesseract/`, location.href).href
   const started = engine = import('tesseract.js').then(({ createWorker, OEM }) => createWorker(['rus', 'uzb'], OEM.LSTM_ONLY, {
     workerPath: `${root}worker.min.js`,
     corePath: `${root}core`,
     langPath: `${root}lang`,
-    logger: message => report(message.status, message.progress),
+    logger: message => {
+      const step = loadSteps[message.status]
+      // Each model reports its own 0–1; the share only ever grows.
+      if (step && engine === started) loaded = Math.max(loaded, step[0] + (step[1] - step[0]) * message.progress)
+      report(message.status, message.progress)
+    },
   }))
+  started.then(() => { if (engine === started) loaded = 1 }, () => {})
   // A failed start, such as no network for the models, is retried by the next scan.
   started.catch(() => { if (engine === started) engine = null })
   return started
+}
+
+/** Starts loading the engine ahead of the scan, while the owner frames the photo. */
+export function prepareReceiptEngine() {
+  void startEngine().catch(() => {})
 }
 
 /** Unloads the engine; also stops a reading in progress. */
@@ -438,13 +458,13 @@ export function confidentText(lines: OcrLine[]) {
  * font: a narrow one is read again from the first pass, stretched. Returns every reading; aborting stops the engine.
  */
 export async function recognizeReceipt(file: Blob, area: Area, onProgress: OcrProgress, signal: AbortSignal, enough: (readings: string[]) => boolean): Promise<string[]> {
-  onProgress('Подготавливаем фото', 0)
-  // Rereads show their own count, so a bar that fills again does not look like the scan started over.
+  // The load phase only when the engine is not ready yet; it may have loaded while the photo was being framed.
+  if (loaded < 1) onProgress('load', loaded)
   let pass = 0, rereads = passes.length - 1
   const mine = report = (status, progress) => {
-    if (status !== 'recognizing text') onProgress(stages[status] ?? 'Читаем чек', progress)
-    else if (!pass) onProgress('Читаем чек', progress)
-    else onProgress(`Перечитываем чек (${pass}/${rereads})`, (pass - 1 + progress) / rereads)
+    if (status !== 'recognizing text') { if (loadSteps[status]) onProgress('load', loaded) }
+    else if (!pass) onProgress('read', progress)
+    else onProgress('check', (pass - 1 + progress) / rereads)
   }
   // A terminated worker never settles its pending job, so the scan stops on this instead and cleans up after itself.
   const aborted = new Promise<never>((_, reject) => signal.addEventListener('abort', () => reject(signal.reason), { once: true }))
@@ -456,6 +476,7 @@ export async function recognizeReceipt(file: Blob, area: Area, onProgress: OcrPr
     const [{ PSM }, worker] = await Promise.race([Promise.all([import('tesseract.js'), startEngine()]), aborted])
     const bitmap = await decoding
     signal.throwIfAborted()
+    onProgress('read', 0)
     let scan: Scan = { bitmap, area, stretch: 1 }
     const readings: string[] = []
     let measured = false

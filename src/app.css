@@ -119,6 +119,8 @@ p { margin: 0; }
 .topbar { height: 76px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .brand { display: flex; align-items: center; gap: 10px; font: 700 25px var(--serif); letter-spacing: -.04em; color: var(--ink); text-decoration: none; }
 .brand-mark { width: 34px; height: 34px; border-radius: 11px; display: grid; place-items: center; background: var(--accent); color: var(--accent-ink); font-size: 22px; }
+/* Install, next to the name: a white button with an edge, so it stands out from the grey page without competing with "Новый чек". */
+.topbar .soft-button { background: var(--surface); box-shadow: var(--raise); color: var(--ink); }
 
 /* ─── Home ─────────────────────────────────────────────────── */
 .home-page { padding-bottom: 56px; display: grid; gap: 64px; }
@@ -472,6 +474,20 @@ button.pay-marks:disabled { cursor: default; }
 .scan-preview { max-width: 100%; max-height: 240px; border-radius: var(--radius-sm); box-shadow: var(--raise-sm); object-fit: contain; }
 .scan-progress { width: 100%; height: 10px; border-radius: 999px; box-shadow: var(--inset-sm); overflow: hidden; }
 .scan-progress i { display: block; height: 100%; border-radius: inherit; background: var(--accent); transition: width .3s; }
+.scan-progress-row { width: 100%; display: flex; align-items: center; gap: 10px; }
+.scan-progress-row .scan-progress { flex: 1; width: auto; }
+.scan-progress-row b { min-width: 4ch; text-align: right; font-size: 14px; color: var(--ink); font-variant-numeric: tabular-nums; }
+/* The steps of the scan: a tick when done, a turning ring on the current one, an empty ring for what is next. */
+.scan-steps { justify-self: stretch; list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 10px; }
+.scan-step { display: flex; align-items: center; gap: 10px; font-size: 15px; color: var(--muted); }
+.scan-step.active { color: var(--ink); font-weight: 600; }
+.scan-step.done { color: var(--ink-soft); }
+.scan-step small { font-size: 13px; font-weight: 400; color: var(--muted); }
+.scan-step-mark { width: 22px; height: 22px; flex: none; border-radius: 50%; display: grid; place-items: center; border: 2px solid var(--border); }
+.scan-step.active .scan-step-mark { border-top-color: var(--brand); animation: spin .8s linear infinite; }
+.scan-step.done .scan-step-mark { border-color: var(--ok-bg); background: var(--ok-bg); color: var(--ok); }
+.scan-step-mark .icon { width: 14px; height: 14px; stroke-width: 2.8; }
+@keyframes spin { to { transform: rotate(1turn); } }
 .modal-total small { font-size: 13px; }
 .modal-total small.off-total { color: var(--danger); }
 .scan-diff { margin: -4px 0 6px; font-size: 13px; line-height: 1.45; color: var(--danger); }

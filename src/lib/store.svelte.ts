@@ -281,8 +281,11 @@ class AppStore {
 
   // ---- create and join ----
 
-  /** The check typed or scanned on the create page, with nothing asked besides; then the invitation opens. */
-  async createBill(servicePercent: number, items: { name: string; quantity: number; unitPrice: number }[]) {
+  /**
+   * The check typed or scanned on the create page, with nothing asked besides; then the invitation opens.
+   * Returns an error for the page to show next to its button, or '' once the check is made.
+   */
+  async createBill(servicePercent: number, items: { name: string; quantity: number; unitPrice: number }[]): Promise<string> {
     const ownerToken = crypto.randomUUID()
     // A name typed in an earlier check, or letters nobody has to make up; the title is the meal and the date.
     const ownerName = this.savedName || randomName(), title = defaultTitle()
@@ -291,7 +294,7 @@ class AppStore {
     try {
       const created = await createRemoteCheck(title, servicePercent, ownerName, ownerToken, '', null)
       bill = { id: created.public_id, dbId: created.id, title, servicePercent, ownerId: created.participant_id, participants: [{ id: created.participant_id, name: ownerName, paid: 0, status: 'unpaid' }], items: [], createdAt: new Date().toISOString(), ownerToken }
-    } catch (error) { this.fail(error, 'Не удалось создать чек'); return } finally { this.busy = false }
+    } catch (error) { console.error(error); return errorMessage(error, 'Не удалось создать чек') } finally { this.busy = false }
     this.bill = bill; this.isOwner = true; this.token = ownerToken; this.mode = 'check'
     this.selectedPerson = bill.participants[0].id; writeStorage(personKey(bill.id), this.selectedPerson)
     history.pushState({}, '', checkPath(bill.id))
@@ -300,6 +303,7 @@ class AppStore {
     await this.connect(bill)
     await this.addItems(items)
     this.qrOpen = true
+    return ''
   }
 
   // ---- the check being made ----

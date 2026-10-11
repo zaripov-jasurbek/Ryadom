@@ -2,7 +2,7 @@
   import { tick } from 'svelte'
   import { limits } from '../lib/limits'
   import { scanLimits } from '../lib/receipt'
-  import { blankRow, validRow, type ItemRow } from '../lib/rows'
+  import { blankRow, rowProblem, validRow, type ItemRow } from '../lib/rows'
   import Icon from './Icon.svelte'
 
   /**
@@ -13,8 +13,15 @@
 
   // A row is checked once it is left, not while it is being typed.
   let touched = $state(new Set<number>())
-  /** Shows every mistake at once, when the form is sent with them. */
-  export function touchAll() { touched = new Set(rows.map(row => row.id)) }
+  /** Shows every mistake at once, when the form is sent with them, and puts the cursor in the first one (or the first name, with nothing typed). */
+  export function touchAll() {
+    touched = new Set(rows.map(row => row.id))
+    const index = Math.max(0, rows.findIndex(row => !blankRow(row) && !validRow(row)))
+    const problem = rows[index] ? rowProblem(rows[index]) ?? 'name' : 'name'
+    const field = table?.querySelectorAll('.draft-row')[index]?.querySelector<HTMLElement>({ name: '.draft-name', quantity: '.draft-qty', price: '.draft-price' }[problem])
+    field?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    field?.focus({ preventScroll: true })
+  }
 
   let table: HTMLDivElement | undefined = $state()
   // Typing in the last line opens the next one, like a list in notes.

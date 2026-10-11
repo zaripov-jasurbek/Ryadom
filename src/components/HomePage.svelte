@@ -1,8 +1,6 @@
 <script lang="ts">
   import { billStanding, formatUzs, type Bill, type BillStanding } from '../lib/calculations'
   import { plural } from '../lib/format'
-  import { install, installHint, promptInstall } from '../lib/pwa.svelte'
-  import InstallHintModal from './InstallHintModal.svelte'
   import Icon from './Icon.svelte'
   import { pickPhoto } from '../lib/photo'
   import { app, grandTotal } from '../lib/store.svelte'
@@ -18,10 +16,6 @@
       case 'empty': return 'Позиций пока нет'
     }
   }
-
-  // Chrome and Edge install on a tap; Safari (iPhone, iPad, Mac) can only be shown the steps.
-  let hintOpen = $state(false)
-  function installApp() { if (install.prompt) void promptInstall(); else hintOpen = true }
 
   // A new check starts with the photo of the receipt; dismissing the picker leaves the table to type into.
   function create() {
@@ -70,7 +64,6 @@
       <p>Создайте чек, поделитесь ссылкой — и пусть каждый отметит своё. Остальное мы посчитаем.</p>
       <div class="hero-actions">
         <button class="primary-button" onclick={create}>Создать новый чек <span aria-hidden="true">↗</span></button>
-        {#if install.prompt || installHint}<button class="soft-button" onclick={installApp}><Icon name="install" /> Установить приложение</button>{/if}
       </div>
       <div class="hero-note"><span class="note-avatars" aria-hidden="true"><b>J</b><b>A</b><b>B</b></span>Понятно каждому за пару секунд</div>
     </div>
@@ -108,5 +101,3 @@
 
   <footer class="app-version muted">Версия {__APP_VERSION__}{__APP_COMMIT__ ? ` · ${__APP_COMMIT__}` : ''}</footer>
 </main>
-
-{#if hintOpen}<InstallHintModal onclose={() => hintOpen = false} />{/if}

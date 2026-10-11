@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte'
   import { formatUzs } from '../lib/calculations'
-  import { recognizeReceipt, stopReceiptEngine, suggestArea, type Area } from '../lib/ocr'
+  import { prepareReceiptEngine, recognizeReceipt, stopReceiptEngine, suggestArea, type Area, type ScanPhase } from '../lib/ocr'
   import { bestReading, settled } from '../lib/receipt'
   import { plural } from '../lib/format'
   import { blankRow, filledRows, rowsTotal, toItems, validRow, type ItemRow } from '../lib/rows'
@@ -16,8 +16,28 @@
   type Point = Area[number]
 
   let step = $state<'pick' | 'area' | 'reading' | 'review'>('pick')
-  let status = $state('')
+  // A scan as a short list of steps under one bar that only grows: loading the scanner (only while it is not ready yet),
+  // reading the photo, checking it with more readings.
+  let phase = $state<ScanPhase>('read')
+  let loadShown = $state(false)
   let progress = $state(0)
+  const percent = $derived(Math.round(progress * 100))
+  const phaseOrder: ScanPhase[] = ['load', 'read', 'check']
+  const scanSteps = $derived([
+    ...(loadShown ? [{ id: 'load' as const, label: 'Загрузка сканера' }] : []),
+    { id: 'read' as const, label: 'Чтение чека' },
+    { id: 'check' as const, label: 'Проверка' },
+  ])
+  const stepState = (id: ScanPhase) => phaseOrder.indexOf(id) < phaseOrder.indexOf(phase) ? 'done' : id === phase ? 'active' : 'todo'
+  function scanProgress(next: ScanPhase, value: number) {
+    if (next === 'load') loadShown = true
+    phase = next
+    const shares: Record<ScanPhase, [number, number]> = loadShown
+      ? { load: [0, .3], read: [.3, .7], check: [.7, 1] }
+      : { load: [0, 0], read: [0, .55], check: [.55, 1] }
+    const [from, to] = shares[next]
+    progress = Math.max(progress, from + (to - from) * value)
+  }
   let error = $state('')
   let preview = $state('')
   // Each photo is a shot: a part of a long receipt, or one of several receipts. Reading a shot again
@@ -96,6 +116,8 @@
       size = { width: suggested.width, height: suggested.height }
       area = suggested.area
       step = 'area'
+      // The scanner loads while the photo is framed, so "Распознать" starts reading sooner.
+      prepareReceiptEngine()
     } catch (failure) {
       console.error(failure)
       error = 'Не получилось открыть фото. Попробуйте другое.'
@@ -167,9 +189,9 @@
     if (problem) { error = problem; haptic.error(); return }
     controller?.abort()
     const current = controller = new AbortController()
-    error = ''; status = 'Подготавливаем фото'; progress = 0; step = 'reading'
+    error = ''; phase = 'read'; loadShown = false; progress = 0; step = 'reading'
     try {
-      const readings = await recognizeReceipt(file, $state.snapshot(area) as Area, (stage, value) => { if (controller === current) { status = stage; progress = value } }, current.signal, settled)
+      const readings = await recognizeReceipt(file, $state.snapshot(area) as Area, (next, value) => { if (controller === current) scanProgress(next, value) }, current.signal, settled)
       if (controller !== current) return
       const { text, result } = bestReading(readings)
       // On the create page the rows go straight into its table, which is where they are checked;
@@ -246,7 +268,7 @@
 
 <Modal labelledby="scan-title" onclose={close} onsubmit={() => void submit()} fill={step === 'area'}>
   <div class="eyebrow">Скан чека</div>
-  <h2 id="scan-title">{step === 'review' ? 'Проверьте позиции' : step === 'area' ? 'Обрежьте чек' : 'Сфотографируйте чек'}</h2>
+  <h2 id="scan-title">{step === 'review' ? 'Проверьте позиции' : step === 'area' ? 'Обрежьте чек' : step === 'reading' ? 'Распознаём чек' : 'Сфотографируйте чек'}</h2>
 
   {#if step === 'pick'}
     <p class="lead">{adding ? 'Следующую часть чека или другой чек.' : 'Снимите чек вместе с ценами. Длинный — по частям.'}</p>
@@ -289,10 +311,22 @@
     <button type="button" class="primary-button wide" onclick={() => void read()}>Распознать</button>
     <button type="button" class="ghost-button" onclick={() => newPhoto(false)}>Другое фото</button>
   {:else if step === 'reading'}
-    <div class="scan-reading" role="status" aria-live="polite">
+    <div class="scan-reading">
       {#if preview}<img class="scan-preview" src={preview} alt="Фото чека" />{/if}
-      <div class="scan-progress"><i style:width="{Math.round(progress * 100)}%"></i></div>
-      <span>{status}… {Math.round(progress * 100)}%</span>
+      <div class="scan-progress-row">
+        <div class="scan-progress" role="progressbar" aria-label="Распознавание" aria-valuemin="0" aria-valuemax="100" aria-valuenow={percent}><i style:width="{percent}%"></i></div>
+        <b aria-hidden="true">{percent}%</b>
+      </div>
+      <ol class="scan-steps">
+        {#each scanSteps as entry (entry.id)}
+          {@const state = stepState(entry.id)}
+          <li class="scan-step {state}">
+            <span class="scan-step-mark" aria-hidden="true">{#if state === 'done'}<Icon name="check" />{/if}</span>
+            <span>{entry.label}{#if entry.id === 'load' && state === 'active'}<small>{' · только в первый раз'}</small>{/if}</span>
+          </li>
+        {/each}
+      </ol>
+      <p class="visually-hidden" role="status">{scanSteps.find(entry => entry.id === phase)?.label}</p>
     </div>
     <button type="button" class="soft-button wide" onclick={reframe}>Отменить</button>
   {:else}

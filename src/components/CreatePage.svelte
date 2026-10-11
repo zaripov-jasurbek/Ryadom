@@ -2,7 +2,7 @@
   import { formatUzs, serviceFee } from '../lib/calculations'
   import { plural } from '../lib/format'
   import { pickPhoto } from '../lib/photo'
-  import { filledRows, rowsTotal, toItems, validRow } from '../lib/rows'
+  import { blankRow, filledRows, rowProblemText, rowsTotal, toItems, validRow } from '../lib/rows'
   import { app } from '../lib/store.svelte'
   import ItemTable from './ItemTable.svelte'
   import Icon from './Icon.svelte'
@@ -16,21 +16,38 @@
   // Weighed goods are rounded to whole sums, so each row may be off by one.
   const totalOff = $derived(app.draftTotal !== null && filled.length > 0 && Math.abs(food - app.draftTotal) > filled.length)
   let table: ItemTable | undefined = $state()
+  // Why "Готово" did not make the check, said under the table after a try, until it is fixed.
+  let tried = $state(false)
+  let failure = $state('')
+  const problem = $derived.by(() => {
+    if (!filled.length) return 'Добавьте хотя бы одну позицию'
+    const index = app.draft.findIndex(row => !blankRow(row) && !validRow(row))
+    if (index >= 0) return `Строка ${index + 1}: ${rowProblemText(app.draft[index])}`
+    if (!serviceValid) return 'Обслуживание — от 0 до 100%'
+    return ''
+  })
 
   async function scan() {
     const file = await pickPhoto()
     if (file && app.mode === 'create') app.scanPhoto(file)
   }
 
-  function submit() {
-    if (!ready || !serviceValid || app.busy) { table?.touchAll(); return }
-    void app.createBill(Math.round(percent * 100) / 100, toItems(filled))
+  async function submit() {
+    if (app.busy) return
+    failure = ''
+    if (problem) {
+      tried = true
+      if (ready) document.getElementById('draft-service')?.focus()
+      else table?.touchAll()
+      return
+    }
+    failure = await app.createBill(Math.round(percent * 100) / 100, toItems(filled))
   }
 </script>
 
 <main class="form-page create-page">
   <button class="back-link" onclick={() => app.goHome()}><Icon name="back" /> Назад</button>
-  <form class="panel bill draft" onsubmit={(e) => { e.preventDefault(); submit() }}>
+  <form class="panel bill draft" onsubmit={(e) => { e.preventDefault(); void submit() }}>
     <div class="draft-top">
       <h1>Новый чек</h1>
       <button type="button" class="soft-button" onclick={scan}><Icon name="camera" /> {filled.length ? 'Ещё фото' : 'Скан'}</button>
@@ -49,6 +66,7 @@
       <p class="scan-diff" role="status">В чеке {formatUzs(app.draftTotal)}: {food < app.draftTotal ? `не хватает ${formatUzs(app.draftTotal - food)}` : `лишние ${formatUzs(food - app.draftTotal)}`}.</p>
     {/if}
 
+    {#if (tried && problem) || failure}<p class="form-error" role="alert">{failure || problem}</p>{/if}
     <button class="primary-button wide" disabled={app.busy}>{app.busy ? 'Создаём…' : filled.length ? `Готово · ${plural(filled.length, 'позиция', 'позиции', 'позиций')}` : 'Готово'} <span aria-hidden="true">↗</span></button>
   </form>
 </main>
