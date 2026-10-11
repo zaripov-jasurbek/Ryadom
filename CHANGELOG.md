@@ -1,5 +1,20 @@
 # Changelog
 
+## [2.3.0](https://github.com/zaripov-jasurbek/Ryadom/compare/v2.2.0...v2.3.0) (2026-10-11)
+
+
+### Новое
+
+* **pwa:** шаги установки на Android, если Chrome не предложил сам ([1f633ca](https://github.com/zaripov-jasurbek/Ryadom/commit/1f633ca72bf17ea2df6b6c18d10111133eb0f83b))
+* **ui:** длинное название позиции переносится на новые строки ([9dcdf35](https://github.com/zaripov-jasurbek/Ryadom/commit/9dcdf3517a0ff3292f1f0ed1aba5008154303de6))
+
+
+### Исправления
+
+* **scan:** на Android новый чек предлагает камеру ([c7e45e9](https://github.com/zaripov-jasurbek/Ryadom/commit/c7e45e91a5f23d2b27b6faacb0a23951a019e6e2))
+* **ui:** зоны касания 44px, контраст, видимый фокус и SVG-иконки ([2a8e817](https://github.com/zaripov-jasurbek/Ryadom/commit/2a8e817f3c2061534470f4eb7b7c5f432d4fd29b))
+* **ui:** установка в шапке, понятный прогресс скана, причина отказа «Готово» ([caa5641](https://github.com/zaripov-jasurbek/Ryadom/commit/caa564191a09b2cef83e36ad7a1e47de399b687e))
+
 ## [2.2.0](https://github.com/zaripov-jasurbek/Ryadom/compare/v2.1.0...v2.2.0) (2026-10-08)
 
 
