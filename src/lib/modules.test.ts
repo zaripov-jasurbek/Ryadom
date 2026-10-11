@@ -6,6 +6,7 @@ import { errorMessage } from './errors.ts'
 import { detailLines, paymentLine, safeFileName } from './export.ts'
 import { paymentCopyValue, portionCount } from './format.ts'
 import { installHintFor } from './platform.ts'
+import { pickerHasCamera } from './photo.ts'
 
 const people = ['Jasur', 'Aziz', 'Bekzod'].map((name, i) => ({ id: `${i}`, name, paid: 0, status: 'unpaid' as const }))
 const emptyBill = (): Bill => ({ id: 'b', dbId: 'db', title: 'Ужин', servicePercent: 0, participants: people, items: [], createdAt: '', ownerToken: 't' })
@@ -97,7 +98,7 @@ describe('error messages', () => {
   })
 })
 
-describe('install hint', () => {
+describe('platform', () => {
   const ua = {
     iphone: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1',
     iphoneChrome: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/129.0 Mobile/15E148 Safari/604.1',
@@ -122,6 +123,12 @@ describe('install hint', () => {
     assert.equal(installHintFor(ua.windowsEdge, 0, false), null)
     assert.equal(installHintFor(ua.android, 5, false), null)
     assert.equal(installHintFor(ua.iphone, 5, true), null)
+  })
+  it("opens the scanner's own camera button on Android, whose photo picker has no camera", () => {
+    assert.equal(pickerHasCamera(ua.android), false)
+    assert.equal(pickerHasCamera(ua.iphone), true)
+    assert.equal(pickerHasCamera(ua.iphoneChrome), true)
+    assert.equal(pickerHasCamera(ua.windowsEdge), true)
   })
 })
 

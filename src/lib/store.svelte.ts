@@ -6,6 +6,7 @@ import { preloadSupabase } from './supabase'
 import { expiresAt } from './limits'
 import { defaultTitle, initial, randomName } from './format'
 import { shareOr } from './share'
+import { pickerHasCamera, pickPhoto } from './photo'
 import type { ItemRow } from './rows'
 
 export type Mode = 'home' | 'create' | 'join' | 'check'
@@ -313,6 +314,15 @@ class AppStore {
 
   /** Opens the scanner on a photo; on the create page its rows land in the draft. */
   scanPhoto(file: File) { this.scanFile = file; this.scanOpen = true }
+
+  /**
+   * A photo for the check being made, from a tap: the system picker where it offers the camera too (iPhone, computers),
+   * otherwise (Android) the scanner opens on its own "Сфотографировать" and "Выбрать из галереи" buttons.
+   */
+  scanForDraft() {
+    if (!pickerHasCamera(navigator.userAgent)) { this.scanOpen = true; return }
+    void pickPhoto().then(file => { if (file && this.mode === 'create') this.scanPhoto(file) })
+  }
 
   /** Scanned rows replace the empty ones; what was typed by hand stays. */
   fillDraft(items: { name: string; quantity: number; unitPrice: number; unsure?: boolean }[], total: number | null, servicePercent: number | null) {

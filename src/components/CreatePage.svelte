@@ -1,7 +1,6 @@
 <script lang="ts">
   import { formatUzs, serviceFee } from '../lib/calculations'
   import { plural } from '../lib/format'
-  import { pickPhoto } from '../lib/photo'
   import { blankRow, filledRows, rowProblemText, rowsTotal, toItems, validRow } from '../lib/rows'
   import { app } from '../lib/store.svelte'
   import ItemTable from './ItemTable.svelte'
@@ -27,10 +26,6 @@
     return ''
   })
 
-  async function scan() {
-    const file = await pickPhoto()
-    if (file && app.mode === 'create') app.scanPhoto(file)
-  }
 
   async function submit() {
     if (app.busy) return
@@ -50,7 +45,7 @@
   <form class="panel bill draft" onsubmit={(e) => { e.preventDefault(); void submit() }}>
     <div class="draft-top">
       <h1>Новый чек</h1>
-      <button type="button" class="soft-button" onclick={scan}><Icon name="camera" /> {filled.length ? 'Ещё фото' : 'Скан'}</button>
+      <button type="button" class="soft-button" onclick={() => app.scanForDraft()}><Icon name="camera" /> {filled.length ? 'Ещё фото' : 'Скан'}</button>
     </div>
     <ItemTable bind:this={table} bind:rows={app.draft} newRow={app.newDraftRow} />
 

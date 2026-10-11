@@ -2,7 +2,6 @@
   import { billStanding, formatUzs, type Bill, type BillStanding } from '../lib/calculations'
   import { plural } from '../lib/format'
   import Icon from './Icon.svelte'
-  import { pickPhoto } from '../lib/photo'
   import { app, grandTotal } from '../lib/store.svelte'
 
   const standingText = (standing: BillStanding, owner: boolean) => {
@@ -20,7 +19,7 @@
   // A new check starts with the photo of the receipt; dismissing the picker leaves the table to type into.
   function create() {
     app.beginCreate()
-    void pickPhoto().then(file => { if (file && app.mode === 'create') app.scanPhoto(file) })
+    app.scanForDraft()
   }
 
   async function forget(saved: Bill) {
