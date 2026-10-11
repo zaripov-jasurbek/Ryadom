@@ -6,6 +6,7 @@
   import { saveImage } from '../lib/export'
   import ItemCard from './ItemCard.svelte'
   import SummaryPanel from './SummaryPanel.svelte'
+  import Icon from './Icon.svelte'
 
   const bill = $derived(app.bill!)
   // A long receipt gets a search box: a guest looks for their two dishes among twenty.
@@ -32,7 +33,7 @@
 
 <main class="check-page" class:with-dock={Boolean(myName) || cardDock || addCard}>
   <header class="check-bar">
-    <button class="icon-button" aria-label="Все чеки" title="Все чеки" onclick={() => app.goHome()}>←</button>
+    <button class="icon-button" aria-label="Все чеки" title="Все чеки" onclick={() => app.goHome()}><Icon name="back" /></button>
     <div class="check-bar-title">
       <h1>{bill.title}</h1>
       <div class="check-bar-meta">
@@ -45,9 +46,9 @@
       </div>
     </div>
     <button class="icon-button" aria-label="Пригласить" title="Пригласить" aria-haspopup="dialog" onclick={() => app.qrOpen = true}>
-      <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="8" r="3.4" /><path d="M3.5 19.5c.7-3.4 3.2-5.3 6.5-5.3 1.6 0 3 .4 4.1 1.2" /><path d="M18 14v6M15 17h6" /></svg>
+      <Icon name="invite" />
     </button>
-    {#if app.isOwner}<button class="icon-button" aria-label="Настройки чека" title="Настройки чека" onclick={() => app.checkEditOpen = true}>✎</button>{/if}
+    {#if app.isOwner}<button class="icon-button" aria-label="Настройки чека" title="Настройки чека" onclick={() => app.checkEditOpen = true}><Icon name="edit" /></button>{/if}
   </header>
 
   {#if !bill.items.length}
@@ -57,16 +58,16 @@
       <p>{app.isOwner ? 'Отсканируйте чек или добавьте позиции вручную.' : 'Позиции скоро появятся.'}</p>
       {#if app.isOwner}
         <div class="empty-actions">
-          <button class="primary-button" onclick={() => app.scanOpen = true}>📷 Сканировать чек</button>
-          <button class="soft-button" onclick={() => app.addItemOpen = true}>＋ Добавить вручную</button>
+          <button class="primary-button" onclick={() => app.scanOpen = true}><Icon name="camera" /> Сканировать чек</button>
+          <button class="soft-button" onclick={() => app.addItemOpen = true}><Icon name="plus" /> Добавить вручную</button>
         </div>
       {/if}
     </section>
   {:else}
     {#if app.isOwner}
       <div class="bill-tools">
-        <button class="ghost-button" onclick={() => app.addItemOpen = true}>＋ Позиция</button>
-        <button class="ghost-button" onclick={() => app.scanOpen = true}>📷 Скан</button>
+        <button class="ghost-button" onclick={() => app.addItemOpen = true}><Icon name="plus" /> Позиция</button>
+        <button class="ghost-button" onclick={() => app.scanOpen = true}><Icon name="camera" /> Скан</button>
       </div>
     {/if}
     <!-- The check itself, as printed: name, quantity, price per serving; under each line who had it. -->
@@ -100,9 +101,9 @@
   <div class="dock">
     {#if myName}<button class="dock-name" aria-label={`Ваше имя: ${myName}. Изменить`} title="Изменить имя" onclick={() => app.nameOpen = true}><span class="person-avatar mini tone-{app.tone(app.selectedPerson!)}" aria-hidden="true">{myName.slice(0, 1).toUpperCase()}</span><span class="dock-name-text">{myName}</span></button>{/if}
     {#if cardDock}
-      <button class="card-dock" onclick={() => app.copy(paymentCopyValue(bill.paymentDetails!), 'Номер скопирован')}><span aria-hidden="true">💳</span> Скопировать карту{me ? ` · ${formatAmount(me.remaining)}` : ''}</button>
+      <button class="card-dock" onclick={() => app.copy(paymentCopyValue(bill.paymentDetails!), 'Номер скопирован')}><Icon name="card" /><span>Скопировать карту{me ? ` · ${formatAmount(me.remaining)}` : ''}</span></button>
     {:else if addCard}
-      <button class="card-dock" onclick={() => app.payDetailsOpen = true}><span aria-hidden="true">💳</span> Добавить карту</button>
+      <button class="card-dock" onclick={() => app.payDetailsOpen = true}><Icon name="card" /><span>Добавить карту</span></button>
     {/if}
   </div>
 </main>

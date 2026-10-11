@@ -3,6 +3,7 @@
   import { limits } from '../lib/limits'
   import { scanLimits } from '../lib/receipt'
   import { blankRow, validRow, type ItemRow } from '../lib/rows'
+  import Icon from './Icon.svelte'
 
   /**
    * The table of items as on the create page. `fixed` edits the given rows only (one item being changed).
@@ -48,9 +49,9 @@
         <input class="draft-qty" type="number" bind:value={row.quantity} oninput={() => typed(row)} min="1" max={scanLimits.maxQuantity} step="1" inputmode="numeric" aria-label={`Количество, строка ${i + 1}`} enterkeyhint="next" />
         <input class="draft-price" type="number" bind:value={row.price} oninput={() => typed(row)} onkeydown={(e) => next(e, i)} min="1" max={limits.maxUnitPrice} step="1" inputmode="numeric" placeholder={i === 0 ? '45000' : ''} aria-label={`Цена за штуку, строка ${i + 1}`} enterkeyhint={fixed ? 'done' : 'next'} />
         {#if fixed || (blankRow(row) && i === rows.length - 1)}<span></span>
-        {:else}<button type="button" class="icon-button small" aria-label={`Убрать строку ${i + 1}`} onclick={() => removeRow(row)}>×</button>{/if}
+        {:else}<button type="button" class="icon-button small" aria-label={`Убрать строку ${i + 1}`} onclick={() => removeRow(row)}><Icon name="close" /></button>{/if}
       </div>
     {/each}
   </div>
-  {#if !fixed}<button type="button" class="add-more" onclick={addRow}>＋ Строка</button>{/if}
+  {#if !fixed}<button type="button" class="add-more" onclick={addRow}><Icon name="plus" /> Строка</button>{/if}
 </div>

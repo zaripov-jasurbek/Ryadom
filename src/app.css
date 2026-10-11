@@ -8,19 +8,19 @@
   --border: #dce1da;
   --ink: #263029;
   --ink-soft: #465148;
-  --muted: #6d786f;
+  --muted: #5f6a61;
   --line: #e1e5df;
   --field: #f3f5f1;
   --field-focus: #e8ebe5;
   --accent: #cce59a;
   --accent-hover: #d6eba9;
   --accent-ink: #2d3b1b;
-  --brand: #647f31;
+  --brand: #58702a;
   --warn-bg: #f1e3cd;
   --warn-ink: #83592a;
   --pending: #e8902a;
   --suspect: #e2b512;
-  --danger: #ad5646;
+  --danger: #984636;
   --danger-bg: #eed9d3;
   --ok: #4c7536;
   --ok-bg: #d7e6c9;
@@ -64,10 +64,16 @@ a { color: var(--brand); }
 h1, h2, h3 { font-family: var(--serif); font-weight: 500; letter-spacing: -.02em; margin: 0; }
 p { margin: 0; }
 :focus-visible { outline: none; box-shadow: var(--focus) !important; }
-/* Fields have no frame, not even when focused: a darker fill says where you type. */
-input:not([type=checkbox]):focus-visible { box-shadow: none !important; }
+/* Fields have no frame until focused: then a darker fill and a thin green edge say where you type. */
+input:not([type=checkbox]):focus-visible { box-shadow: inset 0 0 0 2px var(--brand) !important; }
+/* Placeholders are examples in the muted grey, which is still readable on a field. */
+input::placeholder { color: var(--muted); opacity: 1; }
+/* Small controls keep their drawn size; an invisible margin around them makes a finger-sized (44px) target. */
+.icon-button, .portion-stepper button, .mine-toggle, .face-stack, button.pay-marks, .ghost-button, .chip, .add-more, .back-link, .modal-close { position: relative; }
+:is(.icon-button, .portion-stepper button, .mine-toggle, .face-stack, button.pay-marks, .ghost-button, .chip, .add-more, .back-link, .modal-close)::after { content: ''; position: absolute; inset: var(--hit, 0); }
+.icon { width: 1.2em; height: 1.2em; flex: none; }
 .muted { color: var(--muted); font-size: 13px; }
-.eyebrow { font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.eyebrow { font-size: 12px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
 .accent-star { color: var(--brand); font-size: 15px; }
 
 .app-shell { max-width: 1160px; margin: 0 auto; padding: 0 clamp(16px, 5vw, 48px); }
@@ -91,22 +97,22 @@ input:not([type=checkbox]):focus-visible { box-shadow: none !important; }
 .accent-button:hover:not(:disabled) { background: var(--accent-hover); }
 .soft-button { min-height: 40px; padding: 0 16px; border-radius: var(--radius-sm); font-weight: 600; font-size: 14px; color: var(--ink-soft); background: var(--field); }
 .soft-button:hover:not(:disabled), .chip:hover:not(:disabled) { color: var(--ink); }
-.ghost-button { min-height: 36px; padding: 0 10px; border-radius: 10px; font-size: 13px; font-weight: 600; color: var(--brand); background: transparent; }
+.ghost-button { min-height: 36px; padding: 0 10px; border-radius: 10px; gap: 6px; font-size: 13px; font-weight: 600; color: var(--brand); background: transparent; --hit: -4px 0; }
 .ghost-button:hover:not(:disabled) { background: var(--field); }
 .ghost-button.danger, .icon-button.danger { color: var(--danger); }
-.chip { min-height: 36px; padding: 0 14px; border-radius: 999px; font-size: 13px; font-weight: 600; color: var(--ink-soft); background: var(--field); }
+.chip { min-height: 36px; padding: 0 14px; border-radius: 999px; font-size: 13px; font-weight: 600; color: var(--ink-soft); background: var(--field); --hit: -4px 0; }
 .chip.active { background: var(--accent); color: var(--accent-ink); box-shadow: none; }
 .chip-row { display: flex; flex-wrap: wrap; gap: 10px; }
 .danger-button { min-height: 40px; padding: 0 16px; border-radius: var(--radius-sm); font-weight: 650; font-size: 14px; color: var(--danger); background: var(--danger-bg); }
 .danger-button:hover { background: var(--danger-bg); }
-.icon-button { width: 40px; height: 40px; flex: none; border-radius: var(--radius-sm); background: transparent; color: var(--ink-soft); font-size: 16px; }
+.icon-button { width: 40px; height: 40px; flex: none; border-radius: var(--radius-sm); background: transparent; color: var(--ink-soft); font-size: 16px; --hit: -2px; }
 .icon-button:hover:not(:disabled) { background: var(--field); }
-.icon-button.small { width: 30px; height: 30px; border-radius: 9px; font-size: 16px; color: var(--muted); }
+.icon-button.small { width: 30px; height: 30px; border-radius: 9px; font-size: 16px; color: var(--muted); --hit: -7px; }
 .icon-button.danger:hover { background: var(--danger-bg); }
 .primary-button:active:not(:disabled), .accent-button:active:not(:disabled), .soft-button:active:not(:disabled), .chip:active:not(:disabled),
 .danger-button:active, .icon-button:active, .ghost-button:active:not(:disabled) { filter: brightness(.95); transform: translateY(1px); }
 .wide { width: 100%; margin-top: 12px; }
-.back-link { border: 0; background: none; padding: 8px 0; font-size: 14px; color: var(--muted); }
+.back-link { display: inline-flex; align-items: center; gap: 6px; border: 0; background: none; padding: 8px 0; font-size: 14px; color: var(--muted); --hit: -4px 0; }
 .back-link:hover { color: var(--ink); }
 
 /* ─── Top bar ──────────────────────────────────────────────── */
@@ -186,12 +192,11 @@ input:not([type=checkbox]):focus-visible { box-shadow: none !important; }
 .lead b { color: var(--ink); }
 .field { display: grid; gap: 8px; margin: 12px 0 4px; font-size: 14px; font-weight: 600; color: var(--ink-soft); }
 .label-hint { font-weight: 400; color: var(--muted); }
-.field-note { font-size: 12px; line-height: 1.45; color: var(--muted); }
+.field-note { font-size: 13px; line-height: 1.45; color: var(--muted); }
 .field input, .suffix-input input {
   width: 100%; min-height: 48px; padding: 0 14px; border: 0; border-radius: var(--radius-sm);
   background: var(--field); font-size: 16px; outline: none; transition: background-color .18s;
 }
-.field input::placeholder { color: var(--muted); opacity: .8; }
 .field input:focus, .suffix-input input:focus { background: var(--field-focus); }
 .suffix-input { position: relative; display: block; }
 .suffix-input input { padding-right: 52px; }
@@ -216,14 +221,14 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 .check-bar h1 { font-size: 21px; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .check-bar-meta { display: flex; align-items: center; gap: 10px; min-width: 0; margin-top: 3px; }
 /* Who is at the table: a green ring for whoever has the check open now, a grey one for the rest. Tapping opens the list. */
-.face-stack { flex: none; display: flex; align-items: center; padding: 3px 4px; border: 0; border-radius: 999px; background: transparent; }
+.face-stack { flex: none; display: flex; align-items: center; padding: 3px 4px; border: 0; border-radius: 999px; background: transparent; --hit: -8px -2px; }
 .face-stack:active { background: var(--field); }
 .face-stack .person-avatar { margin-right: -5px; }
 .face-stack .person-avatar:last-child { margin-right: 0; }
 .face-more { margin-left: 9px; font-size: 12px; font-weight: 600; color: var(--muted); }
 .face-stack .person-avatar, .people-list .person-avatar { box-shadow: 0 0 0 2px var(--bg), 0 0 0 3.5px var(--line); }
 .face-stack .person-avatar.online, .people-list .person-avatar.online { box-shadow: 0 0 0 2px var(--bg), 0 0 0 3.5px #7fbf55; }
-.check-bar small { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.check-bar small { font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .check-bar small.soon { color: var(--warn-ink); font-weight: 600; }
 .check-bar .icon-button { font-size: 18px; }
 .empty-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
@@ -268,7 +273,7 @@ button.notice:active { transform: translateY(1px); }
 .bill-name { font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
 .bill-row .bill-qty, .bill-row .bill-price { font-size: 15px; color: var(--ink-soft); }
 .bill-row.mine::before { content: ""; position: absolute; left: -18px; top: 12px; bottom: 12px; width: 4px; border-radius: 0 4px 4px 0; background: var(--brand); }
-.bill-row .item-menu .icon-button { width: 32px; height: 32px; border-radius: 10px; }
+.bill-row .item-menu .icon-button { width: 32px; height: 32px; border-radius: 10px; --hit: -6px -6px -5px; }
 .bill-controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; min-height: 38px; }
 /* Groups of avatars one after another like train cars: when they do not fit, they wrap to the next line.
    Too narrow beside the buttons, the train takes a line of its own above them. */
@@ -325,6 +330,8 @@ button.car:disabled { opacity: 1; cursor: default; }
 .draft-row input:focus { background: var(--field-focus); }
 .draft-row .draft-qty, .draft-row .draft-price { text-align: right; font-variant-numeric: tabular-nums; }
 .draft-row.invalid input { background: var(--danger-bg); }
+/* Next to the price field the remove button's target stops short of it. */
+.draft-row .icon-button.small { --hit: -7px -3px; }
 .item-table { display: grid; }
 .item-table .add-more { margin: 4px 0 6px; }
 /* A scanned row that is likely misread: yellow frame until it is fixed or removed. */
@@ -335,14 +342,13 @@ button.car:disabled { opacity: 1; cursor: default; }
 .draft .primary-button { margin-top: 18px; }
 .item-search { width: 100%; min-height: 46px; padding: 0 16px; border: 0; border-radius: 14px; background: var(--field); font-size: 16px; color: var(--ink); outline: none; }
 .item-search:focus { background: var(--field-focus); }
-.item-search::placeholder { color: var(--muted); opacity: .8; }
 .bill .item-search { margin-bottom: 14px; }
 .item-menu { position: relative; }
 .menu-popover { position: absolute; z-index: 4; right: 0; top: calc(100% + 8px); min-width: 210px; display: grid; gap: 2px; padding: 6px; border-radius: 14px; background: var(--surface); box-shadow: var(--raise-lg); animation: fade .12s ease-out; }
 .menu-popover button { display: flex; align-items: center; gap: 10px; min-height: 42px; padding: 0 12px; border: 0; border-radius: 10px; background: transparent; font-size: 14px; font-weight: 550; color: var(--ink-soft); text-align: left; white-space: nowrap; }
 .menu-popover button:hover:not(:disabled), .menu-popover button:focus-visible { box-shadow: var(--inset-sm); color: var(--ink); }
 .menu-popover button.danger { color: var(--danger); }
-.mine-toggle { display: inline-grid; place-items: center; min-height: 34px; min-width: 46px; padding: 0 12px; border: 0; border-radius: 999px; background: var(--field); font-size: 13px; font-weight: 600; color: var(--ink-soft); transition: box-shadow .18s, background-color .18s, color .18s; }
+.mine-toggle { display: inline-grid; place-items: center; min-height: 34px; min-width: 46px; padding: 0 12px; border: 0; border-radius: 999px; background: var(--field); font-size: 13px; font-weight: 600; color: var(--ink-soft); transition: box-shadow .18s, background-color .18s, color .18s; --hit: -5px 0; }
 .mine-toggle.active { background: var(--accent); color: var(--accent-ink); box-shadow: none; }
 .mine-toggle:active { transform: translateY(1px); }
 /* No vibration on iPhone, so a tap answers with motion: the button springs, the count bumps. */
@@ -357,11 +363,11 @@ button.car:disabled { opacity: 1; cursor: default; }
 .confirm-actions > button { flex: 1; min-height: 48px; }
 .danger-button.confirm-danger { background: var(--danger-bg); }
 .portion-stepper { flex: none; display: inline-flex; align-items: center; gap: 2px; padding: 3px; border-radius: 12px; background: var(--field); }
-.portion-stepper button { width: 30px; height: 30px; border: 0; border-radius: 9px; background: transparent; font-size: 20px; font-weight: 600; color: var(--ink-soft); }
+.portion-stepper button { width: 30px; height: 30px; border: 0; border-radius: 9px; background: transparent; font-size: 20px; font-weight: 600; color: var(--ink-soft); --hit: -7px; }
 .portion-stepper button:not(:disabled):active { background: var(--border); }
 .portion-stepper span { min-width: 28px; text-align: center; font-size: 13px; color: var(--muted); white-space: nowrap; }
 .portion-stepper b { font-size: 16px; color: var(--ink); }
-.add-more { justify-self: start; border: 0; background: none; padding: 8px 4px; font-size: 14px; font-weight: 650; color: var(--brand); }
+.add-more { justify-self: start; display: inline-flex; align-items: center; gap: 4px; border: 0; background: none; padding: 8px 4px; font-size: 14px; font-weight: 650; color: var(--brand); --hit: -4px 0; }
 .add-more:hover { text-decoration: underline; }
 
 /* ─── Summary ──────────────────────────────────────────────── */
@@ -372,11 +378,11 @@ button.car:disabled { opacity: 1; cursor: default; }
 .summary-person-total { display: flex; align-items: center; gap: 6px; }
 .summary-person-total b { font-size: 16px; font-variant-numeric: tabular-nums; }
 /* Two ticks, grey until set: the guest turns the first green, the creator's confirmation turns both green. */
-.pay-marks { display: inline-flex; align-items: center; min-width: 28px; min-height: 28px; padding: 0 2px; border: 0; background: none; font: inherit; font-size: 15px; font-weight: 800; color: var(--muted); opacity: .55; }
+.pay-marks { display: inline-flex; align-items: center; min-width: 28px; min-height: 28px; padding: 0 2px; border: 0; background: none; font: inherit; font-size: 15px; font-weight: 800; color: var(--muted); opacity: .75; }
 .pay-marks span + span { margin-left: -.32em; }
 .pay-marks.first span:first-child, .pay-marks.both span { color: var(--ok); }
 .pay-marks.first, .pay-marks.both { opacity: 1; }
-button.pay-marks { cursor: pointer; border-radius: var(--radius-sm); }
+button.pay-marks { cursor: pointer; border-radius: var(--radius-sm); --hit: -8px; }
 button.pay-marks:active { box-shadow: var(--inset-sm); }
 button.pay-marks:disabled { cursor: default; }
 /* The card number stays a tap away while a guest still owes, wherever they scrolled. */
@@ -387,7 +393,8 @@ button.pay-marks:disabled { cursor: default; }
 .dock-name .person-avatar.mini { width: 28px; height: 28px; font-size: 12px; }
 .dock-name-text { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dock-name:active, .card-dock:active { transform: translateY(1px); }
-.card-dock { flex: 0 1 auto; min-width: 0; min-height: 52px; padding: 0 22px; border: 0; border-radius: 999px; background: var(--accent); color: var(--accent-ink); box-shadow: 0 8px 24px rgb(0 0 0 / .18); font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card-dock { flex: 0 1 auto; min-width: 0; min-height: 52px; padding: 0 22px; border: 0; border-radius: 999px; display: flex; align-items: center; gap: 8px; background: var(--accent); color: var(--accent-ink); box-shadow: 0 8px 24px rgb(0 0 0 / .18); font-size: 15px; font-weight: 700; white-space: nowrap; }
+.card-dock > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .export-card { position: relative; padding: 18px 20px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px; }
 /* The summary speaks the same way as the dishes: no coloured fills, a stripe at the left edge.
    Brand green marks your own row, the calmer "paid" green marks what is settled. */
@@ -405,14 +412,14 @@ button.pay-marks:disabled { cursor: default; }
 .people-list li:first-child { border-top: 0; }
 .people-text { flex: 1; min-width: 0; display: grid; gap: 1px; }
 .people-text b { font-size: 15px; font-weight: 600; }
-.people-text small { font-size: 12px; color: var(--muted); }
+.people-text small { font-size: 13px; color: var(--muted); }
 .people-text small:empty { display: none; }
 
 /* ─── Modal & toast ────────────────────────────────────────── */
 .modal-backdrop { position: fixed; inset: 0; z-index: 10; display: grid; place-items: center; padding: 16px; background: color-mix(in srgb, var(--bg) 55%, #0000004d); backdrop-filter: blur(6px); animation: fade .18s ease-out; }
 .modal-card { position: relative; width: min(100%, 460px); max-height: calc(100vh - 32px); max-height: calc(100dvh - 32px); overflow: auto; padding: 30px; border-radius: 24px; background: var(--surface); box-shadow: var(--raise-lg); animation: rise .22s ease-out; }
 .modal-form { display: grid; gap: 4px; }
-.modal-close { position: absolute; right: 16px; top: 16px; width: 36px; height: 36px; border: 0; border-radius: 11px; background: var(--field); color: var(--muted); font-size: 22px; line-height: 1; }
+.modal-close { position: absolute; right: 16px; top: 16px; width: 36px; height: 36px; border: 0; border-radius: 11px; background: var(--field); display: grid; place-items: center; color: var(--muted); font-size: 18px; --hit: -4px; }
 .modal-close:active { background: var(--border); }
 .modal-total { display: flex; justify-content: space-between; align-items: center; margin-top: 14px; padding: 14px 16px; border-radius: var(--radius-sm); box-shadow: var(--inset-sm); font-size: 14px; color: var(--muted); }
 .modal-total b { font-size: 17px; color: var(--ink); white-space: nowrap; }
@@ -488,16 +495,16 @@ button.pay-marks:disabled { cursor: default; }
   .steps-grid { grid-template-columns: 1fr 1fr; }
 }
 @media (max-width: 760px) {
-  body { font-size: 14px; }
   .topbar { height: 64px; }
   .brand { font-size: 22px; }
   .home-page { gap: 44px; }
   .hero { grid-template-columns: 1fr; gap: 8px; padding-top: 24px; }
   .hero-copy > p { font-size: 15px; }
-  .hero-art { min-height: 340px; }
+  /* Room above and below the receipt, so the two tags float at its edges without covering its lines. */
+  .hero-art { min-height: 450px; }
   .receipt-card { width: 250px; padding: 22px; }
-  .tag-split { top: 30px; right: 0; }
-  .tag-done { bottom: 30px; left: 0; }
+  .tag-split { top: 0; right: 0; }
+  .tag-done { bottom: 0; left: 0; }
   .bottom-cta { flex-direction: column; align-items: stretch; text-align: center; padding: 26px 20px; }
   .bottom-cta h2 { font-size: 25px; }
   .saved-card { padding: 14px; gap: 12px; }

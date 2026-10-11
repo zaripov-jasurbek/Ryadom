@@ -8,6 +8,7 @@
   import ItemTable from './ItemTable.svelte'
   import { app } from '../lib/store.svelte'
   import Modal from './Modal.svelte'
+  import Icon from './Icon.svelte'
   import { haptic } from '../lib/haptics'
 
   /** `suspect` rows are framed in yellow: the receipt's total adds up without them, so they are likely misread. */
@@ -251,10 +252,10 @@
     <p class="lead">{adding ? 'Следующую часть чека или другой чек.' : 'Снимите чек вместе с ценами. Длинный — по частям.'}</p>
     {#if error}<div class="form-error" role="alert">{error}</div>{/if}
     <div class="scan-actions">
-      <button type="button" class="primary-button wide" onclick={() => camera.click()}>📷 Сфотографировать</button>
+      <button type="button" class="primary-button wide" onclick={() => camera.click()}><Icon name="camera" /> Сфотографировать</button>
       <button type="button" class="soft-button wide" onclick={() => gallery.click()}>Выбрать из галереи</button>
     </div>
-    {#if filledRows(rows).length}<button type="button" class="ghost-button" onclick={back}>← К позициям</button>{/if}
+    {#if filledRows(rows).length}<button type="button" class="ghost-button" onclick={back}><Icon name="back" /> К позициям</button>{/if}
     <div class="privacy-note">🔒 Фото остаётся на телефоне</div>
   {:else if step === 'area'}
     <!-- Glows in step with the handles until the first touch, so it is read before the frame is pulled. -->
@@ -325,7 +326,7 @@
     {/if}
     <button class="primary-button wide" disabled={app.busy}>{app.busy ? 'Добавляем…' : `Добавить ${plural(chosen.length, 'позицию', 'позиции', 'позиций')}`} <span aria-hidden="true">＋</span></button>
     <div class="scan-again">
-      <button type="button" class="ghost-button" onclick={() => newPhoto(true)}>📷 Ещё фото</button>
+      <button type="button" class="ghost-button" onclick={() => newPhoto(true)}><Icon name="camera" /> Ещё фото</button>
       <button type="button" class="ghost-button" onclick={reframe}>Изменить рамку</button>
       <button type="button" class="ghost-button" onclick={() => newPhoto(false)}>Переснять</button>
     </div>

@@ -3,6 +3,7 @@
   import { plural } from '../lib/format'
   import { app } from '../lib/store.svelte'
   import Modal from './Modal.svelte'
+  import Icon from './Icon.svelte'
 
   const bill = $derived(app.bill!)
   const online = $derived(new Set([app.selectedPerson, ...app.onlineUsers.map(user => user.participantId)].filter(Boolean)))
@@ -25,7 +26,7 @@
           <b>{app.label(person)}</b>
           <small>{[app.isMe(person.id) ? `для остальных: ${person.name}` : '', person.id === app.ownerId ? 'платит по счёту' : '', here ? 'в сети' : 'не в сети'].filter(Boolean).join(' · ')}</small>
         </div>
-        {#if app.isOwner && person.id !== app.ownerId}<button type="button" class="icon-button small danger" aria-label={`Убрать ${person.name} из чека`} title="Убрать из чека" onclick={() => removeParticipant(person)}>×</button>{/if}
+        {#if app.isOwner && person.id !== app.ownerId}<button type="button" class="icon-button small danger" aria-label={`Убрать ${person.name} из чека`} title="Убрать из чека" onclick={() => removeParticipant(person)}><Icon name="close" /></button>{/if}
       </li>
     {/each}
   </ul>

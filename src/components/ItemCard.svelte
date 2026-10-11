@@ -3,6 +3,7 @@
   import { initial, portionCount } from '../lib/format'
   import { app } from '../lib/store.svelte'
   import { haptic } from '../lib/haptics'
+  import Icon from './Icon.svelte'
 
   let { item }: { item: BillItem } = $props()
   const units = $derived(Array.from({ length: item.quantity }, (_, unit) => unit))
@@ -102,11 +103,11 @@
     <span class="bill-price">{formatAmount(item.unitPrice)}</span>
     {#if app.isOwner}
       <div class="item-menu" bind:this={menu}>
-        <button class="icon-button small" aria-haspopup="menu" aria-expanded={menuOpen} aria-label={`Действия с позицией «${item.name}»`} title="Действия" onclick={() => menuOpen = !menuOpen}>⋯</button>
+        <button class="icon-button small" aria-haspopup="menu" aria-expanded={menuOpen} aria-label={`Действия с позицией «${item.name}»`} title="Действия" onclick={() => menuOpen = !menuOpen}><Icon name="more" /></button>
         {#if menuOpen}
           <div class="menu-popover" role="menu">
-            <button role="menuitem" onclick={() => fromMenu(() => app.editingItem = item)}>✎ Изменить</button>
-            <button role="menuitem" class="danger" onclick={() => fromMenu(() => void remove())}>🗑 Удалить</button>
+            <button role="menuitem" onclick={() => fromMenu(() => app.editingItem = item)}><Icon name="edit" /> Изменить</button>
+            <button role="menuitem" class="danger" onclick={() => fromMenu(() => void remove())}><Icon name="trash" /> Удалить</button>
           </div>
         {/if}
       </div>

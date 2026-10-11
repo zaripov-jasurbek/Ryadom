@@ -3,6 +3,7 @@
   import { plural } from '../lib/format'
   import { install, installHint, promptInstall } from '../lib/pwa.svelte'
   import InstallHintModal from './InstallHintModal.svelte'
+  import Icon from './Icon.svelte'
   import { pickPhoto } from '../lib/photo'
   import { app, grandTotal } from '../lib/store.svelte'
 
@@ -40,7 +41,7 @@
   <!-- Someone coming back is here for their checks; the introduction follows them. -->
   {#if app.bills.length}
     <section class="recent">
-      <div class="section-row"><div><h2>Ваши чеки</h2><span class="muted">{plural(app.bills.length, 'чек', 'чека', 'чеков')}</span></div><button class="accent-button" onclick={create}>＋ Новый чек</button></div>
+      <div class="section-row"><div><h2>Ваши чеки</h2><span class="muted">{plural(app.bills.length, 'чек', 'чека', 'чеков')}</span></div><button class="accent-button" onclick={create}><Icon name="plus" /> Новый чек</button></div>
       <div class="saved-list">
         {#each app.bills as saved (saved.id)}
           {@const owner = Boolean(saved.ownerToken)}
@@ -56,7 +57,7 @@
               <span class="saved-total">{formatUzs(grandTotal(saved))}</span>
               <span class="saved-arrow" aria-hidden="true">→</span>
             </button>
-            <button class="icon-button small saved-remove" aria-label={`Убрать «${saved.title}» из списка`} title="Убрать из списка" onclick={() => forget(saved)}>×</button>
+            <button class="icon-button small saved-remove" aria-label={`Убрать «${saved.title}» из списка`} title="Убрать из списка" onclick={() => forget(saved)}><Icon name="close" /></button>
           </div>
         {/each}
       </div>
@@ -69,7 +70,7 @@
       <p>Создайте чек, поделитесь ссылкой — и пусть каждый отметит своё. Остальное мы посчитаем.</p>
       <div class="hero-actions">
         <button class="primary-button" onclick={create}>Создать новый чек <span aria-hidden="true">↗</span></button>
-        {#if install.prompt || installHint}<button class="soft-button" onclick={installApp}><span aria-hidden="true">📲</span> Установить приложение</button>{/if}
+        {#if install.prompt || installHint}<button class="soft-button" onclick={installApp}><Icon name="install" /> Установить приложение</button>{/if}
       </div>
       <div class="hero-note"><span class="note-avatars" aria-hidden="true"><b>J</b><b>A</b><b>B</b></span>Понятно каждому за пару секунд</div>
     </div>

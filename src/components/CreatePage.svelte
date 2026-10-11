@@ -5,6 +5,7 @@
   import { filledRows, rowsTotal, toItems, validRow } from '../lib/rows'
   import { app } from '../lib/store.svelte'
   import ItemTable from './ItemTable.svelte'
+  import Icon from './Icon.svelte'
 
   const filled = $derived(filledRows(app.draft))
   const ready = $derived(filled.length > 0 && filled.every(validRow))
@@ -28,11 +29,11 @@
 </script>
 
 <main class="form-page create-page">
-  <button class="back-link" onclick={() => app.goHome()}>← Назад</button>
+  <button class="back-link" onclick={() => app.goHome()}><Icon name="back" /> Назад</button>
   <form class="panel bill draft" onsubmit={(e) => { e.preventDefault(); submit() }}>
     <div class="draft-top">
       <h1>Новый чек</h1>
-      <button type="button" class="soft-button" onclick={scan}>{filled.length ? '📷 Ещё фото' : '📷 Скан'}</button>
+      <button type="button" class="soft-button" onclick={scan}><Icon name="camera" /> {filled.length ? 'Ещё фото' : 'Скан'}</button>
     </div>
     <ItemTable bind:this={table} bind:rows={app.draft} newRow={app.newDraftRow} />
 
