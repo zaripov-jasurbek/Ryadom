@@ -2,7 +2,7 @@
   import { formatAmount, isUnitAssigned, sharedAllInfo, type BillItem, type Participant } from '../lib/calculations'
   import { initial, portionCount } from '../lib/format'
   import { app } from '../lib/store.svelte'
-  import { haptic } from '../lib/haptics'
+  import { haptic, tactile } from '../lib/haptics'
   import Icon from './Icon.svelte'
 
   let { item }: { item: BillItem } = $props()
@@ -124,7 +124,7 @@
           {@const label = groupLabel(group)}
           {@const names = groupNames(group)}
           {#if stepper && me}
-            <button type="button" class="car group" class:with-me={withMe(group)} class:pop={tapped === `group:${group.key}`} aria-label={label ? `${names} · ${label}` : names} title={withMe(group) ? 'Не делить эту порцию' : `Поделить порцию: ${names}`} disabled={groupUnit(group) === undefined} onclick={() => tapGroup(group)}>{@render faces(group)}{#if label}<span class="group-share">{label}</span>{/if}</button>
+            <button type="button" class="car group" class:with-me={withMe(group)} class:pop={tapped === `group:${group.key}`} aria-label={label ? `${names} · ${label}` : names} title={withMe(group) ? 'Не делить эту порцию' : `Поделить порцию: ${names}`} disabled={groupUnit(group) === undefined} {@attach tactile} onclick={() => tapGroup(group)}>{@render faces(group)}{#if label}<span class="group-share">{label}</span>{/if}</button>
           {:else}
             <span class="car group" class:with-me={withMe(group)} role="img" aria-label={label ? `${names} · ${label}` : names} title={names}>{@render faces(group)}{#if label}<span class="group-share">{label}</span>{/if}</span>
           {/if}
@@ -136,17 +136,17 @@
       {#if me && !sharedAll}
         {#if stepper}
           <div class="portion-stepper" role="group" aria-label={`Ваши порции: ${item.name}`}>
-            <button type="button" aria-label="Убрать одну порцию" disabled={giveBack === undefined} onclick={() => tap('stepper', giveBack)}>−</button>
+            <button type="button" aria-label="Убрать одну порцию" disabled={giveBack === undefined} {@attach tactile} onclick={() => tap('stepper', giveBack)}>−</button>
             <span aria-live="polite">{#key mine}<b class:bump={tapped === 'stepper'}>{portionCount(mine)}</b>{/key}</span>
-            <button type="button" aria-label="Взять ещё порцию" title={free.length ? '' : 'Свободных порций нет'} disabled={!free.length} onclick={() => tap('stepper', free[0])}>+</button>
+            <button type="button" aria-label="Взять ещё порцию" title={free.length ? '' : 'Свободных порций нет'} disabled={!free.length} {@attach tactile} onclick={() => tap('stepper', free[0])}>+</button>
           </div>
         {:else if tappable(0)}
-          <button class="mine-toggle" class:active={mine > 0} class:pop={tapped === 'mine'} aria-pressed={mine > 0} title="Моё" onclick={() => tap('mine', 0)}>{mine > 0 ? '✓ Я' : 'Я'}</button>
+          <button class="mine-toggle" class:active={mine > 0} class:pop={tapped === 'mine'} aria-pressed={mine > 0} title="Моё" {@attach tactile} onclick={() => tap('mine', 0)}>{mine > 0 ? '✓ Я' : 'Я'}</button>
         {/if}
       {/if}
       <!-- Only the creator splits among everyone; then nobody can mark the item until they switch it off. -->
       {#if app.isOwner && (sharedAll || parts > 1)}
-        <button class="mine-toggle everyone" class:active={sharedAll} aria-pressed={sharedAll} title="На всех" disabled={app.busy} onclick={toggleEveryone}>{sharedAll ? '✓ Все' : 'Все'}</button>
+        <button class="mine-toggle everyone" class:active={sharedAll} aria-pressed={sharedAll} title="На всех" disabled={app.busy} {@attach tactile} onclick={toggleEveryone}>{sharedAll ? '✓ Все' : 'Все'}</button>
       {/if}
     </div>
   </div>
