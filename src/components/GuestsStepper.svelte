@@ -1,7 +1,7 @@
 <script lang="ts">
   import { limits } from '../lib/limits'
   import { plural } from '../lib/format'
-  import { haptic } from '../lib/haptics'
+  import { haptic, tactile } from '../lib/haptics'
 
   // How many people are coming, the creator included. "Split among everyone" cuts shared items into this many parts,
   // so guests who come later pay the same as those already here.
@@ -12,8 +12,8 @@
 <div class="field guests-field">
   <span>Сколько вас? <span class="label-hint">вместе с вами</span></span>
   <div class="portion-stepper" role="group" aria-label="Сколько человек за столом">
-    <button type="button" aria-label="Меньше" disabled={value <= min} onclick={() => step(-1)}>−</button>
+    <button type="button" aria-label="Меньше" disabled={value <= min} {@attach tactile} onclick={() => step(-1)}>−</button>
     <span aria-live="polite"><b>{value}</b> {plural(value, 'человек', 'человека', 'человек').replace(/^\d+\s/, '')}</span>
-    <button type="button" aria-label="Больше" disabled={value >= limits.participants} onclick={() => step(1)}>+</button>
+    <button type="button" aria-label="Больше" disabled={value >= limits.participants} {@attach tactile} onclick={() => step(1)}>+</button>
   </div>
 </div>
