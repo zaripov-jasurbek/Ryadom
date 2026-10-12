@@ -83,6 +83,8 @@ class AppStore {
 
   private remote: RemoteSubscription | null = null
   private refreshSeq = 0
+  /** The state each serving should end in, by the viewer's last tap on it, while its request is on the way. */
+  private wantedUnits = new Map<string, boolean>()
   private reclaimed = new Set<string>()
   /** The anonymous account the open check was connected with; a different one means the session was lost. */
   private sessionUser = ''
@@ -250,7 +252,8 @@ class AppStore {
     const stale = () => seq !== this.refreshSeq || this.bill?.id !== id
     try {
       const result = await loadRemoteCheck(id)
-      if (!stale()) this.applyRemote(result)
+      // While a tap is still being sent the server lags behind the screen; the reload after it catches up.
+      if (!stale() && !this.wantedUnits.size) this.applyRemote(result)
     } catch (error) {
       if (stale()) return
       if (!isRemoteCheckGone(error)) { console.error('Remote refresh failed', error); return }
@@ -431,16 +434,25 @@ class AppStore {
     // An item split among everyone is the creator's until they end it; the server refuses the tap too.
     if (!bill || !me || item.sharedAll) return
     const unitId = item.unitIds?.[unit]
-    if (!unitId || this.pendingUnits[unitId]) return
-    const enabled = !(item.unitSelections[String(unit)] ?? []).includes(me)
+    if (!unitId) return
+    const current = bill.items.find(entry => entry.id === item.id) ?? item
+    const enabled = !(current.unitSelections[String(unit)] ?? []).includes(me)
     // Show the tap right away; the reload after the RPC replaces it with the server's amounts, or reverts it.
     this.refreshSeq++
     this.bill = { ...bill, items: bill.items.map(entry => entry.id === item.id ? withSelection(entry, unit, me, enabled) : entry) }
-    this.pendingUnits = { ...this.pendingUnits, [unitId]: true }
     this.remote?.setPresence(this.presence(`${enabled ? 'Выбирает' : 'Убирает'} ${item.name}`))
-    try { await toggleRemoteUnit(unitId, enabled) }
+    // A tap while the last one is still on its way is not lost: the running request sends the newest wish after it.
+    this.wantedUnits.set(unitId, enabled)
+    if (this.pendingUnits[unitId]) return
+    this.pendingUnits = { ...this.pendingUnits, [unitId]: true }
+    try {
+      for (let sent: boolean | undefined; sent !== this.wantedUnits.get(unitId);) {
+        sent = this.wantedUnits.get(unitId)!
+        await toggleRemoteUnit(unitId, sent)
+      }
+    }
     catch (error) { this.fail(error, 'Не удалось обновить позицию') }
-    finally { const { [unitId]: _, ...rest } = this.pendingUnits; this.pendingUnits = rest }
+    finally { this.wantedUnits.delete(unitId); const { [unitId]: _, ...rest } = this.pendingUnits; this.pendingUnits = rest }
     await this.refresh()
   }
 
