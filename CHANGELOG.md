@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.3.2](https://github.com/zaripov-jasurbek/Ryadom/compare/v2.3.1...v2.3.2) (2026-10-12)
+
+
+### Исправления
+
+* **bill:** a quick second tap on a serving is no longer lost ([04ee11b](https://github.com/zaripov-jasurbek/Ryadom/commit/04ee11b5aa7e38935e08640caae989df2be1be3d))
+
 ## [2.3.1](https://github.com/zaripov-jasurbek/Ryadom/compare/v2.3.0...v2.3.1) (2026-10-12)
 
 
