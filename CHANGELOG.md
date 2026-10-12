@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.3.1](https://github.com/zaripov-jasurbek/Ryadom/compare/v2.3.0...v2.3.1) (2026-10-12)
+
+
+### Исправления
+
+* haptics on iOS 26 and Android without web-haptics ([#28](https://github.com/zaripov-jasurbek/Ryadom/issues/28)) ([05d26c9](https://github.com/zaripov-jasurbek/Ryadom/commit/05d26c9e198af66b90086543339180ce0487bd71))
+
 ## [2.3.0](https://github.com/zaripov-jasurbek/Ryadom/compare/v2.2.0...v2.3.0) (2026-10-11)
 
 
