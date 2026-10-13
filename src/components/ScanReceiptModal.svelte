@@ -2,7 +2,7 @@
   import { onDestroy, onMount } from 'svelte'
   import { formatUzs } from '../lib/calculations'
   import { prepareReceiptEngine, recognizeReceipt, stopReceiptEngine, suggestArea, type Area, type ScanPhase } from '../lib/ocr'
-  import { bestReading, settled } from '../lib/receipt'
+  import { bestReading, isComplete, parseReceipt, settled } from '../lib/receipt'
   import { plural } from '../lib/format'
   import { blankRow, filledRows, rowsTotal, toItems, validRow, type ItemRow } from '../lib/rows'
   import ItemTable from './ItemTable.svelte'
@@ -21,6 +21,9 @@
   let phase = $state<ScanPhase>('read')
   let loadShown = $state(false)
   let progress = $state(0)
+  // What exactly is happening now, and what the readings so far have found.
+  let detail = $state('')
+  let found = $state('')
   const percent = $derived(Math.round(progress * 100))
   const phaseOrder: ScanPhase[] = ['load', 'read', 'check']
   const scanSteps = $derived([
@@ -29,7 +32,8 @@
     { id: 'check' as const, label: 'Проверка' },
   ])
   const stepState = (id: ScanPhase) => phaseOrder.indexOf(id) < phaseOrder.indexOf(phase) ? 'done' : id === phase ? 'active' : 'todo'
-  function scanProgress(next: ScanPhase, value: number) {
+  function scanProgress(next: ScanPhase, value: number, text?: string) {
+    if (text) detail = text
     if (next === 'load') loadShown = true
     phase = next
     const shares: Record<ScanPhase, [number, number]> = loadShown
@@ -189,9 +193,18 @@
     if (problem) { error = problem; haptic.error(); return }
     controller?.abort()
     const current = controller = new AbortController()
-    error = ''; phase = 'read'; loadShown = false; progress = 0; step = 'reading'
+    error = ''; phase = 'read'; loadShown = false; progress = 0; detail = ''; found = ''; step = 'reading'
+    // Each reading is told back as it comes, so a long check shows why it goes on.
+    const judge = (readings: string[]) => {
+      const last = parseReceipt(readings.at(-1) ?? '')
+      if (controller === current) {
+        const count = last.items.length ? `Найдено ${plural(last.items.length, 'позиция', 'позиции', 'позиций')}` : 'Позиций пока не видно'
+        found = last.total === null ? `${count}, итог не найден` : isComplete(last) ? `${count}, сумма сходится` : `${count}, сумма не сходится — проверяем ещё`
+      }
+      return settled(readings)
+    }
     try {
-      const readings = await recognizeReceipt(file, $state.snapshot(area) as Area, (next, value) => { if (controller === current) scanProgress(next, value) }, current.signal, settled)
+      const readings = await recognizeReceipt(file, $state.snapshot(area) as Area, (next, value, text) => { if (controller === current) scanProgress(next, value, text) }, current.signal, judge)
       if (controller !== current) return
       const { text, result } = bestReading(readings)
       // On the create page the rows go straight into its table, which is where they are checked;
@@ -322,11 +335,15 @@
           {@const state = stepState(entry.id)}
           <li class="scan-step {state}">
             <span class="scan-step-mark" aria-hidden="true">{#if state === 'done'}<Icon name="check" />{/if}</span>
-            <span>{entry.label}{#if entry.id === 'load' && state === 'active'}<small>{' · только в первый раз'}</small>{/if}</span>
+            <span class="scan-step-text">
+              <span>{entry.label}{#if entry.id === 'load' && state === 'active'}<small>{' · только в первый раз'}</small>{/if}</span>
+              {#if state === 'active' && detail}<small class="scan-step-detail">{detail}</small>{/if}
+              {#if state === 'active' && entry.id === 'check' && found}<small class="scan-step-detail">{found}</small>{/if}
+            </span>
           </li>
         {/each}
       </ol>
-      <p class="visually-hidden" role="status">{scanSteps.find(entry => entry.id === phase)?.label}</p>
+      <p class="visually-hidden" role="status">{detail || scanSteps.find(entry => entry.id === phase)?.label}</p>
     </div>
     <button type="button" class="soft-button wide" onclick={reframe}>Отменить</button>
   {:else}
