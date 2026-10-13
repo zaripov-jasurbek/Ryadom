@@ -492,6 +492,8 @@ input.tactile.tactile { all: initial; appearance: auto; position: absolute; inse
 .scan-step-mark { width: 22px; height: 22px; flex: none; border-radius: 50%; display: grid; place-items: center; border: 2px solid var(--border); }
 .scan-step.active .scan-step-mark { border-top-color: var(--brand); animation: spin .8s linear infinite; }
 .scan-step.done .scan-step-mark { border-color: var(--ok-bg); background: var(--ok-bg); color: var(--ok); }
+.scan-step-text { display: grid; gap: 2px; min-width: 0; }
+.scan-step .scan-step-detail { font-weight: 400; color: var(--muted); }
 .scan-step-mark .icon { width: 14px; height: 14px; stroke-width: 2.8; }
 @keyframes spin { to { transform: rotate(1turn); } }
 .modal-total small { font-size: 13px; }

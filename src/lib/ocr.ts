@@ -6,7 +6,8 @@
  * reading the photo, then reading it again in other ways until the readings agree. `progress` is 0–1 within the phase.
  */
 export type ScanPhase = 'load' | 'read' | 'check'
-export type OcrProgress = (phase: ScanPhase, progress: number) => void
+/** `detail` says in plain words what exactly is happening right now, for the line under the step. */
+export type OcrProgress = (phase: ScanPhase, progress: number, detail?: string) => void
 
 // Each loading step's share of the whole load, so its bar fills once instead of starting over at every step;
 // the language models are most of it.
@@ -15,6 +16,12 @@ const loadSteps: Record<string, [number, number]> = {
   'initializing tesseract': [.25, .3],
   'loading language traineddata': [.3, .95],
   'initializing api': [.95, 1],
+}
+const loadDetails: Record<string, string> = {
+  'loading tesseract core': 'Загружаем движок распознавания',
+  'initializing tesseract': 'Запускаем движок',
+  'loading language traineddata': 'Загружаем словари: русский и узбекский',
+  'initializing api': 'Почти готово',
 }
 
 /** Receipt text this wide reads best; narrower crops are scaled up, wider ones down. */
@@ -370,14 +377,14 @@ function straight(scan: Scan, mode: Mode) {
  * Each canvas takes tens of megabytes, so a view is drawn again rather than kept. A straightened view helps curled paper;
  * a column of lines catches large bold totals.
  */
-const passes: { draw: (scan: Scan) => HTMLCanvasElement | null; column?: boolean }[] = [
-  { draw: scan => drawVariant(scan, 'normal') },
-  { draw: scan => drawVariant(scan, 'gray') },
-  { draw: scan => straight(scan, 'gray') },
-  { draw: scan => drawVariant(scan, 'normal'), column: true },
-  { draw: scan => drawVariant(scan, 'gray'), column: true },
-  { draw: scan => straight(scan, 'threshold') },
-  { draw: scan => drawVariant(scan, 'thresholdStrong') },
+const passes: { draw: (scan: Scan) => HTMLCanvasElement | null; column?: boolean; label: string }[] = [
+  { draw: scan => drawVariant(scan, 'normal'), label: 'Читаем текст' },
+  { draw: scan => drawVariant(scan, 'gray'), label: 'Читаем в оттенках серого' },
+  { draw: scan => straight(scan, 'gray'), label: 'Выпрямляем изогнутые строки' },
+  { draw: scan => drawVariant(scan, 'normal'), column: true, label: 'Читаем построчно' },
+  { draw: scan => drawVariant(scan, 'gray'), column: true, label: 'Читаем построчно в оттенках серого' },
+  { draw: scan => straight(scan, 'threshold'), label: 'Усиливаем контраст' },
+  { draw: scan => drawVariant(scan, 'thresholdStrong'), label: 'Максимальный контраст' },
 ]
 
 // The worker stays loaded while the scanner is open, so a retake skips loading the engine and its models.
@@ -459,13 +466,16 @@ export function confidentText(lines: OcrLine[]) {
  */
 export async function recognizeReceipt(file: Blob, area: Area, onProgress: OcrProgress, signal: AbortSignal, enough: (readings: string[]) => boolean): Promise<string[]> {
   // The load phase only when the engine is not ready yet; it may have loaded while the photo was being framed.
-  if (loaded < 1) onProgress('load', loaded)
+  if (loaded < 1) onProgress('load', loaded, 'Загружаем сканер')
   let pass = 0, rereads = passes.length - 1
+  let detail = ''
   const mine = report = (status, progress) => {
-    if (status !== 'recognizing text') { if (loadSteps[status]) onProgress('load', loaded) }
-    else if (!pass) onProgress('read', progress)
-    else onProgress('check', (pass - 1 + progress) / rereads)
+    if (status !== 'recognizing text') { if (loadSteps[status]) onProgress('load', loaded, loadDetails[status]) }
+    else if (!pass) onProgress('read', progress, detail)
+    else onProgress('check', (pass - 1 + progress) / rereads, detail)
   }
+  // Drawing a view takes a moment on a phone; it is announced before, so the line never sits on a step that is over.
+  const announce = (text: string) => { detail = text; if (pass) onProgress('check', (pass - 1) / rereads, text); else onProgress('read', 0, text) }
   // A terminated worker never settles its pending job, so the scan stops on this instead and cleans up after itself.
   const aborted = new Promise<never>((_, reject) => signal.addEventListener('abort', () => reject(signal.reason), { once: true }))
   aborted.catch(() => {})
@@ -476,16 +486,20 @@ export async function recognizeReceipt(file: Blob, area: Area, onProgress: OcrPr
     const [{ PSM }, worker] = await Promise.race([Promise.all([import('tesseract.js'), startEngine()]), aborted])
     const bitmap = await decoding
     signal.throwIfAborted()
-    onProgress('read', 0)
     let scan: Scan = { bitmap, area, stretch: 1 }
     const readings: string[] = []
     let measured = false
     for (let index = 0; index < passes.length; index++) {
       signal.throwIfAborted()
-      const { draw, column } = passes[index]
+      const { draw, column, label } = passes[index]
+      const attempt = pass ? ` · попытка ${pass + 1} из ${rereads + 1}` : ''
+      announce(`Готовим фото${attempt}`)
+      // Lets the line repaint before the drawing blocks the page for a moment.
+      await new Promise(resolve => setTimeout(resolve, 0))
       const image = draw(scan)
       if (!image) continue
       signal.throwIfAborted()
+      announce(`${scan.stretch > 1 && index === 0 ? 'Растягиваем узкий шрифт' : label}${attempt}`)
       await Promise.race([worker.setParameters({ tessedit_pageseg_mode: column ? PSM.SINGLE_COLUMN : PSM.SINGLE_BLOCK }), aborted])
       const { data } = await Promise.race([worker.recognize(image, {}, { blocks: true }), aborted])
       const lines = (data.blocks ?? []).flatMap(block => block.paragraphs.flatMap(paragraph => paragraph.lines))

@@ -10,12 +10,14 @@
 
 type Pattern = number | number[]
 
+// Android motors take 10–20 ms just to spin up, so shorter pulses are silent on many phones
+// (the old 8 and 15 ms pulses did nothing on Android); 25 ms and up is felt on most of them.
 const patterns = {
-  light: 15,
-  selection: 8,
-  success: [30, 60, 40],
-  warning: [40, 100, 40],
-  error: [40, 40, 40, 40, 40],
+  light: 30,
+  selection: 25,
+  success: [35, 70, 45],
+  warning: [45, 100, 45],
+  error: [40, 50, 40, 50, 40],
 } satisfies Record<string, Pattern>
 
 const canVibrate = typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function'
