@@ -55,5 +55,5 @@
   <ItemTable bind:this={table} bind:rows {newRow} fixed={Boolean(editing)} />
   <div class="modal-total">{editing ? 'Сумма позиции' : 'Сумма'} <b>{formatUzs(total)}</b></div>
   {#each warnings as warning (warning)}<p class="modal-warning">{warning}</p>{/each}
-  <button class="primary-button wide" disabled={app.isPending('items')}>{#if editing}Сохранить <span aria-hidden="true">✓</span>{:else}{app.isPending('items') ? 'Добавляем…' : filled.length ? `Добавить ${plural(filled.length, 'позицию', 'позиции', 'позиций')}` : 'Добавить'} <span aria-hidden="true">＋</span>{/if}</button>
+  <button class="primary-button wide" disabled={app.isPending('items') || Boolean(editing && app.isPending(`item:${editing.id}`))}>{#if editing}Сохранить <span aria-hidden="true">✓</span>{:else}{app.isPending('items') ? 'Добавляем…' : filled.length ? `Добавить ${plural(filled.length, 'позицию', 'позиции', 'позиций')}` : 'Добавить'} <span aria-hidden="true">＋</span>{/if}</button>
 </Modal>

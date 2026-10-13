@@ -322,13 +322,18 @@ describe('limits and expiry', () => {
   it('lets one address create at most 100 checks a day, whatever the accounts', async () => {
     const create = async (owner: string) => db.rpc(owner, 'create_check', { p_title: 'Ужин', p_service_percent: 0, p_owner_name: 'Jasur', p_owner_token: token() })
     try {
-      db.headers = { 'x-forwarded-for': '203.0.113.7, 10.0.0.1' }
+      // A forged first X-Forwarded-For entry changes nothing: the address is the one Cloudflare saw.
       for (let account = 0; account < 5; account++) {
+        db.headers = { 'cf-connecting-ip': '203.0.113.7', 'x-forwarded-for': `10.9.9.${account}, 203.0.113.7` }
         const owner = await db.newUser()
         for (let i = 0; i < 20; i++) await create(owner)
       }
+      db.headers = { 'cf-connecting-ip': '203.0.113.7', 'x-forwarded-for': 'forged, 203.0.113.7' }
       await assert.rejects(create(await db.newUser()), /Check limit reached/)
-      db.headers = { 'x-forwarded-for': '198.51.100.2' }
+      // Without CF-Connecting-IP, the last X-Forwarded-For entry is the one the proxy added.
+      db.headers = { 'x-forwarded-for': 'forged, 203.0.113.7' }
+      await assert.rejects(create(await db.newUser()), /Check limit reached/)
+      db.headers = { 'cf-connecting-ip': '198.51.100.2', 'x-forwarded-for': '198.51.100.2' }
       await create(await db.newUser())
       // The address itself is not kept, only a hash of it.
       assert.equal((await db.query("select 1 from public.checks where encode(creator_ip_hash, 'escape') like '%203.0.113.7%'")).rows.length, 0)

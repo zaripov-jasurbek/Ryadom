@@ -24,7 +24,7 @@ jobs:
       - run: npm ci
       - name: Типы опубликованной версии
         run: |
-          git fetch --quiet --depth=1 origin 'refs/tags/v*:refs/tags/v*' || true
+          git fetch --quiet --depth=1 origin 'refs/tags/v*:refs/tags/v*'
           tag=$(git tag --list 'v*' --sort=-v:refname | head -1)
           if [ -z "$tag" ]; then echo "Релизов ещё нет, проверка совместимости пропущена"; exit 0; fi
           git show "$tag:src/lib/database.types.ts" > "$RUNNER_TEMP/released.types.ts"

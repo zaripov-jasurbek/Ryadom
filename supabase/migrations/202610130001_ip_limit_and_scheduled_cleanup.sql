@@ -1,7 +1,7 @@
 -- 1. The limit of 20 new checks a day was per anonymous account, and a new anonymous account is one request away.
 --    Checks now also count per client IP: at most public.daily_checks_per_ip() a day. Mobile networks put many people
 --    behind one address, so the number is generous; it stops a script, not a busy restaurant. Only a hash of the address
---    is kept, and it goes away with the check.
+--    is kept, and it goes away with the check. The address is CF-Connecting-IP, not the spoofable first X-Forwarded-For.
 -- 2. purge_expired ran inside create_check, so whoever made a check waited for other people's old ones to be deleted.
 --    It now runs on a schedule (pg_cron) in bigger batches, and create_check no longer calls it.
 -- create_check keeps its signature, so the published site works before and after this migration.
@@ -12,13 +12,17 @@ create index if not exists checks_creator_ip_idx on public.checks(creator_ip_has
 
 create or replace function public.daily_checks_per_ip() returns integer language sql immutable as $$ select 100 $$;
 
--- The client address as Supabase's API gateway passes it: the first entry of X-Forwarded-For.
+-- The client address. The first entry of X-Forwarded-For is whatever the client sent in that header, so it cannot
+-- be trusted: Cloudflare in front of Supabase puts the real address in CF-Connecting-IP and appends it to
+-- X-Forwarded-For. So CF-Connecting-IP first, otherwise the last X-Forwarded-For entry, which the proxy wrote.
 -- Null outside an API request (SQL editor, scheduled jobs, tests), and then only the per-account limit applies.
 create or replace function public.client_ip_hash()
 returns bytea language plpgsql stable set search_path = '' as $$
-declare ip text;
+declare headers json; forwarded text[]; ip text;
 begin
-  ip := nullif(trim(split_part(nullif(current_setting('request.headers', true), '')::json->>'x-forwarded-for', ',', 1)), '');
+  headers := nullif(current_setting('request.headers', true), '')::json;
+  forwarded := string_to_array(headers->>'x-forwarded-for', ',');
+  ip := coalesce(nullif(trim(headers->>'cf-connecting-ip'), ''), nullif(trim(forwarded[cardinality(forwarded)]), ''));
   if ip is null then return null; end if;
   return extensions.digest(convert_to('ryadom:' || ip, 'UTF8'), 'sha256');
 exception when others then
