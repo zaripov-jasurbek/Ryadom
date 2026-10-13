@@ -110,29 +110,64 @@ export function subscribeToRemoteCheck(publicId: string, userId: string, onChang
   const db = realtimeClient
   if (!db) throw new Error('Sign in with ensureAnonymousSession() before subscribing')
   let reloadTimer: ReturnType<typeof setTimeout> | undefined
-  let current = self, joined = false, joinedBefore = false
-  const channel: RealtimeChannel = db.channel(`check:${publicId}`, { config: { private: true, presence: { key: userId } } })
-  channel.on('broadcast', { event: 'changed' }, ({ payload }) => {
-    if ((payload as { by?: string } | undefined)?.by === userId) return
-    clearTimeout(reloadTimer); reloadTimer = setTimeout(onChange, 150)
-  })
-  channel.on('presence', { event: 'sync' }, () => {
-    const byPerson = new Map<string, PresenceUser>()
-    for (const [key, metas] of Object.entries(channel.presenceState<PresenceUser>())) {
-      const latest = metas.at(-1)
-      if (latest) byPerson.set(latest.participantId ?? key, { participantId: latest.participantId, name: latest.name, activity: latest.activity })
-    }
-    onPresence([...byPerson.values()])
-  })
+  let retryTimer: ReturnType<typeof setTimeout> | undefined
+  let current = self, joined = false, joinedBefore = false, closed = false, failures = 0
+  let channel: RealtimeChannel
+  // The channel whose statuses count; the old one, being removed, reports CLOSED and must not start another retry.
+  let active: RealtimeChannel | null = null
+
+  // A channel refused or dropped (an expired token, a join sent before the fresh sign-in's token reached Realtime,
+  // a timeout on a weak network) is not retried by supabase-js, so the check would stop updating until the page is
+  // shown again. It is opened anew with the current token, waiting longer after each failure.
+  function retry() {
+    if (closed || retryTimer) return
+    const delay = Math.min(15_000, 1_000 * 2 ** Math.min(failures++, 4))
+    retryTimer = setTimeout(() => {
+      retryTimer = undefined
+      if (closed) return
+      const old = channel
+      active = null
+      void db!.realtime.setAuth().catch(() => {}).then(async () => {
+        await db!.removeChannel(old).catch(() => {})
+        if (!closed) open()
+      })
+    }, delay)
+  }
+
+  function open() {
+    channel = db!.channel(`check:${publicId}`, { config: { private: true, presence: { key: userId } } })
+    const mine = active = channel
+    channel.on('broadcast', { event: 'changed' }, ({ payload }) => {
+      if ((payload as { by?: string } | undefined)?.by === userId) return
+      clearTimeout(reloadTimer); reloadTimer = setTimeout(onChange, 150)
+    })
+    channel.on('presence', { event: 'sync' }, () => {
+      const byPerson = new Map<string, PresenceUser>()
+      for (const [key, metas] of Object.entries(mine.presenceState<PresenceUser>())) {
+        const latest = metas.at(-1)
+        if (latest) byPerson.set(latest.participantId ?? key, { participantId: latest.participantId, name: latest.name, activity: latest.activity })
+      }
+      onPresence([...byPerson.values()])
+    })
+    channel.subscribe((status, error) => {
+      if (mine !== active || closed) return
+      if (status === 'SUBSCRIBED') {
+        failures = 0
+        // After a reconnect or a re-subscribe, reload in case broadcasts were missed meanwhile.
+        if (joinedBefore) onChange()
+        joined = joinedBefore = true; track()
+        return
+      }
+      joined = false
+      if (error) console.warn('Realtime channel', status, error.message)
+      retry()
+    })
+  }
+
   const track = () => void channel.track({ ...current, since: new Date().toISOString() })
-  channel.subscribe(status => {
-    if (status !== 'SUBSCRIBED') { joined = false; return }
-    // After a reconnect, reload in case broadcasts were missed while offline.
-    if (joinedBefore) onChange()
-    joined = joinedBefore = true; track()
-  })
+  open()
   return {
-    close: () => { clearTimeout(reloadTimer); void db.removeChannel(channel) },
+    close: () => { closed = true; active = null; clearTimeout(reloadTimer); clearTimeout(retryTimer); void db.removeChannel(channel) },
     setPresence: user => { current = user; if (joined) track() },
   }
 }

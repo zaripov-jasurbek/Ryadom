@@ -223,6 +223,13 @@ class AppStore {
     return { participantId: this.selectedPerson, name: this.selectedPerson ? this.personName(this.selectedPerson) : 'Гость', activity }
   }
 
+  // Someone on the channel who is not in the check yet has just joined: their own broadcast may still be on its way,
+  // or may have been missed, so the check reloads right away instead of waiting for it.
+  private onPresence(users: PresenceUser[]) {
+    this.onlineUsers = users
+    if (users.some(user => user.participantId && !this.participantIndex.has(user.participantId))) void this.refresh()
+  }
+
   private disconnect() { this.remote?.close(); this.remote = null; this.onlineUsers = [] }
 
   private async connect(bill: Bill) {
@@ -230,7 +237,7 @@ class AppStore {
       const userId = this.sessionUser = await ensureAnonymousSession()
       this.disconnect()
       if (this.bill?.id !== bill.id) return
-      this.remote = subscribeToRemoteCheck(bill.id, userId, () => void this.refresh(), users => this.onlineUsers = users, this.presence('Просматривает чек'))
+      this.remote = subscribeToRemoteCheck(bill.id, userId, () => void this.refresh(), users => this.onPresence(users), this.presence('Просматривает чек'))
       void this.refresh()
     } catch (error) { this.fail(error, 'Не удалось загрузить чек — проверьте интернет') }
   }
