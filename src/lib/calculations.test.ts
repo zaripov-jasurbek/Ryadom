@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { assignedSubtotal, calculateTotals, sharedAllInfo, formatUzs, itemShares, serviceFee, splitInteger, withSelection, type Bill, type BillItem } from './calculations.ts'
-const people = ['Jasur', 'Aziz', 'Bekzod', 'Sardor'].map((name, i) => ({ id: `${i}`, name, paid: 0, status: 'unpaid' as const }))
+const people = ['Jasur', 'Aziz', 'Bekzod', 'Sardor'].map((name, i) => ({ id: `${i}`, name, mark: 'none' as const, markedFor: 0 }))
 describe('bill calculations', () => {
   it('splits indivisible sums deterministically and conserves the full item price', () => assert.deepEqual(splitInteger(20_000, [1, 1, 1]), [6_667, 6_667, 6_666]))
   it('breaks ties between equal fractions by order, exactly like the server', () => {
@@ -54,7 +54,7 @@ describe('bill calculations', () => {
     assert.deepEqual(itemShares(item, people.slice(0, 2)), { '0': 5_000, '1': 5_001 })
   })
   it('handles many participants and items without losing a sum', () => {
-    const crowd = Array.from({ length: 40 }, (_, i) => ({ id: `p${i}`, name: `P${i}`, paid: 0, status: 'unpaid' as const }))
+    const crowd = Array.from({ length: 40 }, (_, i) => ({ id: `p${i}`, name: `P${i}`, mark: 'none' as const, markedFor: 0 }))
     const items: BillItem[] = Array.from({ length: 60 }, (_, i) => ({ id: `i${i}`, name: 'Dish', quantity: 3, unitPrice: 10_007 + i, unitSelections: { '0': crowd.slice(0, i % 40 + 1).map(p => p.id), '1': [crowd[i % 40].id], '2': crowd.map(p => p.id) } }))
     const bill: Bill = { id: 'big', dbId: 'db', title: 'Banquet', servicePercent: 12, participants: crowd, items, createdAt: '', ownerToken: '' }
     const food = items.reduce((n, item) => n + item.unitPrice * item.quantity, 0)
@@ -62,10 +62,10 @@ describe('bill calculations', () => {
   })
   it('shows an overpayment instead of hiding it when a total goes down', () => {
     const bill: Bill = { id: 'x', dbId: 'db', title: 'Dinner', servicePercent: 0, createdAt: '', ownerToken: '',
-      participants: [people[0], { ...people[1], paid: 5_000, status: 'proof_submitted' }],
+      participants: [people[0], { ...people[1], mark: 'marked' as const, markedFor: 5_000 }],
       items: [{ id: 'tea', name: 'Tea', quantity: 1, unitPrice: 6_000, unitSelections: { '0': ['0', '1'] } }] }
     const aziz = calculateTotals(bill)[1]
-    assert.deepEqual([aziz.due, aziz.paid, aziz.remaining, aziz.overpaid], [3_000, 3_000, 0, 2_000])
+    assert.deepEqual([aziz.due, aziz.remaining, aziz.overpaid], [3_000, 0, 2_000])
   })
   it('counts only what is on someone\'s total as assigned, not the parts kept for guests still on the way', () => {
     const item: BillItem = { id: 'bread', name: 'Bread', quantity: 2, unitPrice: 3_000, sharedAll: true, unitSelections: { '0': ['0'], '1': ['0'] }, unitAmounts: { '0': { '0': 750 }, '1': { '0': 750 } } }

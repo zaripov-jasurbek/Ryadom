@@ -37,7 +37,7 @@
   function close() { if (editing) app.editingItem = null; else app.addItemOpen = false }
 
   async function submit() {
-    if (!ready || app.busy) { table?.touchAll(); return }
+    if (!ready || app.isPending('items')) { table?.touchAll(); return }
     if (!changed) { close(); return }
     if (editing) { if (await app.updateItem(editing, row.name.trim(), row.quantity!, row.price!)) close(); return }
     const items = toItems(filled)
@@ -55,5 +55,5 @@
   <ItemTable bind:this={table} bind:rows {newRow} fixed={Boolean(editing)} />
   <div class="modal-total">{editing ? 'Сумма позиции' : 'Сумма'} <b>{formatUzs(total)}</b></div>
   {#each warnings as warning (warning)}<p class="modal-warning">{warning}</p>{/each}
-  <button class="primary-button wide" disabled={app.busy}>{#if editing}Сохранить <span aria-hidden="true">✓</span>{:else}{app.busy ? 'Добавляем…' : filled.length ? `Добавить ${plural(filled.length, 'позицию', 'позиции', 'позиций')}` : 'Добавить'} <span aria-hidden="true">＋</span>{/if}</button>
+  <button class="primary-button wide" disabled={app.isPending('items')}>{#if editing}Сохранить <span aria-hidden="true">✓</span>{:else}{app.isPending('items') ? 'Добавляем…' : filled.length ? `Добавить ${plural(filled.length, 'позицию', 'позиции', 'позиций')}` : 'Добавить'} <span aria-hidden="true">＋</span>{/if}</button>
 </Modal>

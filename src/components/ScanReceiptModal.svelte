@@ -248,7 +248,7 @@
   function reframe() { controller?.abort(); controller = null; error = ''; step = 'area' }
 
   async function submit() {
-    if (step !== 'review' || app.busy) return
+    if (step !== 'review' || app.isPending('items')) return
     if (!ready) { table?.touchAll(); return }
     const items = toItems(chosen)
     const added = await app.addItems(items)
@@ -370,12 +370,12 @@
       <p class="scan-diff" role="status">{chosenTotal < receiptTotal ? `Не хватает ${formatUzs(receiptTotal - chosenTotal)} до суммы чека` : `На ${formatUzs(chosenTotal - receiptTotal)} больше суммы чека`}: сверьте цены и количество с фото.</p>
     {/if}
     {#if serviceMismatch}
-      <div class="notice info scan-service"><span aria-hidden="true">%</span><div><b>В чеке обслуживание {receiptService}%</b><small>Сейчас в расчёте {app.bill?.servicePercent}%.</small></div><button type="button" class="chip" disabled={app.busy} onclick={applyService}>Поставить {receiptService}%</button></div>
+      <div class="notice info scan-service"><span aria-hidden="true">%</span><div><b>В чеке обслуживание {receiptService}%</b><small>Сейчас в расчёте {app.bill?.servicePercent}%.</small></div><button type="button" class="chip" disabled={app.isPending('check')} onclick={applyService}>Поставить {receiptService}%</button></div>
     {/if}
     {#if rawText}
       <details class="scan-raw"><summary>Распознанный текст</summary><pre>{rawText}</pre></details>
     {/if}
-    <button class="primary-button wide" disabled={app.busy}>{app.busy ? 'Добавляем…' : `Добавить ${plural(chosen.length, 'позицию', 'позиции', 'позиций')}`} <span aria-hidden="true">＋</span></button>
+    <button class="primary-button wide" disabled={app.isPending('items')}>{app.isPending('items') ? 'Добавляем…' : `Добавить ${plural(chosen.length, 'позицию', 'позиции', 'позиций')}`} <span aria-hidden="true">＋</span></button>
     <div class="scan-again">
       <button type="button" class="ghost-button" onclick={() => newPhoto(true)}><Icon name="camera" /> Ещё фото</button>
       <button type="button" class="ghost-button" onclick={reframe}>Изменить рамку</button>

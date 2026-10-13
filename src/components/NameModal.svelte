@@ -8,7 +8,7 @@
   let name = $state(app.savedName && current === app.savedName ? current : '')
 
   async function submit() {
-    if (app.busy) return
+    if (app.isPending('name')) return
     const value = name.trim()
     if (!value || value === current) { app.nameOpen = false; return }
     if (await app.rename(value)) app.nameOpen = false
@@ -21,5 +21,5 @@
   <!-- svelte-ignore a11y_autofocus -->
   <label class="field">Имя<input bind:value={name} placeholder={current} maxlength={limits.nameLength} autocomplete="given-name" enterkeyhint="done" autofocus /></label>
   <p class="field-note">Себя в чеке вы видите как «Я». Имя сохранится и для следующих чеков.</p>
-  <button class="primary-button wide" disabled={app.busy}>Сохранить <span aria-hidden="true">✓</span></button>
+  <button class="primary-button wide" disabled={app.isPending('name')}>Сохранить <span aria-hidden="true">✓</span></button>
 </Modal>

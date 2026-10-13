@@ -1,20 +1,21 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { billStanding, calculateTotals, personItems, type Bill, type BillItem, type PaymentStatus } from './calculations.ts'
+import { billStanding, calculateTotals, personItems, type Bill, type BillItem, type PaymentMark } from './calculations.ts'
 import { readOwnerToken, routeCheckId } from './routes.ts'
 import { errorMessage } from './errors.ts'
 import { detailLines, paymentLine, safeFileName } from './export.ts'
 import { paymentCopyValue, portionCount } from './format.ts'
 import { installHintFor } from './platform.ts'
+import { markOf } from './snapshot.ts'
 import { pickerHasCamera } from './photo.ts'
 
-const people = ['Jasur', 'Aziz', 'Bekzod'].map((name, i) => ({ id: `${i}`, name, paid: 0, status: 'unpaid' as const }))
+const people = ['Jasur', 'Aziz', 'Bekzod'].map((name, i) => ({ id: `${i}`, name, mark: 'none' as const, markedFor: 0 }))
 const emptyBill = (): Bill => ({ id: 'b', dbId: 'db', title: 'Ужин', servicePercent: 0, participants: people, items: [], createdAt: '', ownerToken: 't' })
 /** A check as loadRemoteCheck shapes it: who holds each serving, by serving index. */
 const withItems = (...items: BillItem[]): Bill => ({ ...emptyBill(), items })
 const item = (id: string, name: string, quantity: number, unitPrice: number, unitSelections: Record<string, string[]> = {}): BillItem => ({ id, name, quantity, unitPrice, unitSelections })
-const paying = (bill: Bill, personId: string, paid: number, status: PaymentStatus): Bill =>
-  ({ ...bill, participants: bill.participants.map(person => person.id === personId ? { ...person, paid, status } : person) })
+const paying = (bill: Bill, personId: string, markedFor: number, mark: PaymentMark): Bill =>
+  ({ ...bill, participants: bill.participants.map(person => person.id === personId ? { ...person, markedFor, mark } : person) })
 
 describe('routes', () => {
   it('treats the GitHub Pages base path as home, not as a check id', () => {
@@ -59,10 +60,10 @@ describe('check summaries', () => {
     assert.deepEqual(billStanding(bill, '0', true), { kind: 'owed', amount: 10_000 })
     assert.deepEqual(billStanding(bill, '1', false), { kind: 'owes', amount: 10_000 })
     assert.deepEqual(billStanding(bill, '2', false), { kind: 'nothing-marked' })
-    bill = paying(bill, '1', 10_000, 'proof_submitted')
+    bill = paying(bill, '1', 10_000, 'marked')
     assert.deepEqual(billStanding(bill, '0', true), { kind: 'pending' })
     assert.deepEqual(billStanding(bill, '1', false), { kind: 'pending' })
-    bill = paying(bill, '1', 10_000, 'paid')
+    bill = paying(bill, '1', 10_000, 'confirmed')
     assert.deepEqual(billStanding(bill, '0', true), { kind: 'settled' })
     assert.deepEqual(billStanding(bill, '1', false), { kind: 'settled' })
   })
@@ -145,8 +146,11 @@ describe('export', () => {
     const [jasur, aziz] = calculateTotals(bill)
     assert.equal(paymentLine(jasur, '0'), 'платил по счёту')
     assert.equal(paymentLine(aziz, '0'), 'не оплачено')
-    assert.equal(paymentLine({ ...aziz, status: 'proof_submitted' }, '0'), 'отметил оплату ✓')
-    assert.equal(paymentLine({ ...aziz, status: 'paid' }, '0'), 'оплачено ✓✓')
+    assert.equal(paymentLine({ ...aziz, mark: 'marked' }, '0'), 'отметил оплату ✓')
+    assert.equal(paymentLine({ ...aziz, mark: 'confirmed' }, '0'), 'оплачено ✓✓')
+  })
+  it('reads the server\'s payment statuses as checkmarks', () => {
+    assert.deepEqual(['unpaid', 'partially_paid', 'proof_submitted', 'paid', undefined].map(markOf), ['none', 'none', 'marked', 'confirmed', 'none'])
   })
   it('lists what each amount is made of under the name', () => {
     const bill = { ...withItems(item('tea', 'Чай', 2, 10_000, { '0': ['0'], '1': ['0', '1'] })), servicePercent: 10 }

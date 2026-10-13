@@ -146,7 +146,7 @@
       {/if}
       <!-- Only the creator splits among everyone; then nobody can mark the item until they switch it off. -->
       {#if app.isOwner && (sharedAll || parts > 1)}
-        <button class="mine-toggle everyone" class:active={sharedAll} aria-pressed={sharedAll} title="На всех" disabled={app.busy} {@attach tactile} onclick={toggleEveryone}>{sharedAll ? '✓ Все' : 'Все'}</button>
+        <button class="mine-toggle everyone" class:active={sharedAll} aria-pressed={sharedAll} title="На всех" disabled={app.isPending(`item:${item.id}`)} {@attach tactile} onclick={toggleEveryone}>{sharedAll ? '✓ Все' : 'Все'}</button>
       {/if}
     </div>
   </div>

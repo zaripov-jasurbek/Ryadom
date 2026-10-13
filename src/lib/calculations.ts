@@ -1,6 +1,11 @@
-export type PaymentStatus = 'unpaid' | 'partially_paid' | 'proof_submitted' | 'paid'
+/** Payments are checkmarks: none → marked (the guest's ✓ "I paid") → confirmed (the creator's ✓✓). */
+export type PaymentMark = 'none' | 'marked' | 'confirmed'
 export type ShareMode = 'equal' | 'by_quantity' | 'custom'
-export type Participant = { id: string; name: string; paid: number; status: PaymentStatus }
+export type Participant = {
+  id: string; name: string; mark: PaymentMark
+  /** The share the server recorded when the mark was put; above the current total it is an overpayment to give back. */
+  markedFor: number
+}
 export type BillItem = {
   id: string; name: string; quantity: number; unitPrice: number
   /** Unit index → ids of the participants sharing that unit. */
@@ -24,8 +29,8 @@ export type Bill = {
 }
 export const ownerIdOf = (bill: Pick<Bill, 'ownerId' | 'participants'>) => bill.ownerId ?? bill.participants[0]?.id
 
-/** overpaid: paid more than the current total, e.g. before a late guest took over part of a shared item. */
-export type ParticipantTotal = { id: string; name: string; subtotal: number; service: number; due: number; paid: number; remaining: number; overpaid: number; status: PaymentStatus }
+/** overpaid: marked for more than the current total, e.g. before a late guest took over part of a shared item. */
+export type ParticipantTotal = { id: string; name: string; subtotal: number; service: number; due: number; remaining: number; overpaid: number; mark: PaymentMark }
 
 /**
  * Splits whole UZS in proportion to whole-number weights; the largest fractions get the leftover sums.
@@ -78,9 +83,9 @@ export function calculateTotals(bill: Pick<Bill, 'participants' | 'items' | 'ser
   const services = splitInteger(serviceTotal, subtotals)
   return bill.participants.map((p, i) => {
     const due = subtotals[i] + services[i]
-    const given = Math.max(0, p.paid)
-    const paid = Math.min(due, given)
-    return { id: p.id, name: p.name, subtotal: subtotals[i], service: services[i], due, paid, remaining: due - paid, overpaid: given - paid, status: p.status }
+    // A share that grows past the marked one takes the mark off on the server, so a mark always covers the total.
+    const settled = p.mark !== 'none'
+    return { id: p.id, name: p.name, subtotal: subtotals[i], service: services[i], due, remaining: settled ? 0 : due, overpaid: settled ? Math.max(0, p.markedFor - due) : 0, mark: p.mark }
   })
 }
 
@@ -153,11 +158,11 @@ export function billStanding(bill: Bill, me: string | null, owner: boolean): Bil
     const others = totals.filter(person => person.id !== ownerId)
     const owed = others.reduce((sum, person) => sum + person.remaining, 0)
     if (owed > 0) return { kind: 'owed', amount: owed }
-    return others.some(person => person.status === 'proof_submitted') ? { kind: 'pending' } : { kind: 'settled' }
+    return others.some(person => person.mark === 'marked') ? { kind: 'pending' } : { kind: 'settled' }
   }
   const mine = totals.find(person => person.id === me)
   if (!mine) return null
   if (!mine.due) return { kind: 'nothing-marked' }
-  if (mine.status === 'paid') return { kind: 'settled' }
+  if (mine.mark === 'confirmed') return { kind: 'settled' }
   return mine.remaining > 0 ? { kind: 'owes', amount: mine.remaining } : { kind: 'pending' }
 }
