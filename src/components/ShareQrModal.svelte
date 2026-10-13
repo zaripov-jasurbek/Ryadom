@@ -1,12 +1,20 @@
 <script lang="ts">
   import { renderSVG } from 'uqr'
   import { prefersShareSheet } from '../lib/share'
+  import { onMount } from 'svelte'
   import { app } from '../lib/store.svelte'
   import Modal from './Modal.svelte'
 
   const link = app.publicLink()
   // Black on white in both themes: phone cameras read dark modules on a light background most reliably.
   const svg = renderSVG(link, { ecc: 'M', border: 2, blackColor: '#1d241f', whiteColor: '#ffffff' })
+
+  // While the code is on screen guests are joining right now, so the check also reloads on its own every few seconds:
+  // a guest shows up even if their broadcast is lost.
+  onMount(() => {
+    const timer = setInterval(() => { if (document.visibilityState === 'visible') void app.refresh() }, 4000)
+    return () => clearInterval(timer)
+  })
 
   function copy() {
     void app.copy(link, 'Ссылка скопирована')
