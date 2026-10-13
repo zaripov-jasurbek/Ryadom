@@ -319,19 +319,42 @@ describe('limits and expiry', () => {
     await create()
   })
 
+  it('lets one address create at most 100 checks a day, whatever the accounts', async () => {
+    const create = async (owner: string) => db.rpc(owner, 'create_check', { p_title: 'Ужин', p_service_percent: 0, p_owner_name: 'Jasur', p_owner_token: token() })
+    try {
+      db.headers = { 'x-forwarded-for': '203.0.113.7, 10.0.0.1' }
+      for (let account = 0; account < 5; account++) {
+        const owner = await db.newUser()
+        for (let i = 0; i < 20; i++) await create(owner)
+      }
+      await assert.rejects(create(await db.newUser()), /Check limit reached/)
+      db.headers = { 'x-forwarded-for': '198.51.100.2' }
+      await create(await db.newUser())
+      // The address itself is not kept, only a hash of it.
+      assert.equal((await db.query("select 1 from public.checks where encode(creator_ip_hash, 'escape') like '%203.0.113.7%'")).rows.length, 0)
+    } finally { db.headers = null }
+  })
+
+  it('runs the cleanup on a schedule', async () => {
+    const jobs = (await db.query<{ command: string }>("select command from cron.job where jobname = 'ryadom-purge-expired'")).rows
+    assert.deepEqual(jobs.map(job => job.command), ['select public.purge_expired()'])
+  })
+
   it('gives clients no direct access to the tables', async () => {
     const s = await setup(db)
     await assert.rejects(db.as(s.guest, () => db.query('select owner_token_hash from public.checks where id = $1', [s.check.id])), /permission denied/)
     await assert.rejects(db.as(s.guest, () => db.query('select session_token_hash from public.participants where check_id = $1', [s.check.id])), /permission denied/)
   })
 
-  it('hides a check after 3 days and deletes it when the next check is created', async () => {
+  it('hides a check after 3 days and deletes it on the scheduled cleanup, not while someone creates a check', async () => {
     const s = await setup(db)
     await db.query("update public.checks set created_at = now() - interval '3 days 1 minute' where id = $1", [s.check.id])
     await assert.rejects(db.rpc(s.guest, 'get_check', { p_public_id: s.check.public_id }), (error: { code?: string }) => error.code === 'P0002')
     await assert.rejects(join(await db.newUser(), s.check.public_id), /Check not found/)
     await assert.rejects(db.rpc(await db.newUser(), 'claim_check_owner', { p_public_id: s.check.public_id, p_owner_token: s.ownerToken }), /Invalid owner link/)
     const fresh = await setup(db)
+    assert.equal((await db.query('select id from public.checks where id = $1', [s.check.id])).rows.length, 1)
+    await db.runCron()
     assert.equal((await db.query('select id from public.checks where id = $1', [s.check.id])).rows.length, 0)
     assert.equal((await db.query('select id from public.checks where id = $1', [fresh.check.id])).rows.length, 1)
   })
@@ -363,7 +386,7 @@ describe('limits and expiry', () => {
   it('leaves nothing of an expired check', async () => {
     const s = await filled()
     await db.query("update public.checks set created_at = now() - interval '4 days' where id = $1", [s.check.id])
-    await setup(db)
+    await db.runCron()
     assert.equal(Number(await leftovers(s.check.id)), 0)
   })
 
@@ -376,7 +399,7 @@ describe('limits and expiry', () => {
     await db.rpc(renewed, 'touch_account', {})
     // Created long ago and never touched: its own new check renews it before the cleanup runs.
     const check = await db.rpc<Created>(active, 'create_check', { p_title: 'Обед', p_service_percent: 0, p_owner_name: 'Jasur', p_owner_token: token() })
-    await setup(db)
+    await db.runCron()
     const alive = async (id: string) => (await db.query('select id from auth.users where id = $1', [id])).rows.length === 1
     assert.equal(await alive(idle), false)
     assert.equal(await alive(renewed), true)
