@@ -1,0 +1,35 @@
+name: CI
+# Проверки на каждый PR и пуш: типы, тесты (в том числе SQL-тесты миграций на PGlite) и сборка.
+# Тест совместимости сверяет миграции с RPC, которые вызывает опубликованный сайт (последний тег v*).
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+  workflow_call:
+permissions:
+  contents: read
+concurrency:
+  # Вызванный из другого workflow запуск получает имя вызывающего, так что он не отменяет обычный CI и наоборот.
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Типы опубликованной версии
+        run: |
+          git fetch --quiet --depth=1 origin 'refs/tags/v*:refs/tags/v*'
+          tag=$(git tag --list 'v*' --sort=-v:refname | head -1)
+          if [ -z "$tag" ]; then echo "Релизов ещё нет, проверка совместимости пропущена"; exit 0; fi
+          git show "$tag:src/lib/database.types.ts" > "$RUNNER_TEMP/released.types.ts"
+          echo "RELEASED_TYPES=$RUNNER_TEMP/released.types.ts" >> "$GITHUB_ENV"
+          echo "Сверяем миграции с $tag"
+      - run: npm run check
+      - run: npm test
+      - run: npm run build

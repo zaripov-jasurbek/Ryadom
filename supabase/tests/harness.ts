@@ -27,6 +27,12 @@ const platformStubs = `
   grant usage on schema realtime to authenticated;
   grant select, insert on realtime.messages to authenticated;
   create publication supabase_realtime;
+  create schema cron;
+  create table cron.job (jobid bigint generated always as identity primary key, jobname text unique, schedule text not null, command text not null);
+  create function cron.schedule(job_name text, schedule text, command text) returns bigint language sql as $$
+    insert into cron.job(jobname, schedule, command) values (job_name, schedule, command)
+    on conflict (jobname) do update set schedule = excluded.schedule, command = excluded.command returning jobid
+  $$;
 `
 
 export type Db = PGlite & {
@@ -34,6 +40,10 @@ export type Db = PGlite & {
   as: <T>(userId: string, fn: () => Promise<T>) => Promise<T>
   rpc: <T = unknown>(userId: string, fn: string, args: Record<string, unknown>) => Promise<T>
   newUser: () => Promise<string>
+  /** The request headers PostgREST would pass, e.g. { 'x-forwarded-for': '1.2.3.4' }; null for none. */
+  headers: Record<string, string> | null
+  /** Runs every pg_cron job once, as the scheduler would. */
+  runCron: () => Promise<void>
   /** Applies the migrations that createDb({ before }) held back. */
   migrateRest: () => Promise<void>
 }
@@ -54,9 +64,14 @@ export async function createDb(options: { before?: string } = {}): Promise<Db> {
   await apply(files.filter(file => !held.includes(file)))
   const db = pg as unknown as Db
   db.migrateRest = () => apply(held.splice(0))
+  db.headers = null
   db.as = async (userId, fn) => {
+    await pg.query(`select set_config('request.headers', $1, false)`, [db.headers ? JSON.stringify(db.headers) : ''])
     await pg.exec(`set role authenticated; select set_config('request.jwt.claim.sub', '${userId}', false)`)
-    try { return await fn() } finally { await pg.exec(`reset role; select set_config('request.jwt.claim.sub', '', false)`) }
+    try { return await fn() } finally { await pg.exec(`reset role; select set_config('request.jwt.claim.sub', '', false); select set_config('request.headers', '', false)`) }
+  }
+  db.runCron = async () => {
+    for (const { command } of (await pg.query<{ command: string }>('select command from cron.job order by jobid')).rows) await pg.exec(command)
   }
   db.rpc = (userId, fn, args) => db.as(userId, async () => {
     const names = Object.keys(args)

@@ -17,7 +17,7 @@
   const ready = $derived(Boolean(title.trim()) && feeValid)
 
   async function submit() {
-    if (!ready || app.busy) return
+    if (!ready || app.isPending('check')) return
     const percent = Math.round(fee! * 100) / 100
     const details = paymentDetails.trim()
     const guestsChanged = guests !== Math.max(bill.expectedGuests ?? present, present)
@@ -44,11 +44,11 @@
   <div class="chip-row" role="group" aria-label="Быстрый выбор процента">
     {#each [0, 10, 12, 15] as preset (preset)}<button type="button" class="chip" class:active={fee === preset} onclick={() => fee = preset}>{preset ? `${preset}%` : 'Нет'}</button>{/each}
   </div>
-  {#if feeValid && fee! > bill.servicePercent && bill.participants.some(person => person.status === 'paid' || person.status === 'proof_submitted')}
+  {#if feeValid && fee! > bill.servicePercent && bill.participants.some(person => person.mark !== 'none')}
     <p class="modal-warning">Суммы вырастут — часть оплат придётся подтвердить заново.</p>
   {/if}
   <label class="field"><span>Карта или телефон для перевода <span class="label-hint">по желанию</span></span><input bind:value={paymentDetails} placeholder="8600 1234 5678 9012" maxlength={limits.paymentDetailsLength} autocomplete="off" /></label>
   <p class="field-note">Только номер: срок действия и коды из SMS не нужны.</p>
-  <button class="primary-button wide" disabled={app.busy || !ready}>Сохранить <span aria-hidden="true">✓</span></button>
+  <button class="primary-button wide" disabled={app.isPending('check') || !ready}>Сохранить <span aria-hidden="true">✓</span></button>
   <button type="button" class="ghost-button danger" onclick={removeBill}>Удалить чек</button>
 </Modal>

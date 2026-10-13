@@ -28,7 +28,7 @@
 
 
   async function submit() {
-    if (app.busy) return
+    if (app.isPending('create')) return
     failure = ''
     if (problem) {
       tried = true
@@ -62,6 +62,6 @@
     {/if}
 
     {#if (tried && problem) || failure}<p class="form-error" role="alert">{failure || problem}</p>{/if}
-    <button class="primary-button wide" disabled={app.busy}>{app.busy ? 'Создаём…' : filled.length ? `Готово · ${plural(filled.length, 'позиция', 'позиции', 'позиций')}` : 'Готово'} <span aria-hidden="true">↗</span></button>
+    <button class="primary-button wide" disabled={app.isPending('create')}>{app.isPending('create') ? 'Создаём…' : filled.length ? `Готово · ${plural(filled.length, 'позиция', 'позиции', 'позиций')}` : 'Готово'} <span aria-hidden="true">↗</span></button>
   </form>
 </main>

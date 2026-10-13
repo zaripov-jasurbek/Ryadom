@@ -14,7 +14,7 @@
       <div class="empty-illustration" aria-hidden="true">🧾</div>
       <h1>Не открылось</h1>
       <p class="lead">{error}</p>
-      <button class="primary-button wide" disabled={app.busy} onclick={join}>Попробовать ещё раз</button>
+      <button class="primary-button wide" disabled={app.isPending('join')} onclick={join}>Попробовать ещё раз</button>
       <button class="ghost-button" onclick={() => app.goHome()}>На главную</button>
     </section>
   {:else}

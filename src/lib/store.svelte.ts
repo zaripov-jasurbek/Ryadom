@@ -4,6 +4,7 @@ import { addRemoteItem, addRemoteItems, updateRemoteCheck, updateRemoteItem, sha
 import { checkPath, homePath, readOwnerToken, routeCheckId } from './routes'
 import { preloadSupabase } from './supabase'
 import { expiresAt } from './limits'
+import { markOf } from './snapshot'
 import { defaultTitle, initial, randomName } from './format'
 import { shareOr } from './share'
 import { pickerHasCamera, pickPhoto } from './photo'
@@ -19,9 +20,17 @@ const personKey = (billId: string) => `billsplit:person:${billId}`
 const guestKey = (billId: string) => `billsplit:guest:${billId}`
 const nameKey = 'billsplit:name'
 
+/** A participant as checks saved before payments became checkmarks keep them: the server's status and amount. */
+type SavedParticipant = Participant | (Omit<Participant, 'mark' | 'markedFor'> & { status?: string; paid?: number })
+const savedParticipant = (person: SavedParticipant): Participant =>
+  'mark' in person ? person : { id: person.id, name: person.name, mark: markOf(person.status), markedFor: Number(person.paid ?? 0) }
+
 function parseBills(raw: string | null): Bill[] | null {
   if (raw === null) return null
-  try { return JSON.parse(raw) as Bill[] } catch { return null }
+  try {
+    const bills = JSON.parse(raw) as (Omit<Bill, 'participants'> & { participants: SavedParticipant[] })[]
+    return bills.map(bill => ({ ...bill, participants: bill.participants.map(savedParticipant) }))
+  } catch { return null }
 }
 
 function readStorage(key: string) { try { return localStorage.getItem(key) } catch { return null } }
@@ -43,7 +52,12 @@ class AppStore {
   selectedPerson = $state<string | null>(null)
   isOwner = $state(false)
   onlineUsers = $state<PresenceUser[]>([])
-  busy = $state(false)
+  /**
+   * Requests on their way to the server, by what they change: only the buttons for the same thing wait,
+   * so a slow item upload does not block the payment ticks. Keys: 'create', 'join', 'items', 'check', 'name',
+   * 'delete', `item:<id>`, `person:<id>` and `pay:<participant id>`.
+   */
+  pendingActions = $state<Record<string, true>>({})
   /** False while the device has no network: taps would fail, so the page says so up front. */
   online = $state(typeof navigator === 'undefined' || navigator.onLine)
   toast = $state('')
@@ -77,7 +91,7 @@ class AppStore {
   unassignedTotal = $derived(this.bill ? totalFood(this.bill) - assignedSubtotal(this.bill) : 0)
   /** The creator paid the restaurant, so their own share counts as settled. */
   ownerId = $derived(this.bill ? ownerIdOf(this.bill) : undefined)
-  allConfirmed = $derived(Boolean(this.bill && this.unassignedTotal <= 0 && this.bill.items.length && this.totals.every(person => person.id === this.ownerId || person.status === 'paid' || person.due === 0)))
+  allConfirmed = $derived(Boolean(this.bill && this.unassignedTotal <= 0 && this.bill.items.length && this.totals.every(person => person.id === this.ownerId || person.mark === 'confirmed' || person.due === 0)))
   currentTotal = $derived(this.totals.find(person => person.id === this.selectedPerson))
   participantIndex = $derived(new Map(this.bill?.participants.map((person, index) => [person.id, index]) ?? []))
 
@@ -89,6 +103,16 @@ class AppStore {
   /** The anonymous account the open check was connected with; a different one means the session was lost. */
   private sessionUser = ''
   private toastTimer: ReturnType<typeof setTimeout> | undefined
+
+  isPending = (key: string) => Boolean(this.pendingActions[key])
+
+  /** Runs one request under its key; a second tap on the same thing while it runs is ignored. */
+  private async track<T>(key: string, run: () => Promise<T>): Promise<T | undefined> {
+    if (this.pendingActions[key]) return undefined
+    this.pendingActions = { ...this.pendingActions, [key]: true }
+    try { return await run() }
+    finally { const { [key]: _, ...rest } = this.pendingActions; this.pendingActions = rest }
+  }
 
   personIndex = (id: string) => this.participantIndex.get(id) ?? 0
   /** Avatar colour: one of ten, in the order people joined, so the first ten at a table never share one. */
@@ -301,11 +325,11 @@ class AppStore {
     // A name typed in an earlier check, or letters nobody has to make up; the title is the meal and the date.
     const ownerName = this.savedName || randomName(), title = defaultTitle()
     let bill: Bill
-    this.busy = true
     try {
-      const created = await createRemoteCheck(title, servicePercent, ownerName, ownerToken, '', null)
-      bill = { id: created.public_id, dbId: created.id, title, servicePercent, ownerId: created.participant_id, participants: [{ id: created.participant_id, name: ownerName, paid: 0, status: 'unpaid' }], items: [], createdAt: new Date().toISOString(), ownerToken }
-    } catch (error) { console.error(error); return errorMessage(error, 'Не удалось создать чек') } finally { this.busy = false }
+      const created = await this.track('create', () => createRemoteCheck(title, servicePercent, ownerName, ownerToken, '', null))
+      if (!created) return ''
+      bill = { id: created.public_id, dbId: created.id, title, servicePercent, ownerId: created.participant_id, participants: [{ id: created.participant_id, name: ownerName, mark: 'none', markedFor: 0 }], items: [], createdAt: new Date().toISOString(), ownerToken }
+    } catch (error) { console.error(error); return errorMessage(error, 'Не удалось создать чек') }
     this.bill = bill; this.isOwner = true; this.token = ownerToken; this.mode = 'check'
     this.selectedPerson = bill.participants[0].id; writeStorage(personKey(bill.id), this.selectedPerson)
     history.pushState({}, '', checkPath(bill.id))
@@ -351,7 +375,8 @@ class AppStore {
   async joinSharedCheck() {
     if (!this.joinPublicId) return ''
     const name = this.savedName
-    this.busy = true
+    if (this.isPending('join')) return ''
+    this.pendingActions = { ...this.pendingActions, join: true }
     try {
       let sessionToken: string = crypto.randomUUID()
       if (this.token) await claimRemoteCheckOwner(this.joinPublicId, this.token)
@@ -365,27 +390,27 @@ class AppStore {
     } catch (error) {
       console.error(error)
       return errorMessage(error, 'Не удалось открыть чек')
-    } finally { this.busy = false }
+    } finally { const { join: _, ...rest } = this.pendingActions; this.pendingActions = rest }
   }
 
   // ---- bill changes ----
 
   /** Runs a change on the server, then reloads the check. */
-  private async mutate(fallback: string, remote: (dbId: string) => Promise<unknown>, success?: string) {
+  private async mutate(key: string, fallback: string, remote: (dbId: string) => Promise<unknown>, success?: string) {
     const bill = this.bill
-    if (!bill) return false
+    if (!bill || this.isPending(key)) return false
     try {
-      this.busy = true
-      await remote(bill.dbId)
-      await this.refresh()
+      await this.track(key, async () => {
+        await remote(bill.dbId)
+        await this.refresh()
+      })
       if (success) this.notify(success)
       return true
     } catch (error) { this.fail(error, fallback); return false }
-    finally { this.busy = false }
   }
 
   addItem(name: string, quantity: number, unitPrice: number) {
-    return this.mutate('Не удалось добавить позицию', dbId => addRemoteItem(dbId, name, quantity, unitPrice))
+    return this.mutate('items', 'Не удалось добавить позицию', dbId => addRemoteItem(dbId, name, quantity, unitPrice))
   }
 
   /**
@@ -394,8 +419,8 @@ class AppStore {
    */
   async addItems(items: { name: string; quantity: number; unitPrice: number }[]) {
     const bill = this.bill
-    if (!bill || !items.length) return 0
-    this.busy = true
+    if (!bill || !items.length || this.isPending('items')) return 0
+    this.pendingActions = { ...this.pendingActions, items: true }
     let added = 0
     try {
       try {
@@ -407,33 +432,33 @@ class AppStore {
         for (const entry of items) { await addRemoteItem(bill.dbId, entry.name, entry.quantity, entry.unitPrice); added++ }
       }
     } catch (error) { this.fail(error, added ? `Добавлено ${added} из ${items.length} позиций` : 'Не удалось добавить позиции') }
-    finally { await this.refresh(); this.busy = false }
+    finally { await this.refresh(); const { items: _, ...rest } = this.pendingActions; this.pendingActions = rest }
     return added
   }
 
   updateItem(item: BillItem, name: string, quantity: number, unitPrice: number) {
-    return this.mutate('Не удалось сохранить позицию', dbId => updateRemoteItem(dbId, item.id, name, quantity, unitPrice), 'Позиция обновлена')
+    return this.mutate(`item:${item.id}`, 'Не удалось сохранить позицию', dbId => updateRemoteItem(dbId, item.id, name, quantity, unitPrice), 'Позиция обновлена')
   }
 
   /** expectedGuests: undefined keeps the number, null clears it. */
   updateCheck(title: string, servicePercent: number, paymentDetails: string, expectedGuests?: number | null) {
-    return this.mutate('Не удалось сохранить чек', dbId => updateRemoteCheck(dbId, title, servicePercent, paymentDetails, expectedGuests), 'Чек обновлён')
+    return this.mutate('check', 'Не удалось сохранить чек', dbId => updateRemoteCheck(dbId, title, servicePercent, paymentDetails, expectedGuests), 'Чек обновлён')
   }
 
   shareItemEqually(item: BillItem) {
-    return this.mutate('Не удалось разделить позицию', dbId => shareRemoteItemEqually(dbId, item.id), `«${item.name}» делится на всех`)
+    return this.mutate(`item:${item.id}`, 'Не удалось разделить позицию', dbId => shareRemoteItemEqually(dbId, item.id), `«${item.name}» делится на всех`)
   }
 
   unshareItem(item: BillItem) {
-    return this.mutate('Не удалось изменить позицию', dbId => unshareRemoteItem(dbId, item.id), `«${item.name}» больше не на всех`)
+    return this.mutate(`item:${item.id}`, 'Не удалось изменить позицию', dbId => unshareRemoteItem(dbId, item.id), `«${item.name}» больше не на всех`)
   }
 
   unconfirm(personId: string) {
-    return this.mutate('Не удалось отменить подтверждение', dbId => unconfirmRemotePayment(dbId, personId), 'Подтверждение отменено')
+    return this.mutate(`pay:${personId}`, 'Не удалось отменить подтверждение', dbId => unconfirmRemotePayment(dbId, personId), 'Подтверждение отменено')
   }
 
   removeItem(item: BillItem) {
-    return this.mutate('Не удалось удалить позицию', dbId => deleteRemoteItem(dbId, item.id))
+    return this.mutate(`item:${item.id}`, 'Не удалось удалить позицию', dbId => deleteRemoteItem(dbId, item.id))
   }
 
   async toggleUnit(item: BillItem, unit: number) {
@@ -465,30 +490,31 @@ class AppStore {
 
   /** Your own ✓ "I paid"; the creator then puts ✓✓. */
   markPaid(paid: boolean) {
-    return this.mutate('Не удалось отметить оплату', dbId => markRemotePaid(dbId, paid), paid ? 'Отмечено: оплатил' : 'Отметка снята')
+    return this.mutate(`pay:${this.selectedPerson}`, 'Не удалось отметить оплату', dbId => markRemotePaid(dbId, paid), paid ? 'Отмечено: оплатил' : 'Отметка снята')
   }
 
   /** Your own name in the check; it is kept for the next checks too. */
   async rename(name: string) {
-    if (!await this.mutate('Не удалось сменить имя', dbId => renameRemoteParticipant(dbId, name))) return false
+    if (!await this.mutate('name', 'Не удалось сменить имя', dbId => renameRemoteParticipant(dbId, name))) return false
     this.rememberName(name)
     this.remote?.setPresence(this.presence('Просматривает чек'))
     return true
   }
 
   approve(personId: string) {
-    return this.mutate('Не удалось подтвердить оплату', dbId => confirmRemotePayment(dbId, personId), 'Оплата подтверждена')
+    return this.mutate(`pay:${personId}`, 'Не удалось подтвердить оплату', dbId => confirmRemotePayment(dbId, personId), 'Оплата подтверждена')
   }
 
   async removeParticipant(person: Participant) {
-    const removed = await this.mutate('Не удалось удалить участника', dbId => removeRemoteParticipant(dbId, person.id))
+    const removed = await this.mutate(`person:${person.id}`, 'Не удалось удалить участника', dbId => removeRemoteParticipant(dbId, person.id))
     if (removed && this.selectedPerson === person.id && this.bill) { this.selectedPerson = null; writeStorage(personKey(this.bill.id), null) }
   }
 
   async removeBill() {
     const bill = this.bill
     if (!bill) return
-    try { await deleteRemoteCheck(bill.dbId) } catch (error) { this.fail(error, 'Не удалось удалить чек'); return }
+    try { if (!await this.track('delete', async () => { await deleteRemoteCheck(bill.dbId); return true })) return }
+    catch (error) { this.fail(error, 'Не удалось удалить чек'); return }
     this.forget('Чек удалён')
   }
 

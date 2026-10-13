@@ -8,7 +8,7 @@
   let details = $state(bill.paymentDetails ?? '')
 
   async function submit() {
-    if (app.busy) return
+    if (app.isPending('check')) return
     const value = details.trim()
     if (value === (bill.paymentDetails ?? '')) { app.payDetailsOpen = false; return }
     if (await app.updateCheck(bill.title, bill.servicePercent, value)) app.payDetailsOpen = false
@@ -21,5 +21,5 @@
   <!-- svelte-ignore a11y_autofocus -->
   <label class="field">Карта или телефон<input bind:value={details} placeholder="8600 1234 5678 9012" maxlength={limits.paymentDetailsLength} autocomplete="off" inputmode="text" autofocus /></label>
   <p class="field-note">Только номер: срок действия и коды из SMS не нужны.</p>
-  <button class="primary-button wide" disabled={app.busy}>Сохранить <span aria-hidden="true">✓</span></button>
+  <button class="primary-button wide" disabled={app.isPending('check')}>Сохранить <span aria-hidden="true">✓</span></button>
 </Modal>
