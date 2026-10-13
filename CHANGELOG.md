@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.4.0](https://github.com/zaripov-jasurbek/Ryadom/compare/v2.3.2...v2.4.0) (2026-10-13)
+
+
+### Новое
+
+* **scan:** подробно показываем, что делает сканер; вибрация на Android ([#31](https://github.com/zaripov-jasurbek/Ryadom/issues/31)) ([093e06f](https://github.com/zaripov-jasurbek/Ryadom/commit/093e06fbe1545a15931e20bd82e0c7aed9d605fa))
+
+
+### Исправления
+
+* **realtime:** гость появляется в чеке сразу, канал переподписывается после сбоя ([#32](https://github.com/zaripov-jasurbek/Ryadom/issues/32)) ([7bb4ab9](https://github.com/zaripov-jasurbek/Ryadom/commit/7bb4ab9b24a1cf9d3af14495451c3dcf7d2b3222))
+
 ## [2.3.2](https://github.com/zaripov-jasurbek/Ryadom/compare/v2.3.1...v2.3.2) (2026-10-12)
 
 
