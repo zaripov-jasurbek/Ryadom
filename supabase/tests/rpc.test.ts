@@ -451,7 +451,7 @@ describe('check snapshot and broadcasts', () => {
     const s = await setup(db)
     const stranger = await db.newUser()
     const preview = await db.rpc<Record<string, unknown>>(stranger, 'check_preview', { p_public_id: s.check.public_id })
-    assert.deepEqual(preview, { title: 'Ужин', service_percent: 10, participants: ['Jasur', 'Aziz'], items: 1, food_total: 40_000 })
+    assert.deepEqual(preview, { title: 'Ужин', service_percent: 10, expected_guests: null, participants: ['Jasur', 'Aziz'], items: 1, food_total: 40_000 })
     assert.equal(await db.rpc(stranger, 'check_preview', { p_public_id: 'missing' }), null)
     await db.query("update public.checks set created_at = now() - interval '3 days 1 minute' where id = $1", [s.check.id])
     assert.equal(await db.rpc(stranger, 'check_preview', { p_public_id: s.check.public_id }), null)
@@ -510,5 +510,67 @@ describe('guest names', () => {
     assert.equal(new Set(names.map(name => name.toUpperCase())).size, 9)
     assert.equal(new Set(names.map(name => name[0].toUpperCase())).size, 9)
     for (const name of names.filter(name => name !== 'Jasur')) assert.match(name, /^[A-Z]{3}$/)
+  })
+})
+
+describe('named joining and the guest limit', () => {
+  let db: Db
+  before(async () => { db = await createDb() })
+  const join = (publicId: string, name: string, unique = true, sessionToken = token()) => db.newUser().then(user =>
+    db.rpc<Created>(user, 'join_check', { p_public_id: publicId, p_name: name, p_session_token: sessionToken, p_unique_name: unique }))
+  const create = async (expected: number | null = null) => {
+    const owner = await db.newUser()
+    const check = await db.rpc<Created>(owner, 'create_check', { p_title: 'Ужин', p_service_percent: 0, p_owner_name: 'Jasur', p_owner_token: token(), p_expected_guests: expected })
+    const names = async () => (await db.query<{ name: string }>('select name from public.participants where check_id = $1 order by sort_order', [check.id])).rows.map(row => row.name)
+    return { owner, check, names }
+  }
+
+  it('refuses a typed name someone at the table has, whatever the case and spaces', async () => {
+    const t = await create()
+    await join(t.check.public_id, '  Азиз   Каримов ')
+    await assert.rejects(join(t.check.public_id, 'азиз каримов'), /Name taken/)
+    await assert.rejects(join(t.check.public_id, 'JASUR'), /Name taken/)
+    await assert.rejects(join(t.check.public_id, 'A'), /Invalid participant name/)
+    await assert.rejects(join(t.check.public_id, '   '), /Invalid participant name/)
+    assert.deepEqual(await t.names(), ['Jasur', 'Азиз Каримов'])
+  })
+
+  it('lets the same browser back in with its token even though its name is taken by itself', async () => {
+    const t = await create()
+    const sessionToken = token()
+    const first = await join(t.check.public_id, 'Bek', true, sessionToken)
+    const again = await join(t.check.public_id, 'Bek', true, sessionToken)
+    assert.equal(again.participant_id, first.participant_id)
+  })
+
+  it('keeps the old behaviour for the published site: no name check, letters for an empty name', async () => {
+    const t = await create()
+    await join(t.check.public_id, 'Jasur', false)
+    await join(t.check.public_id, '', false)
+    const names = await t.names()
+    assert.equal(names.length, 3)
+    assert.match(names[2], /^[A-Z]{3}$/)
+  })
+
+  it('refuses renaming to someone else\'s name or a too short one', async () => {
+    const t = await create()
+    const user = await db.newUser()
+    await db.rpc<Created>(user, 'join_check', { p_public_id: t.check.public_id, p_name: 'Aziz', p_session_token: token(), p_unique_name: true })
+    await assert.rejects(db.rpc(user, 'rename_participant', { p_check_id: t.check.id, p_name: ' jasur ' }), /Name taken/)
+    await assert.rejects(db.rpc(user, 'rename_participant', { p_check_id: t.check.id, p_name: 'A' }), /Invalid participant name/)
+    await db.rpc(user, 'rename_participant', { p_check_id: t.check.id, p_name: 'AZIZ' })
+    assert.deepEqual(await t.names(), ['Jasur', 'AZIZ'])
+  })
+
+  it('lets nobody join beyond the expected number, the creator included, for any client', async () => {
+    const t = await create(3)
+    await join(t.check.public_id, 'Aziz')
+    await join(t.check.public_id, '', false)
+    await assert.rejects(join(t.check.public_id, 'Bekzod'), /Guest limit reached/)
+    await assert.rejects(join(t.check.public_id, '', false), /Guest limit reached/)
+    assert.equal((await t.names()).length, 3)
+    const preview = await db.rpc<{ expected_guests: number; participants: string[] }>(await db.newUser(), 'check_preview', { p_public_id: t.check.public_id })
+    assert.equal(preview.expected_guests, 3)
+    assert.equal(preview.participants.length, 3)
   })
 })

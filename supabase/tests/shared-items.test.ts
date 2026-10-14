@@ -51,13 +51,16 @@ describe('split among everyone, with guests arriving later', () => {
     assert.deepEqual(personItems(bill, t.people[1].id).map(line => line.sharedAll), [true])
   })
 
-  it('splits among more people when more come than expected, and shows the early payer as overpaid', async () => {
+  it('lets nobody in beyond the expected number until the creator raises it, then shows the early payer as overpaid', async () => {
     const t = await table(db, 2, 10)
     const tea = await t.item('Чай', 1, 10_000)
     await t.shareAll(tea)
     const aziz = await t.join('Aziz')
     assert.equal(calculateTotals(await assertSameTotals(t))[1].due, 5_500)
     await db.rpc(aziz.user, 'mark_paid', { p_check_id: t.check.id, p_paid: true })
+    await assert.rejects(t.join('Bekzod'), /Guest limit reached/)
+    assert.equal(calculateTotals(await assertSameTotals(t))[1].due, 5_500, 'a refused guest changes nobody\'s share')
+    await db.rpc(t.owner, 'update_check', { p_check_id: t.check.id, p_title: 'Ужин', p_service_percent: 10, p_payment_details: '', p_expected_guests: 3 })
     await t.join('Bekzod')
     const bill = await assertSameTotals(t)
     const azizTotal = calculateTotals(bill)[1]
@@ -132,11 +135,12 @@ describe('split among everyone, with guests arriving later', () => {
     let seed = 7
     const random = (n: number) => { seed = (seed * 1_103_515_245 + 12_345) % 2_147_483_648; return seed % n }
     for (let round = 0; round < 12; round++) {
-      const t = await table(db, 1 + random(6), [0, 10, 12, 15, 12.5][random(5)])
+      const expected = 1 + random(6)
+      const t = await table(db, expected, [0, 10, 12, 15, 12.5][random(5)])
       const items: string[] = []
       for (let step = 0; step < 10; step++) {
         const action = random(4)
-        if (action === 0 && t.people.length < 8) await t.join(`Гость ${step}`)
+        if (action === 0 && t.people.length < Math.min(8, expected)) await t.join(`Гость ${step}`)
         else if (action === 1 || !items.length) items.push(await t.item(`Блюдо ${step}`, 1 + random(3), 1_000 + random(97_001)))
         else if (action === 2) await t.shareAll(items[random(items.length)])
         else {

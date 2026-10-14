@@ -4,7 +4,7 @@ import { billStanding, calculateTotals, personItems, type Bill, type BillItem, t
 import { readOwnerToken, routeCheckId } from './routes.ts'
 import { errorMessage } from './errors.ts'
 import { detailLines, paymentLine, safeFileName } from './export.ts'
-import { paymentCopyValue, portionCount } from './format.ts'
+import { nameProblem, paymentCopyValue, portionCount } from './format.ts'
 import { installHintFor } from './platform.ts'
 import { markOf } from './snapshot.ts'
 import { pickerHasCamera } from './photo.ts'
@@ -159,5 +159,18 @@ describe('export', () => {
     assert.match(tea, /^Чай × 2 \(доля\) — 15\s000\sсум$/)
     assert.match(service, /^Обслуживание 10% — /)
     assert.match(detailLines(bill, aziz)[0], /^Чай \(доля\) — 5\s000\sсум$/)
+  })
+})
+
+describe('names typed by guests', () => {
+  it('asks for 2 to 24 characters with letters, and none already at the table', () => {
+    assert.equal(nameProblem('  Азиз  ', ['Jasur']), '')
+    assert.equal(nameProblem('Азиз Каримов', ['Азиз']), '')
+    assert.match(nameProblem('   '), /Напишите/)
+    assert.match(nameProblem('А'), /хотя бы 2/)
+    assert.match(nameProblem('x'.repeat(25)), /не длиннее 24/)
+    assert.match(nameProblem('123'), /буквы/)
+    assert.match(nameProblem(' jasur ', ['Jasur']), /уже есть/)
+    assert.match(nameProblem('Азиз   Каримов', ['азиз каримов']), /уже есть/)
   })
 })
