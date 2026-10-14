@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.5.0](https://github.com/zaripov-jasurbek/Ryadom/compare/v2.4.0...v2.5.0) (2026-10-14)
+
+
+### Новое
+
+* имя при входе, лимит гостей, подсветка своего имени ([#35](https://github.com/zaripov-jasurbek/Ryadom/issues/35)) ([5ff0029](https://github.com/zaripov-jasurbek/Ryadom/commit/5ff0029609d9d37a9818f364ed22e294daf0bf52))
+
 ## [2.4.0](https://github.com/zaripov-jasurbek/Ryadom/compare/v2.3.2...v2.4.0) (2026-10-13)
 
 
