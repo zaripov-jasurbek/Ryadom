@@ -401,8 +401,9 @@ class AppStore {
       if (this.token) await claimRemoteCheckOwner(this.joinPublicId, this.token)
       // Saved before the request: if the answer is lost on the way, the next try finds the guest it made.
       else { sessionToken = readStorage(guestKey(this.joinPublicId)) ?? sessionToken; writeStorage(guestKey(this.joinPublicId), sessionToken) }
-      await joinRemoteCheck(this.joinPublicId, name, sessionToken, typedName !== undefined)
+      // Also before the request: if the answer is lost, the retry joins silently by token, and under this name.
       if (typedName !== undefined) this.rememberName(name)
+      await joinRemoteCheck(this.joinPublicId, name, sessionToken, typedName !== undefined)
       const loaded = await loadRemoteCheck(this.joinPublicId)
       this.applyRemote(loaded); this.mode = 'check'
       history.replaceState({}, '', checkPath(loaded.id))

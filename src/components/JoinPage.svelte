@@ -38,7 +38,9 @@
     if (!failure) return
     // Someone took the name or the last place a moment ago: show it here and refresh who is at the table.
     serverProblem = failure
-    preview = await app.previewCheck().catch(() => preview)
+    const fresh = await app.previewCheck().catch(() => preview)
+    if (fresh) preview = fresh
+    else error = 'Чек не найден — возможно, его удалили'
   }
 
   onMount(() => { void open() })
