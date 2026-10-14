@@ -1,11 +1,11 @@
 import { assignedSubtotal, calculateTotals, ownerIdOf, serviceFee, withSelection, type Bill, type BillItem, type Participant } from './calculations'
-import { errorMessage } from './errors'
-import { addRemoteItem, addRemoteItems, updateRemoteCheck, updateRemoteItem, shareRemoteItemEqually, unshareRemoteItem, claimRemoteCheckOwner, confirmRemotePayment, createRemoteCheck, deleteRemoteCheck, deleteRemoteItem, ensureAnonymousSession, isRemoteCheckGone, joinRemoteCheck, loadRemoteCheck, removeRemoteParticipant, renameRemoteParticipant, markRemotePaid, subscribeToRemoteCheck, toggleRemoteUnit, unconfirmRemotePayment, type PresenceUser, type RemoteBill, type RemoteSubscription } from './remote'
+import { errorMessage, errorText } from './errors'
+import { addRemoteItem, addRemoteItems, updateRemoteCheck, updateRemoteItem, shareRemoteItemEqually, unshareRemoteItem, claimRemoteCheckOwner, confirmRemotePayment, createRemoteCheck, deleteRemoteCheck, deleteRemoteItem, ensureAnonymousSession, isRemoteCheckGone, joinRemoteCheck, loadRemoteCheck, previewRemoteCheck, removeRemoteParticipant, renameRemoteParticipant, markRemotePaid, subscribeToRemoteCheck, toggleRemoteUnit, unconfirmRemotePayment, type PresenceUser, type RemoteBill, type RemoteSubscription } from './remote'
 import { checkPath, homePath, readOwnerToken, routeCheckId } from './routes'
 import { preloadSupabase } from './supabase'
 import { expiresAt } from './limits'
 import { markOf } from './snapshot'
-import { defaultTitle, initial, randomName } from './format'
+import { cleanName, defaultTitle, initial, randomName } from './format'
 import { shareOr } from './share'
 import { pickerHasCamera, pickPhoto } from './photo'
 import type { ItemRow } from './rows'
@@ -19,6 +19,9 @@ const personKey = (billId: string) => `billsplit:person:${billId}`
 /** A guest's join token: this browser gets its participant back after losing its Supabase session. */
 const guestKey = (billId: string) => `billsplit:guest:${billId}`
 const nameKey = 'billsplit:name'
+const nameHintKey = 'billsplit:name-hint-seen'
+/** join_check errors raised before it adds anyone. */
+const refusedJoin = /Name taken|Invalid participant name|Guest limit reached|Participant limit reached/
 
 /** A participant as checks saved before payments became checkmarks keep them: the server's status and amount. */
 type SavedParticipant = Participant | (Omit<Participant, 'mark' | 'markedFor'> & { status?: string; paid?: number })
@@ -83,6 +86,8 @@ class AppStore {
   nameOpen = $state(false)
   /** The open confirmation sheet; it replaces window.confirm, which looks foreign on phones. */
   confirmRequest = $state<ConfirmRequest | null>(null)
+  /** True once this browser has opened the name sheet: until then your name at the bottom pulses to show it can change. */
+  nameHintSeen = $state(readStorage(nameHintKey) === '1')
   /** The name typed last time, so the next check does not ask for it again. */
   savedName = $state(readStorage(nameKey) ?? '')
 
@@ -176,6 +181,11 @@ class AppStore {
   }
 
   closeOverlays() { this.answerConfirm(false); this.addItemOpen = false; this.scanOpen = false; this.scanFile = null; this.qrOpen = false; this.editingItem = null; this.checkEditOpen = false; this.peopleOpen = false; this.payDetailsOpen = false; this.nameOpen = false }
+
+  openNameSheet() {
+    this.nameOpen = true
+    if (!this.nameHintSeen) { this.nameHintSeen = true; writeStorage(nameHintKey, '1') }
+  }
 
   private rememberName(name: string) { this.savedName = name; writeStorage(nameKey, name) }
 
@@ -368,20 +378,32 @@ class AppStore {
   }
 
   /**
-   * Opening the link is joining: nobody is asked for a name. A name typed in an earlier check is used,
-   * otherwise the server picks three letters nobody else at this table has; the guest may change them later.
+   * A browser that was in this check before (the creator's secret or a guest's join token) goes straight back in;
+   * anyone new first says who they are.
+   */
+  needsName() { return Boolean(this.joinPublicId) && !this.token && !readStorage(guestKey(this.joinPublicId)) }
+
+  /** The check's name, who is there and how many are expected, for the join page; null if it is gone. */
+  previewCheck() { return previewRemoteCheck(this.joinPublicId) }
+
+  /**
+   * Joins the check from its link. A new guest gives a name, which the server refuses if someone at the table
+   * already has it; a returning browser is matched by its token and keeps its name.
    * Returns an error message for the page, or '' on success.
    */
-  async joinSharedCheck() {
+  async joinSharedCheck(typedName?: string) {
     if (!this.joinPublicId) return ''
-    const name = this.savedName
+    const name = typedName === undefined ? this.savedName : cleanName(typedName)
     if (this.isPending('join')) return ''
     this.pendingActions = { ...this.pendingActions, join: true }
     try {
       let sessionToken: string = crypto.randomUUID()
       if (this.token) await claimRemoteCheckOwner(this.joinPublicId, this.token)
+      // Saved before the request: if the answer is lost on the way, the next try finds the guest it made.
       else { sessionToken = readStorage(guestKey(this.joinPublicId)) ?? sessionToken; writeStorage(guestKey(this.joinPublicId), sessionToken) }
-      await joinRemoteCheck(this.joinPublicId, name, sessionToken)
+      // Also before the request: if the answer is lost, the retry joins silently by token, and under this name.
+      if (typedName !== undefined) this.rememberName(name)
+      await joinRemoteCheck(this.joinPublicId, name, sessionToken, typedName !== undefined)
       const loaded = await loadRemoteCheck(this.joinPublicId)
       this.applyRemote(loaded); this.mode = 'check'
       history.replaceState({}, '', checkPath(loaded.id))
@@ -389,6 +411,8 @@ class AppStore {
       return ''
     } catch (error) {
       console.error(error)
+      // The server made nobody: the token goes, so the next try asks for a name again instead of joining silently.
+      if (!this.token && refusedJoin.test(errorText(error))) writeStorage(guestKey(this.joinPublicId), null)
       return errorMessage(error, 'Не удалось открыть чек')
     } finally { const { join: _, ...rest } = this.pendingActions; this.pendingActions = rest }
   }
@@ -494,7 +518,8 @@ class AppStore {
   }
 
   /** Your own name in the check; it is kept for the next checks too. */
-  async rename(name: string) {
+  async rename(typed: string) {
+    const name = cleanName(typed)
     if (!await this.mutate('name', 'Не удалось сменить имя', dbId => renameRemoteParticipant(dbId, name))) return false
     this.rememberName(name)
     this.remote?.setPresence(this.presence('Просматривает чек'))

@@ -99,7 +99,8 @@
   {/if}
 
   <div class="dock">
-    {#if myName}<button class="dock-name" aria-label={`Ваше имя: ${myName}. Изменить`} title="Изменить имя" onclick={() => app.nameOpen = true}><span class="person-avatar mini tone-{app.tone(app.selectedPerson!)}" aria-hidden="true">{myName.slice(0, 1).toUpperCase()}</span><span class="dock-name-text">{myName}</span></button>{/if}
+    <!-- Pulses with a pencil until it is tapped once, so people see the name is theirs and can be changed. -->
+    {#if myName}<button class="dock-name" class:hint={!app.nameHintSeen} aria-label={`Ваше имя: ${myName}. Изменить`} title="Изменить имя" onclick={() => app.openNameSheet()}><span class="person-avatar mini tone-{app.tone(app.selectedPerson!)}" aria-hidden="true">{myName.slice(0, 1).toUpperCase()}</span><span class="dock-name-text">{myName}</span><span class="dock-name-edit" aria-hidden="true"><Icon name="edit" /></span></button>{/if}
     {#if cardDock}
       <button class="card-dock" onclick={() => app.copy(paymentCopyValue(bill.paymentDetails!), 'Номер скопирован')}><Icon name="card" /><span>Скопировать карту{me ? ` · ${formatAmount(me.remaining)}` : ''}</span></button>
     {:else if addCard}

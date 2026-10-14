@@ -396,6 +396,17 @@ button.pay-marks:disabled { cursor: default; }
 .dock-name { flex: 0 1 auto; min-width: 0; max-width: 45vw; min-height: 52px; padding: 0 16px 0 10px; border: 0; border-radius: 999px; display: flex; align-items: center; gap: 8px; background: var(--surface); color: var(--ink); box-shadow: 0 0 0 1px var(--border), 0 8px 24px rgb(0 0 0 / .14); font-size: 15px; font-weight: 600; }
 .dock-name .person-avatar.mini { width: 28px; height: 28px; font-size: 12px; }
 .dock-name-text { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dock-name-edit { flex: none; display: grid; place-items: center; width: 26px; height: 26px; margin-right: -6px; border-radius: 50%; background: var(--brand); color: var(--surface); }
+.dock-name-edit .icon { width: 15px; height: 15px; }
+/* Until the first tap the button's background breathes and a soft ring spreads out of it: a hint to press it. */
+.dock-name.hint { animation: name-pulse 1.8s ease-out infinite; }
+@keyframes name-pulse {
+  0% { background: var(--surface); box-shadow: 0 0 0 1px var(--border), 0 8px 24px rgb(0 0 0 / .14), 0 0 0 0 color-mix(in srgb, var(--brand) 55%, transparent); }
+  40% { background: color-mix(in srgb, var(--brand) 16%, var(--surface)); }
+  70% { box-shadow: 0 0 0 1px var(--border), 0 8px 24px rgb(0 0 0 / .14), 0 0 0 14px color-mix(in srgb, var(--brand) 0%, transparent); }
+  100% { box-shadow: 0 0 0 1px var(--border), 0 8px 24px rgb(0 0 0 / .14), 0 0 0 0 color-mix(in srgb, var(--brand) 0%, transparent); }
+}
+@media (prefers-reduced-motion: reduce) { .dock-name.hint { animation: none; box-shadow: 0 0 0 2px var(--brand), 0 8px 24px rgb(0 0 0 / .14); } }
 .dock-name:active, .card-dock:active { transform: translateY(1px); }
 .card-dock { flex: 0 1 auto; min-width: 0; min-height: 52px; padding: 0 22px; border: 0; border-radius: 999px; display: flex; align-items: center; gap: 8px; background: var(--accent); color: var(--accent-ink); box-shadow: 0 8px 24px rgb(0 0 0 / .18); font-size: 15px; font-weight: 700; white-space: nowrap; }
 .card-dock > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }

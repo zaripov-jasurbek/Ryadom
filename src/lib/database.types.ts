@@ -9,7 +9,7 @@ export interface Database {
       check_preview: { Args: { p_public_id: string }; Returns: Json }
       touch_account: { Args: Record<string, never>; Returns: undefined }
       create_check: { Args: { p_title: string; p_service_percent: number; p_owner_name: string; p_owner_token: string; p_payment_details: string | null; p_expected_guests?: number | null }; Returns: Json }
-      join_check: { Args: { p_public_id: string; p_name: string; p_session_token: string }; Returns: Json }
+      join_check: { Args: { p_public_id: string; p_name: string; p_session_token: string; p_unique_name?: boolean }; Returns: Json }
       claim_check_owner: { Args: { p_public_id: string; p_owner_token: string }; Returns: string }
       add_item: { Args: { p_check_id: string; p_name: string; p_quantity: number; p_unit_price: number }; Returns: string }
       add_items: { Args: { p_check_id: string; p_items: { name: string; quantity: number; unit_price: number }[] }; Returns: string[] }
