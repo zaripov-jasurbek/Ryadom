@@ -403,7 +403,7 @@ class AppStore {
       else { sessionToken = readStorage(guestKey(this.joinPublicId)) ?? sessionToken; writeStorage(guestKey(this.joinPublicId), sessionToken) }
       // Also before the request: if the answer is lost, the retry joins silently by token, and under this name.
       if (typedName !== undefined) this.rememberName(name)
-      await joinRemoteCheck(this.joinPublicId, name, sessionToken, typedName !== undefined)
+      await joinRemoteCheck(this.joinPublicId, name, sessionToken)
       const loaded = await loadRemoteCheck(this.joinPublicId)
       this.applyRemote(loaded); this.mode = 'check'
       history.replaceState({}, '', checkPath(loaded.id))

@@ -66,8 +66,8 @@ export const createRemoteCheck = (title: string, servicePercent: number, ownerNa
   call('create_check', { p_title: title, p_service_percent: servicePercent, p_owner_name: ownerName, p_owner_token: ownerToken, p_payment_details: paymentDetails || null, p_expected_guests: expectedGuests }) as Promise<Created>
 export const claimRemoteCheckOwner = (publicId: string, ownerToken: string) => call('claim_check_owner', { p_public_id: publicId, p_owner_token: ownerToken })
 /** uniqueName: the guest typed this name, so the server refuses one that someone at the table already has. */
-export const joinRemoteCheck = (publicId: string, name: string, sessionToken: string, uniqueName = false) =>
-  call('join_check', { p_public_id: publicId, p_name: name, p_session_token: sessionToken, ...(uniqueName ? { p_unique_name: true } : {}) }) as Promise<Created>
+export const joinRemoteCheck = (publicId: string, name: string, sessionToken: string) =>
+  call('join_check', { p_public_id: publicId, p_name: name, p_session_token: sessionToken }) as Promise<Created>
 export type CheckPreview = { title: string; expected_guests?: number | null; participants: string[] }
 /** The check's name and who is already there, before joining; null for a missing or expired check. */
 export const previewRemoteCheck = (publicId: string) => call('check_preview', { p_public_id: publicId }) as Promise<CheckPreview | null>
