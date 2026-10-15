@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.6.0](https://github.com/zaripov-jasurbek/Ryadom/compare/v2.5.0...v2.6.0) (2026-10-15)
+
+
+### Новое
+
+* **fix:** Имена гостей обязательны, повторные запросы без дублей, стабильность ([#37](https://github.com/zaripov-jasurbek/Ryadom/issues/37)) ([9b5a2ae](https://github.com/zaripov-jasurbek/Ryadom/commit/9b5a2aecc4cef4d43378d5585213be97ccb65b06))
+
 ## [2.5.0](https://github.com/zaripov-jasurbek/Ryadom/compare/v2.4.0...v2.5.0) (2026-10-14)
 
 
