@@ -266,7 +266,8 @@ describe('check RPCs', () => {
 describe('limits and expiry', () => {
   let db: Db
   before(async () => { db = await createDb() })
-  const join = (userId: string, publicId: string, sessionToken = token()) => db.rpc<Created>(userId, 'join_check', { p_public_id: publicId, p_name: 'Гость', p_session_token: sessionToken })
+  // Every new guest needs a name nobody at the table has; a returning token keeps its own.
+  const join = (userId: string, publicId: string, sessionToken = token()) => db.rpc<Created>(userId, 'join_check', { p_public_id: publicId, p_name: `Гость ${sessionToken.slice(0, 8)}`, p_session_token: sessionToken })
 
   it('takes writes only through RPCs', async () => {
     const s = await setup(db)
@@ -498,21 +499,6 @@ describe('check snapshot and broadcasts', () => {
   })
 })
 
-describe('guest names', () => {
-  it('gives guests without a name unique letters with distinct first letters', async () => {
-    const db = await createDb()
-    const owner = await db.newUser()
-    const check = await db.rpc<Created>(owner, 'create_check', { p_title: 'Ужин', p_service_percent: 0, p_owner_name: 'Jasur', p_owner_token: token() })
-    for (let i = 0; i < 8; i++) await db.rpc<Created>(await db.newUser(), 'join_check', { p_public_id: check.public_id, p_name: '', p_session_token: token() })
-    const { rows } = await db.query<{ name: string }>('select name from public.participants where check_id = $1', [check.id])
-    const names = rows.map(row => row.name)
-    assert.equal(names.length, 9)
-    assert.equal(new Set(names.map(name => name.toUpperCase())).size, 9)
-    assert.equal(new Set(names.map(name => name[0].toUpperCase())).size, 9)
-    for (const name of names.filter(name => name !== 'Jasur')) assert.match(name, /^[A-Z]{3}$/)
-  })
-})
-
 describe('named joining and the guest limit', () => {
   let db: Db
   before(async () => { db = await createDb() })
@@ -535,6 +521,14 @@ describe('named joining and the guest limit', () => {
     assert.deepEqual(await t.names(), ['Jasur', 'Азиз Каримов'])
   })
 
+  it('treats tabs and line breaks around a name like spaces', async () => {
+    const t = await create()
+    await join(t.check.public_id, '\tАзиз\n')
+    await assert.rejects(join(t.check.public_id, '\nазиз'), /Name taken/)
+    await assert.rejects(join(t.check.public_id, '\t\n'), /Invalid participant name/)
+    assert.deepEqual(await t.names(), ['Jasur', 'Азиз'])
+  })
+
   it('lets the same browser back in with its token even though its name is taken by itself', async () => {
     const t = await create()
     const sessionToken = token()
@@ -543,13 +537,12 @@ describe('named joining and the guest limit', () => {
     assert.equal(again.participant_id, first.participant_id)
   })
 
-  it('keeps the old behaviour for the published site: no name check, letters for an empty name', async () => {
+  it('wants a name from every new guest, with or without the flag the published site sends', async () => {
     const t = await create()
-    await join(t.check.public_id, 'Jasur', false)
-    await join(t.check.public_id, '', false)
-    const names = await t.names()
-    assert.equal(names.length, 3)
-    assert.match(names[2], /^[A-Z]{3}$/)
+    await assert.rejects(join(t.check.public_id, '', false), /Invalid participant name/)
+    await assert.rejects(join(t.check.public_id, 'jasur', false), /Name taken/)
+    await join(t.check.public_id, 'Aziz', false)
+    assert.deepEqual(await t.names(), ['Jasur', 'Aziz'])
   })
 
   it('refuses renaming to someone else\'s name or a too short one', async () => {
@@ -565,12 +558,60 @@ describe('named joining and the guest limit', () => {
   it('lets nobody join beyond the expected number, the creator included, for any client', async () => {
     const t = await create(3)
     await join(t.check.public_id, 'Aziz')
-    await join(t.check.public_id, '', false)
+    await join(t.check.public_id, 'Bek', false)
     await assert.rejects(join(t.check.public_id, 'Bekzod'), /Guest limit reached/)
-    await assert.rejects(join(t.check.public_id, '', false), /Guest limit reached/)
+    await assert.rejects(join(t.check.public_id, 'Dilshod', false), /Guest limit reached/)
     assert.equal((await t.names()).length, 3)
     const preview = await db.rpc<{ expected_guests: number; participants: string[] }>(await db.newUser(), 'check_preview', { p_public_id: t.check.public_id })
     assert.equal(preview.expected_guests, 3)
     assert.equal(preview.participants.length, 3)
+  })
+})
+
+describe('repeated requests', () => {
+  let db: Db
+  before(async () => { db = await createDb() })
+  const count = async (sql: string, id: string) => Number((await db.query<{ n: string }>(sql, [id])).rows[0].n)
+
+  it('makes one check for a create repeated with the same request id', async () => {
+    const owner = await db.newUser(), requestId = crypto.randomUUID()
+    const args = { p_title: 'Ужин', p_service_percent: 0, p_owner_name: 'Jasur', p_owner_token: token(), p_request_id: requestId }
+    const first = await db.rpc<Created>(owner, 'create_check', args)
+    const again = await db.rpc<Created>(owner, 'create_check', args)
+    assert.deepEqual(again, first)
+    const other = await db.rpc<Created>(owner, 'create_check', { ...args, p_request_id: crypto.randomUUID() })
+    assert.notEqual(other.id, first.id)
+  })
+
+  it('adds an item and a scanned receipt once each when repeated, and again without an id', async () => {
+    const s = await setup(db)
+    const itemCount = () => count('select count(*) as n from public.items where check_id = $1', s.check.id)
+    const before = await itemCount()
+    const one = { p_check_id: s.check.id, p_name: 'Чай', p_quantity: 1, p_unit_price: 5_000, p_request_id: crypto.randomUUID() }
+    assert.equal(await db.rpc<string>(s.owner, 'add_item', one), await db.rpc<string>(s.owner, 'add_item', one))
+    const receipt = { p_check_id: s.check.id, p_items: [{ name: 'Плов', quantity: 2, unit_price: 40_000 }, { name: 'Сок', quantity: 1, unit_price: 15_000 }], p_request_id: crypto.randomUUID() }
+    assert.deepEqual(await db.rpc<string[]>(s.owner, 'add_items', receipt), await db.rpc<string[]>(s.owner, 'add_items', receipt))
+    assert.equal(await itemCount(), before + 3)
+    await db.rpc(s.owner, 'add_item', { ...one, p_request_id: undefined })
+    await db.rpc(s.owner, 'add_item', { ...one, p_request_id: undefined })
+    assert.equal(await itemCount(), before + 5)
+  })
+
+  it('runs a repeat of a refused request again, and keeps ids per account and per call', async () => {
+    const s = await setup(db)
+    const requestId = crypto.randomUUID()
+    await assert.rejects(db.rpc(s.owner, 'add_item', { p_check_id: s.check.id, p_name: '', p_quantity: 1, p_unit_price: 5_000, p_request_id: requestId }), /Invalid item/)
+    await db.rpc(s.owner, 'add_item', { p_check_id: s.check.id, p_name: 'Чай', p_quantity: 1, p_unit_price: 5_000, p_request_id: requestId })
+    await assert.rejects(db.rpc(s.owner, 'add_items', { p_check_id: s.check.id, p_items: [{ name: 'Сок', quantity: 1, unit_price: 1 }], p_request_id: requestId }), /Invalid request id/)
+    // Someone else's id is theirs alone: the guest is refused as a non-owner, not answered from the owner's result.
+    await assert.rejects(db.rpc(s.guest, 'add_item', { p_check_id: s.check.id, p_name: 'Чай', p_quantity: 1, p_unit_price: 5_000, p_request_id: requestId }), /Owner access required/)
+  })
+
+  it('forgets request ids after a day on the schedule', async () => {
+    const s = await setup(db)
+    await db.rpc(s.owner, 'add_item', { p_check_id: s.check.id, p_name: 'Чай', p_quantity: 1, p_unit_price: 5_000, p_request_id: crypto.randomUUID() })
+    await db.query(`update public.request_results set created_at = now() - interval '2 days'`)
+    await db.runCron()
+    assert.equal(await count('select count(*) as n from public.request_results where $1::text is not null', 'x'), 0)
   })
 })

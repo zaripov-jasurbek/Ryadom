@@ -62,8 +62,8 @@ describe('compatibility of the migrations with clients', () => {
   it('reads the RPC list from the types file', () => {
     const rpcs = rpcsFromTypes(readFileSync(join(import.meta.dirname, '..', '..', 'src', 'lib', 'database.types.ts'), 'utf8'))
     const addItems = rpcs.find(rpc => rpc.name === 'add_items')
-    assert.deepEqual(addItems?.args.map(arg => arg.name), ['p_check_id', 'p_items'])
-    assert.deepEqual(rpcs.find(rpc => rpc.name === 'create_check')?.args.filter(arg => arg.optional).map(arg => arg.name), ['p_expected_guests'])
+    assert.deepEqual(addItems?.args.map(arg => arg.name), ['p_check_id', 'p_items', 'p_request_id'])
+    assert.deepEqual(rpcs.find(rpc => rpc.name === 'create_check')?.args.filter(arg => arg.optional).map(arg => arg.name), ['p_expected_guests', 'p_request_id'])
     assert.deepEqual(rpcs.find(rpc => rpc.name === 'touch_account')?.args, [])
   })
 

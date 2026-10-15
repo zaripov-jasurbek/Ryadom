@@ -62,19 +62,21 @@ async function call<K extends keyof Rpc>(fn: K, args: Rpc[K]['Args']): Promise<u
 
 type Created = { id: string; public_id: string; participant_id: string }
 
-export const createRemoteCheck = (title: string, servicePercent: number, ownerName: string, ownerToken: string, paymentDetails: string, expectedGuests: number | null) =>
-  call('create_check', { p_title: title, p_service_percent: servicePercent, p_owner_name: ownerName, p_owner_token: ownerToken, p_payment_details: paymentDetails || null, p_expected_guests: expectedGuests }) as Promise<Created>
+/** requestId: the same for a repeat of the same creation, so a lost answer does not make a second check (see requests.ts). */
+export const createRemoteCheck = (title: string, servicePercent: number, ownerName: string, ownerToken: string, paymentDetails: string, expectedGuests: number | null, requestId?: string) =>
+  call('create_check', { p_title: title, p_service_percent: servicePercent, p_owner_name: ownerName, p_owner_token: ownerToken, p_payment_details: paymentDetails || null, p_expected_guests: expectedGuests, ...(requestId ? { p_request_id: requestId } : {}) }) as Promise<Created>
 export const claimRemoteCheckOwner = (publicId: string, ownerToken: string) => call('claim_check_owner', { p_public_id: publicId, p_owner_token: ownerToken })
 /** uniqueName: the guest typed this name, so the server refuses one that someone at the table already has. */
-export const joinRemoteCheck = (publicId: string, name: string, sessionToken: string, uniqueName = false) =>
-  call('join_check', { p_public_id: publicId, p_name: name, p_session_token: sessionToken, ...(uniqueName ? { p_unique_name: true } : {}) }) as Promise<Created>
+export const joinRemoteCheck = (publicId: string, name: string, sessionToken: string) =>
+  call('join_check', { p_public_id: publicId, p_name: name, p_session_token: sessionToken }) as Promise<Created>
 export type CheckPreview = { title: string; expected_guests?: number | null; participants: string[] }
 /** The check's name and who is already there, before joining; null for a missing or expired check. */
 export const previewRemoteCheck = (publicId: string) => call('check_preview', { p_public_id: publicId }) as Promise<CheckPreview | null>
-export const addRemoteItem = (checkId: string, name: string, quantity: number, price: number) => call('add_item', { p_check_id: checkId, p_name: name, p_quantity: quantity, p_unit_price: price })
+export const addRemoteItem = (checkId: string, name: string, quantity: number, price: number, requestId?: string) =>
+  call('add_item', { p_check_id: checkId, p_name: name, p_quantity: quantity, p_unit_price: price, ...(requestId ? { p_request_id: requestId } : {}) })
 /** All rows or none, in one request; scanned receipts add many at once. */
-export const addRemoteItems = (checkId: string, items: { name: string; quantity: number; unitPrice: number }[]) =>
-  call('add_items', { p_check_id: checkId, p_items: items.map(entry => ({ name: entry.name, quantity: entry.quantity, unit_price: entry.unitPrice })) })
+export const addRemoteItems = (checkId: string, items: { name: string; quantity: number; unitPrice: number }[], requestId?: string) =>
+  call('add_items', { p_check_id: checkId, p_items: items.map(entry => ({ name: entry.name, quantity: entry.quantity, unit_price: entry.unitPrice })), ...(requestId ? { p_request_id: requestId } : {}) })
 export const updateRemoteItem = (checkId: string, itemId: string, name: string, quantity: number, price: number) => call('update_item', { p_check_id: checkId, p_item_id: itemId, p_name: name, p_quantity: quantity, p_unit_price: price })
 /** expectedGuests: undefined keeps the number, null clears it. */
 export const updateRemoteCheck = (checkId: string, title: string, servicePercent: number, paymentDetails: string, expectedGuests?: number | null) =>

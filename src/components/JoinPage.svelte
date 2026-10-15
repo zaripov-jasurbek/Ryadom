@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { errorMessage } from '../lib/errors'
-  import { nameProblem } from '../lib/format'
+  import { joinState } from '../lib/join'
   import { limits } from '../lib/limits'
   import type { CheckPreview } from '../lib/remote'
   import { app } from '../lib/store.svelte'
@@ -15,11 +15,14 @@
   // The field scolds only after the first try, then as the name is fixed.
   let tried = $state(false)
   let serverProblem = $state('')
+  // A try failed but was not refused: the next one goes in by the saved token (see joinState).
+  let retrying = $state(false)
 
   const taken = $derived(preview?.participants ?? [])
   const expected = $derived(preview?.expected_guests ?? null)
-  const full = $derived(expected !== null && taken.length >= expected)
-  const problem = $derived(serverProblem || (tried ? nameProblem(name, taken) : ''))
+  const form = $derived(joinState(name, taken, expected, retrying))
+  const full = $derived(form.full)
+  const problem = $derived(serverProblem || (tried ? form.problem : ''))
 
   async function open() {
     error = ''
@@ -33,9 +36,10 @@
 
   async function join() {
     tried = true; serverProblem = ''
-    if (nameProblem(name, taken) || full || app.isPending('join')) return
+    if (form.problem || full || app.isPending('join')) return
     const failure = await app.joinSharedCheck(name)
     if (!failure) return
+    retrying = app.hasJoinToken()
     // Someone took the name or the last place a moment ago: show it here and refresh who is at the table.
     serverProblem = failure
     const fresh = await app.previewCheck().catch(() => preview)

@@ -29,6 +29,9 @@ const messages: [RegExp, string][] = [
   [/Anonymous sign-ins are disabled/i, 'Сервис временно недоступен — попробуйте позже'],
   // A request past the timeout in supabase.ts; older Safari reports it as a plain abort.
   [/TimeoutError|timed out|AbortError|aborted/i, 'Сервер не ответил — попробуйте ещё раз'],
+  // A part of the app that did not load (Chrome, Safari, Firefox wording): offline, or a file of an older build that a
+  // deploy removed and the reload in update.ts did not fix. The same words for both; checked before network errors.
+  [/dynamically imported module|Importing a module script failed/i, 'Не удалось загрузить часть приложения — проверьте интернет и обновите страницу'],
   [/Failed to fetch|NetworkError|Load failed|fetch failed/i, 'Нет интернета — проверьте подключение и попробуйте ещё раз'],
   [/Supabase is not configured/, 'Сервис временно недоступен — попробуйте позже'],
 ]
