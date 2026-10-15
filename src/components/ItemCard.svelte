@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { flushSync, tick } from 'svelte'
   import { formatAmount, isUnitAssigned, sharedAllInfo, type BillItem, type Participant } from '../lib/calculations'
   import { initial, portionCount } from '../lib/format'
   import { app } from '../lib/store.svelte'
@@ -33,13 +34,13 @@
   // "−" first gives back a serving this person had alone, the last one first.
   const giveBack = $derived(me ? units.filter(unit => tappable(unit) && has(unit, me)).sort((a, b) => consumers(a).length - consumers(b).length || b - a)[0] : undefined)
   // Servings eaten by the same people form one group: one stack of avatars shows who shares with whom.
-  // Servings the viewer has alone are left to the stepper and the "Я" toggle.
+  // The viewer's own servings are a group too, so you see yourself on the line, not only in the stepper.
   type Group = { key: string; people: Participant[]; units: number[] }
   const groups = $derived.by(() => {
     const byPeople = new Map<string, Group>()
     for (const unit of units) {
       const people = consumers(unit)
-      if (!people.length || (people.length === 1 && people[0].id === me)) continue
+      if (!people.length) continue
       const key = people.map(person => person.id).join(',')
       const group = byPeople.get(key)
       if (group) group.units.push(unit)
@@ -47,7 +48,38 @@
     }
     return [...byPeople.values()]
   })
-  const maxFaces = 4
+  // How much of each person fits: full names while there is room, then avatars side by side,
+  // then avatars overlapping with "+N". Measured on the line itself, so a wide screen keeps the names.
+  const densities = ['names', 'faces', 'stack'] as const
+  let density = $state<(typeof densities)[number]>('names')
+  let train: HTMLDivElement | undefined = $state()
+  /** Everything on one line and nothing cut at the edge. */
+  function fits(row: HTMLElement) {
+    const cars = [...row.children] as HTMLElement[]
+    return row.scrollWidth <= row.clientWidth + 1 && (!cars.length || cars.at(-1)!.offsetTop === cars[0].offsetTop)
+  }
+  function fit() {
+    if (!train || !train.isConnected) return
+    for (const level of densities) {
+      density = level
+      flushSync()
+      if (fits(train)) return
+    }
+  }
+  let trainWidth = 0
+  function watchWidth(row: HTMLDivElement) {
+    const observer = new ResizeObserver(([entry]) => {
+      const width = Math.round(entry.contentRect.width)
+      if (width === trainWidth) return
+      trainWidth = width
+      fit()
+    })
+    observer.observe(row)
+    return () => observer.disconnect()
+  }
+  // Someone joins or leaves a group: start again from full names.
+  $effect(() => { void groups; void tick().then(fit) })
+  const maxFaces = $derived(density === 'stack' ? 4 : 8)
   const withMe = (group: Group) => Boolean(me) && group.people.some(person => person.id === me)
   // "⅓" when a serving is split, "× 2" when there are several such servings.
   function groupLabel(group: Group) {
@@ -55,7 +87,8 @@
     const times = group.units.length > 1 ? `× ${group.units.length}` : ''
     return [share, times].filter(Boolean).join(' ')
   }
-  const groupNames = (group: Group) => group.people.map(person => person.id === me ? 'вы' : person.name).join(', ')
+  const nameOf = (person: Participant) => person.id === me ? 'вы' : person.name
+  const groupNames = (group: Group) => group.people.map(nameOf).join(', ')
   // A tap on a group the viewer is in gives back one of its servings; on anyone else's, joins one of them.
   const groupUnit = (group: Group) => group.units.filter(tappable).at(withMe(group) ? -1 : 0)
   const tapGroup = (group: Group) => tap(`group:${group.key}`, groupUnit(group))
@@ -91,8 +124,8 @@
 
 {#snippet faces(group: Group)}
   <span class="faces" aria-hidden="true">
-    {#each group.people.slice(0, group.people.length > maxFaces ? maxFaces - 1 : maxFaces) as person (person.id)}<b class="tone-{app.tone(person.id)}">{app.avatar(person)}</b>{/each}
-    {#if group.people.length > maxFaces}<b class="more">+{group.people.length - maxFaces + 1}</b>{/if}
+    {#each group.people.slice(0, group.people.length > maxFaces ? maxFaces - 1 : maxFaces) as person (person.id)}<span class="face"><b class="tone-{app.tone(person.id)}">{app.avatar(person)}</b>{#if density === 'names' && person.id !== me}<span class="face-name">{nameOf(person)}</span>{/if}</span>{/each}
+    {#if group.people.length > maxFaces}<span class="face"><b class="more">+{group.people.length - maxFaces + 1}</b></span>{/if}
   </span>
 {/snippet}
 
@@ -116,10 +149,10 @@
 
   <div class="bill-controls">
     {#if sharedAll}
-      <span class="train-note">На всех · по {formatAmount(share.perPerson)}</span>
+      <span class="train-note">Поровну на {parts} · по {formatAmount(share.perPerson)}</span>
     {:else}
       <!-- One stack of avatars per group of servings; the groups wrap to a new line instead of scrolling sideways. -->
-      <div class="train" role="group" aria-label="Кто отметил">
+      <div class="train d-{density}" role="group" aria-label="Кто отметил" bind:this={train} {@attach watchWidth}>
         {#each groups as group (group.key)}
           {@const label = groupLabel(group)}
           {@const names = groupNames(group)}
@@ -145,7 +178,9 @@
         {/if}
       {/if}
       <!-- Only the creator splits among everyone; then nobody can mark the item until they switch it off. -->
-      {#if app.isOwner && (sharedAll || parts > 1)}
+      {#if !app.isOwner && sharedAll}
+        <span class="everyone-chip" title={`Поровну на всех: по ${formatAmount(share.perPerson)} с каждого`}><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.2" /><circle cx="16.5" cy="9" r="2.6" /><path d="M3 19c.6-3.3 3-5 6-5s5.4 1.7 6 5M14.5 14.2c2.9-.4 5.6 1 6.5 4.8" /></svg>На всех</span>
+      {:else if app.isOwner && (sharedAll || parts > 1)}
         <button class="mine-toggle everyone" class:active={sharedAll} aria-pressed={sharedAll} title="На всех" disabled={app.isPending(`item:${item.id}`)} {@attach tactile} onclick={toggleEveryone}>{sharedAll ? '✓ Все' : 'Все'}</button>
       {/if}
     </div>

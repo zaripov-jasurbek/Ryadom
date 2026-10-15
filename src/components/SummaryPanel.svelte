@@ -1,9 +1,18 @@
 <script lang="ts">
   import { formatUzs, type ParticipantTotal } from '../lib/calculations'
   import { app } from '../lib/store.svelte'
+  import { detailItems } from '../lib/export'
 
   // You first, then the rest in the order they joined.
   const people = $derived([...app.totals].sort((a, b) => Number(b.id === app.selectedPerson) - Number(a.id === app.selectedPerson)))
+
+  // What each amount is made of opens under the name, one person or several at a time.
+  let opened = $state(new Set<string>())
+  function toggleDetails(id: string) {
+    const next = new Set(opened)
+    if (!next.delete(id)) next.add(id)
+    opened = next
+  }
 
   // Two ticks per debtor: grey, then the first green when the guest says they paid, both green once the creator confirms.
   const mine = $derived(app.isOwner ? undefined : app.currentTotal)
@@ -28,11 +37,16 @@
     {@const reviewable = app.isOwner && !payer && (person.due > 0 || person.mark === 'confirmed')}
     {@const first = marked(person) || person.mark === 'confirmed'}
     {@const both = person.mark === 'confirmed'}
+    {@const lines = detailItems(app.bill!, person)}
+    {@const open = opened.has(person.id)}
     {@const label = both ? 'Оплата подтверждена' : first ? 'Оплатил, ждёт подтверждения' : 'Не оплачено'}
     <div class="summary-person" class:is-me={app.selectedPerson === person.id}>
       <div class="summary-person-main">
         <span class="person-avatar tone-{app.tone(person.id)}">{app.avatar(person)}</span>
-        <span class="summary-person-name"><b>{app.label(person)}</b></span>
+        <span class="summary-person-name">
+          <b>{app.label(person)}</b>
+          {#if lines.length}<button type="button" class="details-toggle" aria-expanded={open} aria-controls={`details-${person.id}`} onclick={() => toggleDetails(person.id)}>Детали <span class="details-caret" aria-hidden="true">▾</span></button>{/if}
+        </span>
         <span class="summary-person-total">
           <b>{formatUzs(person.due)}</b>
           {#if own || reviewable}
@@ -42,6 +56,11 @@
           {/if}
         </span>
       </div>
+      {#if open && lines.length}
+        <ul class="person-details" id={`details-${person.id}`}>
+          {#each lines as line, i (i)}<li><span>{line.label}</span><b>{formatUzs(line.amount)}</b></li>{/each}
+        </ul>
+      {/if}
     </div>
   {/each}
 </div>

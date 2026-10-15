@@ -75,7 +75,7 @@
       {#if searchable}
         <input class="item-search" type="search" bind:value={query} placeholder="Найти блюдо" aria-label="Найти блюдо" enterkeyhint="search" />
       {/if}
-      <div class="bill-line bill-head" aria-hidden="true"><span>Название</span><span class="bill-qty">Кол-во</span><span class="bill-price">Цена</span>{#if app.isOwner}<span></span>{/if}</div>
+      <div class="bill-line bill-head" aria-hidden="true"><span>Название</span><span class="bill-qty">Кол-во</span><span class="bill-price">За шт.</span>{#if app.isOwner}<span></span>{/if}</div>
       {#each shown as item (item.id)}<ItemCard {item} />{:else}
         <p class="filter-empty">Ничего не нашлось по «{query.trim()}»</p>
       {/each}
