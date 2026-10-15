@@ -567,3 +567,51 @@ describe('named joining and the guest limit', () => {
     assert.equal(preview.participants.length, 3)
   })
 })
+
+describe('repeated requests', () => {
+  let db: Db
+  before(async () => { db = await createDb() })
+  const count = async (sql: string, id: string) => Number((await db.query<{ n: string }>(sql, [id])).rows[0].n)
+
+  it('makes one check for a create repeated with the same request id', async () => {
+    const owner = await db.newUser(), requestId = crypto.randomUUID()
+    const args = { p_title: 'Ужин', p_service_percent: 0, p_owner_name: 'Jasur', p_owner_token: token(), p_request_id: requestId }
+    const first = await db.rpc<Created>(owner, 'create_check', args)
+    const again = await db.rpc<Created>(owner, 'create_check', args)
+    assert.deepEqual(again, first)
+    const other = await db.rpc<Created>(owner, 'create_check', { ...args, p_request_id: crypto.randomUUID() })
+    assert.notEqual(other.id, first.id)
+  })
+
+  it('adds an item and a scanned receipt once each when repeated, and again without an id', async () => {
+    const s = await setup(db)
+    const itemCount = () => count('select count(*) as n from public.items where check_id = $1', s.check.id)
+    const before = await itemCount()
+    const one = { p_check_id: s.check.id, p_name: 'Чай', p_quantity: 1, p_unit_price: 5_000, p_request_id: crypto.randomUUID() }
+    assert.equal(await db.rpc<string>(s.owner, 'add_item', one), await db.rpc<string>(s.owner, 'add_item', one))
+    const receipt = { p_check_id: s.check.id, p_items: [{ name: 'Плов', quantity: 2, unit_price: 40_000 }, { name: 'Сок', quantity: 1, unit_price: 15_000 }], p_request_id: crypto.randomUUID() }
+    assert.deepEqual(await db.rpc<string[]>(s.owner, 'add_items', receipt), await db.rpc<string[]>(s.owner, 'add_items', receipt))
+    assert.equal(await itemCount(), before + 3)
+    await db.rpc(s.owner, 'add_item', { ...one, p_request_id: undefined })
+    await db.rpc(s.owner, 'add_item', { ...one, p_request_id: undefined })
+    assert.equal(await itemCount(), before + 5)
+  })
+
+  it('runs a repeat of a refused request again, and keeps ids per account and per call', async () => {
+    const s = await setup(db)
+    const requestId = crypto.randomUUID()
+    await assert.rejects(db.rpc(s.owner, 'add_item', { p_check_id: s.check.id, p_name: '', p_quantity: 1, p_unit_price: 5_000, p_request_id: requestId }), /Invalid item/)
+    await db.rpc(s.owner, 'add_item', { p_check_id: s.check.id, p_name: 'Чай', p_quantity: 1, p_unit_price: 5_000, p_request_id: requestId })
+    await assert.rejects(db.rpc(s.owner, 'add_items', { p_check_id: s.check.id, p_items: [{ name: 'Сок', quantity: 1, unit_price: 1 }], p_request_id: requestId }), /Invalid request id/)
+    // Someone else's id is theirs alone: the guest is refused as a non-owner, not answered from the owner's result.
+    await assert.rejects(db.rpc(s.guest, 'add_item', { p_check_id: s.check.id, p_name: 'Чай', p_quantity: 1, p_unit_price: 5_000, p_request_id: requestId }), /Owner access required/)
+  })
+
+  it('forgets request ids after a day on the schedule', async () => {
+    const s = await setup(db)
+    await db.rpc(s.owner, 'add_item', { p_check_id: s.check.id, p_name: 'Чай', p_quantity: 1, p_unit_price: 5_000, p_request_id: crypto.randomUUID() })
+    await db.query(`update public.request_results set created_at = now() - interval '2 days'`)
+    await db.runCron()
+    assert.equal(await count('select count(*) as n from public.request_results where $1::text is not null', 'x'), 0)
+  })
+})

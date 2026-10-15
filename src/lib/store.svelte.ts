@@ -9,6 +9,7 @@ import { cleanName, defaultTitle, initial, randomName } from './format'
 import { shareOr } from './share'
 import { pickerHasCamera, pickPhoto } from './photo'
 import type { ItemRow } from './rows'
+import { RepeatIds } from './requests'
 
 export type Mode = 'home' | 'create' | 'join' | 'check'
 /** A line of the check being made: what was typed or scanned, checked only when the check is created. */
@@ -101,6 +102,10 @@ class AppStore {
   participantIndex = $derived(new Map(this.bill?.participants.map((person, index) => [person.id, index]) ?? []))
 
   private remote: RemoteSubscription | null = null
+  /** Ids that let the server recognise a repeated creation or addition (see requests.ts). */
+  private requests = new RepeatIds()
+  /** The secret and name of the check being created, kept until it is made, so a repeat gets the same check. */
+  private creating: { ownerToken: string; ownerName: string } | null = null
   private refreshSeq = 0
   /** The state each serving should end in, by the viewer's last tap on it, while its request is on the way. */
   private wantedUnits = new Map<string, boolean>()
@@ -215,6 +220,8 @@ class AppStore {
   goHome() { this.disconnect(); this.closeOverlays(); this.mode = 'home'; history.pushState({}, '', homePath()) }
   beginCreate() {
     this.mode = 'create'; this.draft = [this.newDraftRow()]; this.draftTotal = null; this.draftService = null
+    // A new check from the start: an unfinished earlier try is not repeated into it.
+    this.creating = null; this.requests.done('create')
     preloadSupabase()
   }
 
@@ -331,22 +338,31 @@ class AppStore {
    * Returns an error for the page to show next to its button, or '' once the check is made.
    */
   async createBill(servicePercent: number, items: { name: string; quantity: number; unitPrice: number }[]): Promise<string> {
-    const ownerToken = crypto.randomUUID()
+    if (this.isPending('create')) return ''
     // A name typed in an earlier check, or letters nobody has to make up; the title is the meal and the date.
-    const ownerName = this.savedName || randomName(), title = defaultTitle()
-    let bill: Bill
-    try {
-      const created = await this.track('create', () => createRemoteCheck(title, servicePercent, ownerName, ownerToken, '', null))
-      if (!created) return ''
-      bill = { id: created.public_id, dbId: created.id, title, servicePercent, ownerId: created.participant_id, participants: [{ id: created.participant_id, name: ownerName, mark: 'none', markedFor: 0 }], items: [], createdAt: new Date().toISOString(), ownerToken }
-    } catch (error) { console.error(error); return errorMessage(error, 'Не удалось создать чек') }
+    this.creating ??= { ownerToken: crypto.randomUUID(), ownerName: this.savedName || randomName() }
+    const { ownerToken, ownerName } = this.creating, title = defaultTitle()
+    let bill: Bill | undefined, failure = ''
+    await this.track('create', async () => {
+      try {
+        const created = await createRemoteCheck(title, servicePercent, ownerName, ownerToken, '', null, this.requests.take('create', [ownerToken, title, servicePercent]))
+        bill = { id: created.public_id, dbId: created.id, title, servicePercent, ownerId: created.participant_id, participants: [{ id: created.participant_id, name: ownerName, mark: 'none', markedFor: 0 }], items: [], createdAt: new Date().toISOString(), ownerToken }
+      } catch (error) { console.error(error); failure = errorMessage(error, 'Не удалось создать чек'); return }
+      // The items go in before the check opens. If they fail, the page keeps them, and the same button tries again:
+      // the server returns the check it already made and adds the items once.
+      try { await this.sendItems(bill.dbId, items) } catch (error) {
+        console.error(error); bill = undefined
+        failure = errorMessage(error, 'Не удалось добавить позиции — нажмите ещё раз')
+      }
+    })
+    if (!bill) return failure
+    this.requests.done('create'); this.creating = null
     this.bill = bill; this.isOwner = true; this.token = ownerToken; this.mode = 'check'
     this.selectedPerson = bill.participants[0].id; writeStorage(personKey(bill.id), this.selectedPerson)
     history.pushState({}, '', checkPath(bill.id))
     this.save()
     this.draft = []; this.draftTotal = null; this.draftService = null
     await this.connect(bill)
-    await this.addItems(items)
     this.qrOpen = true
     return ''
   }
@@ -441,12 +457,22 @@ class AppStore {
   }
 
   addItem(name: string, quantity: number, unitPrice: number) {
-    return this.mutate('items', 'Не удалось добавить позицию', dbId => addRemoteItem(dbId, name, quantity, unitPrice))
+    const key = `item:${this.bill?.dbId}`
+    return this.mutate('items', 'Не удалось добавить позицию', dbId => addRemoteItem(dbId, name, quantity, unitPrice, this.requests.take(key, [name, quantity, unitPrice])))
+      .then(added => { if (added) this.requests.done(key); return added })
+  }
+
+  /** Adds rows in one request, all or none; a repeat of the same rows after a lost answer does not add them twice. */
+  private async sendItems(dbId: string, items: { name: string; quantity: number; unitPrice: number }[]) {
+    if (!items.length) return
+    const key = `items:${dbId}`
+    await addRemoteItems(dbId, items, this.requests.take(key, items))
+    this.requests.done(key)
   }
 
   /**
-   * Adds scanned items in receipt order. Returns how many were added, so after a failure
-   * the caller can keep the rest for another try.
+   * Adds scanned or typed items in receipt order. Returns how many were added (all or none), so after a failure
+   * the caller can keep them for another try.
    */
   async addItems(items: { name: string; quantity: number; unitPrice: number }[]) {
     const bill = this.bill
@@ -454,15 +480,9 @@ class AppStore {
     this.pendingActions = { ...this.pendingActions, items: true }
     let added = 0
     try {
-      try {
-        await addRemoteItems(bill.dbId, items)
-        added = items.length
-      } catch (error) {
-        // A server without add_items yet (PGRST202: no such function) gets the rows one by one, as before.
-        if ((error as { code?: string } | null)?.code !== 'PGRST202') throw error
-        for (const entry of items) { await addRemoteItem(bill.dbId, entry.name, entry.quantity, entry.unitPrice); added++ }
-      }
-    } catch (error) { this.fail(error, added ? `Добавлено ${added} из ${items.length} позиций` : 'Не удалось добавить позиции') }
+      await this.sendItems(bill.dbId, items)
+      added = items.length
+    } catch (error) { this.fail(error, 'Не удалось добавить позиции') }
     finally { await this.refresh(); const { items: _, ...rest } = this.pendingActions; this.pendingActions = rest }
     return added
   }
