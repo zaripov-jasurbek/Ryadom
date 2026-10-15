@@ -87,10 +87,17 @@ function paperPath(ctx: CanvasRenderingContext2D, x: number, y: number, width: n
   ctx.closePath()
 }
 
+/** roundRect arrived in Safari 16; an older phone gets square corners instead of no picture. */
+function rounded(ctx: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, radius: number) {
+  ctx.beginPath()
+  if (ctx.roundRect) ctx.roundRect(x, y, width, height, radius)
+  else ctx.rect(x, y, width, height)
+}
+
 function pill(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, [background, color]: [string, string]) {
   ctx.font = `600 16px ${sans}`
   const width = ctx.measureText(text).width + 24
-  ctx.fillStyle = background; ctx.beginPath(); ctx.roundRect(x, y, width, 30, 15); ctx.fill()
+  ctx.fillStyle = background; rounded(ctx, x, y, width, 30, 15); ctx.fill()
   ctx.fillStyle = color; ctx.textBaseline = 'middle'; ctx.fillText(text, x + 12, y + 16); ctx.textBaseline = 'alphabetic'
 }
 
@@ -106,7 +113,7 @@ function paint(ctx: CanvasRenderingContext2D, bill: Bill, total: number, totals:
 
   // Brand and date
   let y = 60 + 64
-  ctx.fillStyle = '#cce59a'; ctx.beginPath(); ctx.roundRect(x, y, 44, 44, 13); ctx.fill()
+  ctx.fillStyle = '#cce59a'; rounded(ctx, x, y, 44, 44, 13); ctx.fill()
   ctx.fillStyle = '#2d3b1b'; ctx.font = `700 28px ${serif}`; ctx.textAlign = 'center'; ctx.fillText('р', x + 22, y + 31)
   ctx.textAlign = 'left'; ctx.fillStyle = ink; ctx.fillText('рядом', x + 58, y + 32)
   ctx.fillStyle = muted; ctx.font = `20px ${sans}`; ctx.textAlign = 'right'
@@ -177,7 +184,8 @@ export function saveImage(bill: Bill, total: number, totals: ParticipantTotal[],
   const title = bill.title
   const scrap = document.createElement('canvas').getContext('2d'); if (!scrap) return
   const width = 1080, height = Math.ceil(paint(scrap, bill, total, totals, ownerId, 1))
-  const scale = Math.min(3, Math.max(2, window.devicePixelRatio || 1))
+  // iOS Safari draws nothing on a canvas over 16.7 million pixels, so a long check gets a lower scale.
+  const scale = Math.min(3, Math.max(2, window.devicePixelRatio || 1), Math.sqrt(16_000_000 / (width * height)))
   const canvas = document.createElement('canvas')
   canvas.width = width * scale; canvas.height = height * scale
   const ctx = canvas.getContext('2d'); if (!ctx) return

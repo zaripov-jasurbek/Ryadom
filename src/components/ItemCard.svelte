@@ -56,7 +56,8 @@
   /** Everything on one line and nothing cut at the edge. */
   function fits(row: HTMLElement) {
     const cars = [...row.children] as HTMLElement[]
-    return row.scrollWidth <= row.clientWidth + 1 && (!cars.length || cars.at(-1)!.offsetTop === cars[0].offsetTop)
+    // Groups of different heights sit centred on a line, so "the same line" allows half a group of difference.
+    return row.scrollWidth <= row.clientWidth + 1 && (!cars.length || cars.at(-1)!.offsetTop < cars[0].offsetTop + cars[0].offsetHeight / 2)
   }
   function fit() {
     if (!train || !train.isConnected) return
@@ -68,6 +69,7 @@
   }
   let trainWidth = 0
   function watchWidth(row: HTMLDivElement) {
+    trainWidth = 0
     const observer = new ResizeObserver(([entry]) => {
       const width = Math.round(entry.contentRect.width)
       if (width === trainWidth) return
@@ -77,8 +79,10 @@
     observer.observe(row)
     return () => observer.disconnect()
   }
-  // Someone joins or leaves a group: start again from full names.
-  $effect(() => { void groups; void tick().then(fit) })
+  // Someone joins or leaves a group: start again from full names. Only a real change re-measures:
+  // every realtime reload rebuilds the groups, and a long check would measure every line each time.
+  const groupsShape = $derived(groups.map(group => `${group.key}:${group.units.length}`).join('|'))
+  $effect(() => { void groupsShape; void tick().then(fit) })
   const maxFaces = $derived(density === 'stack' ? 4 : 8)
   const withMe = (group: Group) => Boolean(me) && group.people.some(person => person.id === me)
   // "⅓" when a serving is split, "× 2" when there are several such servings.
@@ -157,7 +161,7 @@
           {@const label = groupLabel(group)}
           {@const names = groupNames(group)}
           {#if stepper && me}
-            <button type="button" class="car group" class:with-me={withMe(group)} class:pop={tapped === `group:${group.key}`} aria-label={label ? `${names} · ${label}` : names} title={withMe(group) ? 'Не делить эту порцию' : `Поделить порцию: ${names}`} disabled={groupUnit(group) === undefined} {@attach tactile} onclick={() => tapGroup(group)}>{@render faces(group)}{#if label}<span class="group-share">{label}</span>{/if}</button>
+            <button type="button" class="car group" class:with-me={withMe(group)} class:pop={tapped === `group:${group.key}`} aria-label={label ? `${names} · ${label}` : names} title={withMe(group) ? (group.people.length > 1 ? 'Не делить эту порцию' : 'Убрать одну порцию') : `Поделить порцию: ${names}`} disabled={groupUnit(group) === undefined} {@attach tactile} onclick={() => tapGroup(group)}>{@render faces(group)}{#if label}<span class="group-share">{label}</span>{/if}</button>
           {:else}
             <span class="car group" class:with-me={withMe(group)} role="img" aria-label={label ? `${names} · ${label}` : names} title={names}>{@render faces(group)}{#if label}<span class="group-share">{label}</span>{/if}</span>
           {/if}
