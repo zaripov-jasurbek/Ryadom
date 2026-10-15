@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.7.0](https://github.com/zaripov-jasurbek/Ryadom/compare/v2.6.0...v2.7.0) (2026-10-15)
+
+
+### Новое
+
+* **check:** понятнее цена, мой аватар, детали, адаптивные имена, чип «На всех», новая картинка ([#39](https://github.com/zaripov-jasurbek/Ryadom/issues/39)) ([ebec17a](https://github.com/zaripov-jasurbek/Ryadom/commit/ebec17ac9b8e8975ca1972024470332f7bbc6f15))
+
 ## [2.6.0](https://github.com/zaripov-jasurbek/Ryadom/compare/v2.5.0...v2.6.0) (2026-10-15)
 
 
