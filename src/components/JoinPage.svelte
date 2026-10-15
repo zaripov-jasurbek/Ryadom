@@ -15,11 +15,15 @@
   // The field scolds only after the first try, then as the name is fixed.
   let tried = $state(false)
   let serverProblem = $state('')
+  // A try failed but was not refused, so this browser may already be at the table under the typed name, in what
+  // looks like the last place: the server decides by the saved token, and the page checks only the name itself.
+  let retrying = $state(false)
 
   const taken = $derived(preview?.participants ?? [])
+  const others = $derived(retrying ? [] : taken)
   const expected = $derived(preview?.expected_guests ?? null)
-  const full = $derived(expected !== null && taken.length >= expected)
-  const problem = $derived(serverProblem || (tried ? nameProblem(name, taken) : ''))
+  const full = $derived(!retrying && expected !== null && taken.length >= expected)
+  const problem = $derived(serverProblem || (tried ? nameProblem(name, others) : ''))
 
   async function open() {
     error = ''
@@ -33,9 +37,10 @@
 
   async function join() {
     tried = true; serverProblem = ''
-    if (nameProblem(name, taken) || full || app.isPending('join')) return
+    if (nameProblem(name, others) || full || app.isPending('join')) return
     const failure = await app.joinSharedCheck(name)
     if (!failure) return
+    retrying = app.hasJoinToken()
     // Someone took the name or the last place a moment ago: show it here and refresh who is at the table.
     serverProblem = failure
     const fresh = await app.previewCheck().catch(() => preview)

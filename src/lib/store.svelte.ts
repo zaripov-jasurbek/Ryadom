@@ -383,6 +383,13 @@ class AppStore {
    */
   needsName() { return Boolean(this.joinPublicId) && !this.token && !readStorage(guestKey(this.joinPublicId)) }
 
+  /**
+   * A join that failed without the server refusing it (a lost answer, a dropped network) keeps its token, and the
+   * server may already have made the guest. The next try then goes in by that token, so the join page must not
+   * hold it back over a name or a place that may be this guest's own.
+   */
+  hasJoinToken() { return Boolean(this.joinPublicId) && !this.token && Boolean(readStorage(guestKey(this.joinPublicId))) }
+
   /** The check's name, who is there and how many are expected, for the join page; null if it is gone. */
   previewCheck() { return previewRemoteCheck(this.joinPublicId) }
 

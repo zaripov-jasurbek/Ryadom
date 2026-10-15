@@ -521,6 +521,14 @@ describe('named joining and the guest limit', () => {
     assert.deepEqual(await t.names(), ['Jasur', 'Азиз Каримов'])
   })
 
+  it('treats tabs and line breaks around a name like spaces', async () => {
+    const t = await create()
+    await join(t.check.public_id, '\tАзиз\n')
+    await assert.rejects(join(t.check.public_id, '\nазиз'), /Name taken/)
+    await assert.rejects(join(t.check.public_id, '\t\n'), /Invalid participant name/)
+    assert.deepEqual(await t.names(), ['Jasur', 'Азиз'])
+  })
+
   it('lets the same browser back in with its token even though its name is taken by itself', async () => {
     const t = await create()
     const sessionToken = token()
