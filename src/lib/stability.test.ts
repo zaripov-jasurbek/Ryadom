@@ -32,9 +32,9 @@ describe('reloading onto a new build', () => {
     assert.equal(shouldReloadForUpdate(false, null, 1_000_000), false)
   })
 
-  it('says a file of an older build is an update, not a lost connection', () => {
+  it('names a part of the app that did not load, offline or after a deploy', () => {
     for (const text of ['Failed to fetch dynamically imported module: https://x/assets/a.js', 'Importing a module script failed.', 'error loading dynamically imported module'])
-      assert.equal(errorMessage(new TypeError(text), 'x'), 'Вышла новая версия — обновите страницу')
+      assert.equal(errorMessage(new TypeError(text), 'x'), 'Не удалось загрузить часть приложения — проверьте интернет и обновите страницу')
     assert.equal(errorMessage(new TypeError('Failed to fetch'), 'x'), 'Нет интернета — проверьте подключение и попробуйте ещё раз')
   })
 })

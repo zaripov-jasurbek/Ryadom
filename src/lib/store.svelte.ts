@@ -104,8 +104,11 @@ class AppStore {
   private remote: RemoteSubscription | null = null
   /** Ids that let the server recognise a repeated creation or addition (see requests.ts). */
   private requests = new RepeatIds()
-  /** The secret and name of the check being created, kept until it is made, so a repeat gets the same check. */
-  private creating: { ownerToken: string; ownerName: string } | null = null
+  /**
+   * The secret, name and title of the check being created, kept until it is made, so a repeat gets the same check.
+   * The title is kept too: it names the meal by the hour, and a repeat at 11:00 must not turn «Завтрак» into «Обед».
+   */
+  private creating: { ownerToken: string; ownerName: string; title: string } | null = null
   private refreshSeq = 0
   /** The state each serving should end in, by the viewer's last tap on it, while its request is on the way. */
   private wantedUnits = new Map<string, boolean>()
@@ -340,12 +343,12 @@ class AppStore {
   async createBill(servicePercent: number, items: { name: string; quantity: number; unitPrice: number }[]): Promise<string> {
     if (this.isPending('create')) return ''
     // A name typed in an earlier check, or letters nobody has to make up; the title is the meal and the date.
-    this.creating ??= { ownerToken: crypto.randomUUID(), ownerName: this.savedName || randomName() }
-    const { ownerToken, ownerName } = this.creating, title = defaultTitle()
+    this.creating ??= { ownerToken: crypto.randomUUID(), ownerName: this.savedName || randomName(), title: defaultTitle() }
+    const { ownerToken, ownerName, title } = this.creating
     let bill: Bill | undefined, failure = ''
     await this.track('create', async () => {
       try {
-        const created = await createRemoteCheck(title, servicePercent, ownerName, ownerToken, '', null, this.requests.take('create', [ownerToken, title, servicePercent]))
+        const created = await createRemoteCheck(title, servicePercent, ownerName, ownerToken, '', null, this.requests.take('create', [ownerToken, servicePercent]))
         bill = { id: created.public_id, dbId: created.id, title, servicePercent, ownerId: created.participant_id, participants: [{ id: created.participant_id, name: ownerName, mark: 'none', markedFor: 0 }], items: [], createdAt: new Date().toISOString(), ownerToken }
       } catch (error) { console.error(error); failure = errorMessage(error, 'Не удалось создать чек'); return }
       // The items go in before the check opens. If they fail, the page keeps them, and the same button tries again:
