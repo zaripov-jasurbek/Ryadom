@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { tick } from 'svelte'
+  import { cancelFit, requestFit, type Fitter } from '../lib/fit'
   import { formatAmount, isUnitAssigned, sharedAllInfo, type BillItem, type Participant } from '../lib/calculations'
   import { initial, portionCount } from '../lib/format'
   import { app } from '../lib/store.svelte'
@@ -17,29 +19,32 @@
 
   // Servings split by hand in older checks keep their amounts; nobody can tap them any more.
   const isCustom = (unit: number) => item.unitModes?.[String(unit)] === 'custom'
-  function consumers(unit: number) {
+  // Who has each serving, worked out once per change: the controls below ask it many times per serving,
+  // and on a big table (50 people, 10 servings) asking afresh each time made a line slow to draw.
+  const unitPeople = $derived(units.map(unit => {
     const key = String(unit), custom = isCustom(unit) ? item.unitCustomAmounts?.[key] : undefined
-    return everyone.filter(person => custom ? (custom[person.id] ?? 0) > 0 : item.unitSelections[key]?.includes(person.id))
-  }
+    const chosen = new Set(item.unitSelections[key] ?? [])
+    return everyone.filter(person => custom ? (custom[person.id] ?? 0) > 0 : chosen.has(person.id))
+  }))
+  const consumers = (unit: number) => unitPeople[unit] ?? []
   const has = (unit: number, id: string) => consumers(unit).some(person => person.id === id)
   const tappable = (unit: number) => !isCustom(unit)
 
-  // Each person's servings: a shared one counts as a part, so "Бек 4½" when one of five is split in two.
-  const counts = $derived(everyone.map(person => ({ person, count: units.reduce((sum, unit) => { const list = consumers(unit); return list.some(entry => entry.id === person.id) ? sum + 1 / list.length : sum }, 0) })).filter(entry => entry.count > 0))
-  const mine = $derived(counts.find(entry => entry.person.id === me)?.count ?? 0)
+  // Your servings: a shared one counts as a part, so 4½ when one of five is split in two.
+  const mine = $derived(me ? units.reduce((sum, unit) => { const list = consumers(unit); return list.some(entry => entry.id === me) ? sum + 1 / list.length : sum }, 0) : 0)
   const free = $derived(units.filter(unit => tappable(unit) && !consumers(unit).length))
   // A serving nobody has marked yet: the line gets a pulsing dot, like an unread chat.
   const open = $derived(units.some(unit => !isUnitAssigned(item, unit)))
   // "−" first gives back a serving this person had alone, the last one first.
   const giveBack = $derived(me ? units.filter(unit => tappable(unit) && has(unit, me)).sort((a, b) => consumers(a).length - consumers(b).length || b - a)[0] : undefined)
   // Servings eaten by the same people form one group: one stack of avatars shows who shares with whom.
-  // Servings the viewer has alone are left to the stepper and the "Я" toggle.
+  // The viewer's own servings are a group too, so you see yourself on the line, not only in the stepper.
   type Group = { key: string; people: Participant[]; units: number[] }
   const groups = $derived.by(() => {
     const byPeople = new Map<string, Group>()
     for (const unit of units) {
       const people = consumers(unit)
-      if (!people.length || (people.length === 1 && people[0].id === me)) continue
+      if (!people.length) continue
       const key = people.map(person => person.id).join(',')
       const group = byPeople.get(key)
       if (group) group.units.push(unit)
@@ -47,7 +52,41 @@
     }
     return [...byPeople.values()]
   })
-  const maxFaces = 4
+  // How much of each person fits: full names while there is room, then avatars side by side,
+  // then avatars overlapping with "+N". Measured on the line itself, so a wide screen keeps the names.
+  const densities = ['names', 'faces', 'stack'] as const
+  let density = $state<(typeof densities)[number]>('names')
+  let train: HTMLDivElement | undefined = $state()
+  /** Everything on one line and nothing cut at the edge. */
+  function fits(row: HTMLElement) {
+    const cars = [...row.children] as HTMLElement[]
+    // Groups of different heights sit centred on a line, so "the same line" allows half a group of difference.
+    return row.scrollWidth <= row.clientWidth + 1 && (!cars.length || cars.at(-1)!.offsetTop < cars[0].offsetTop + cars[0].offsetHeight / 2)
+  }
+  const fitter: Fitter = {
+    levels: densities.length,
+    set: level => density = densities[level],
+    fits: () => !train || !train.isConnected || fits(train),
+  }
+  function fit() { if (train?.isConnected) requestFit(fitter) }
+  $effect(() => () => cancelFit(fitter))
+  let trainWidth = 0
+  function watchWidth(row: HTMLDivElement) {
+    trainWidth = 0
+    const observer = new ResizeObserver(([entry]) => {
+      const width = Math.round(entry.contentRect.width)
+      if (width === trainWidth) return
+      trainWidth = width
+      fit()
+    })
+    observer.observe(row)
+    return () => observer.disconnect()
+  }
+  // Someone joins or leaves a group: start again from full names. Only a real change re-measures:
+  // every realtime reload rebuilds the groups, and a long check would measure every line each time.
+  const groupsShape = $derived(groups.map(group => `${group.key}:${group.units.length}`).join('|'))
+  $effect(() => { void groupsShape; void tick().then(fit) })
+  const maxFaces = $derived(density === 'stack' ? 4 : 8)
   const withMe = (group: Group) => Boolean(me) && group.people.some(person => person.id === me)
   // "⅓" when a serving is split, "× 2" when there are several such servings.
   function groupLabel(group: Group) {
@@ -55,7 +94,8 @@
     const times = group.units.length > 1 ? `× ${group.units.length}` : ''
     return [share, times].filter(Boolean).join(' ')
   }
-  const groupNames = (group: Group) => group.people.map(person => person.id === me ? 'вы' : person.name).join(', ')
+  const nameOf = (person: Participant) => person.id === me ? 'вы' : person.name
+  const groupNames = (group: Group) => group.people.map(nameOf).join(', ')
   // A tap on a group the viewer is in gives back one of its servings; on anyone else's, joins one of them.
   const groupUnit = (group: Group) => group.units.filter(tappable).at(withMe(group) ? -1 : 0)
   const tapGroup = (group: Group) => tap(`group:${group.key}`, groupUnit(group))
@@ -91,8 +131,8 @@
 
 {#snippet faces(group: Group)}
   <span class="faces" aria-hidden="true">
-    {#each group.people.slice(0, group.people.length > maxFaces ? maxFaces - 1 : maxFaces) as person (person.id)}<b class="tone-{app.tone(person.id)}">{app.avatar(person)}</b>{/each}
-    {#if group.people.length > maxFaces}<b class="more">+{group.people.length - maxFaces + 1}</b>{/if}
+    {#each group.people.slice(0, group.people.length > maxFaces ? maxFaces - 1 : maxFaces) as person (person.id)}<span class="face"><b class="tone-{app.tone(person.id)}">{app.avatar(person)}</b>{#if density === 'names' && person.id !== me}<span class="face-name">{nameOf(person)}</span>{/if}</span>{/each}
+    {#if group.people.length > maxFaces}<span class="face"><b class="more">+{group.people.length - maxFaces + 1}</b></span>{/if}
   </span>
 {/snippet}
 
@@ -116,15 +156,15 @@
 
   <div class="bill-controls">
     {#if sharedAll}
-      <span class="train-note">На всех · по {formatAmount(share.perPerson)}</span>
+      <span class="train-note">Поровну на {parts} · по {formatAmount(share.perPerson)}</span>
     {:else}
       <!-- One stack of avatars per group of servings; the groups wrap to a new line instead of scrolling sideways. -->
-      <div class="train" role="group" aria-label="Кто отметил">
+      <div class="train d-{density}" role="group" aria-label="Кто отметил" bind:this={train} {@attach watchWidth}>
         {#each groups as group (group.key)}
           {@const label = groupLabel(group)}
           {@const names = groupNames(group)}
           {#if stepper && me}
-            <button type="button" class="car group" class:with-me={withMe(group)} class:pop={tapped === `group:${group.key}`} aria-label={label ? `${names} · ${label}` : names} title={withMe(group) ? 'Не делить эту порцию' : `Поделить порцию: ${names}`} disabled={groupUnit(group) === undefined} {@attach tactile} onclick={() => tapGroup(group)}>{@render faces(group)}{#if label}<span class="group-share">{label}</span>{/if}</button>
+            <button type="button" class="car group" class:with-me={withMe(group)} class:pop={tapped === `group:${group.key}`} aria-label={label ? `${names} · ${label}` : names} title={withMe(group) ? (group.people.length > 1 ? 'Не делить эту порцию' : 'Убрать одну порцию') : `Поделить порцию: ${names}`} disabled={groupUnit(group) === undefined} {@attach tactile} onclick={() => tapGroup(group)}>{@render faces(group)}{#if label}<span class="group-share">{label}</span>{/if}</button>
           {:else}
             <span class="car group" class:with-me={withMe(group)} role="img" aria-label={label ? `${names} · ${label}` : names} title={names}>{@render faces(group)}{#if label}<span class="group-share">{label}</span>{/if}</span>
           {/if}
@@ -145,7 +185,9 @@
         {/if}
       {/if}
       <!-- Only the creator splits among everyone; then nobody can mark the item until they switch it off. -->
-      {#if app.isOwner && (sharedAll || parts > 1)}
+      {#if !app.isOwner && sharedAll}
+        <span class="everyone-chip" title={`Поровну на всех: по ${formatAmount(share.perPerson)} с каждого`}><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.2" /><circle cx="16.5" cy="9" r="2.6" /><path d="M3 19c.6-3.3 3-5 6-5s5.4 1.7 6 5M14.5 14.2c2.9-.4 5.6 1 6.5 4.8" /></svg>На всех</span>
+      {:else if app.isOwner && (sharedAll || parts > 1)}
         <button class="mine-toggle everyone" class:active={sharedAll} aria-pressed={sharedAll} title="На всех" disabled={app.isPending(`item:${item.id}`)} {@attach tactile} onclick={toggleEveryone}>{sharedAll ? '✓ Все' : 'Все'}</button>
       {/if}
     </div>

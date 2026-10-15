@@ -66,7 +66,7 @@
 <svelte:window onresize={refit} />
 
 <div class="item-table">
-  <div class="bill-line bill-head draft-line" aria-hidden="true"><span>Название</span><span class="bill-qty">Кол-во</span><span class="bill-price">Цена</span><span></span></div>
+  <div class="bill-line bill-head draft-line" aria-hidden="true"><span>Название</span><span class="bill-qty">Кол-во</span><span class="bill-price">За шт.</span><span></span></div>
   <div class="draft-rows" bind:this={table}>
     {#each rows as row, i (row.id)}
       <div class="bill-line draft-line draft-row" class:suspect={row.suspect} class:invalid={touched.has(row.id) && !blankRow(row) && !validRow(row)} onfocusout={(e) => { if (e.currentTarget.contains(e.relatedTarget as Node | null)) return; touched.add(row.id); touched = new Set(touched) }}>

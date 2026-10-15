@@ -69,8 +69,8 @@ p { margin: 0; }
 /* Placeholders are examples in the muted grey, which is still readable on a field. */
 :is(input, textarea)::placeholder { color: var(--muted); opacity: 1; }
 /* Small controls keep their drawn size; an invisible margin around them makes a finger-sized (44px) target. */
-.icon-button, .portion-stepper button, .mine-toggle, .face-stack, button.pay-marks, .ghost-button, .chip, .add-more, .back-link, .modal-close { position: relative; }
-:is(.icon-button, .portion-stepper button, .mine-toggle, .face-stack, button.pay-marks, .ghost-button, .chip, .add-more, .back-link, .modal-close)::after { content: ''; position: absolute; inset: var(--hit, 0); }
+.icon-button, .portion-stepper button, .mine-toggle, .face-stack, button.pay-marks, .ghost-button, .chip, .add-more, .back-link, .modal-close, .details-toggle { position: relative; }
+:is(.icon-button, .portion-stepper button, .mine-toggle, .face-stack, button.pay-marks, .ghost-button, .chip, .add-more, .back-link, .modal-close, .details-toggle)::after { content: ''; position: absolute; inset: var(--hit, 0); }
 .icon { width: 1.2em; height: 1.2em; flex: none; }
 .muted { color: var(--muted); font-size: 13px; }
 .eyebrow { font-size: 12px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
@@ -288,10 +288,17 @@ button.car:disabled { opacity: 1; cursor: default; }
 /* One group of servings: the avatars of the people sharing it, stacked, and their share after them. */
 .car.group { display: inline-flex; align-items: center; gap: 6px; padding: 3px; background: var(--field); color: var(--ink-soft); }
 .car.group:has(.group-share) { padding-right: 10px; }
-.faces { display: flex; }
-:where(.faces) b { width: 28px; height: 28px; margin-left: -8px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700; border: 2px solid var(--field); background: var(--tone-0); color: var(--tone-0-ink); }
-.faces b:first-child { margin-left: 0; }
+.faces { display: flex; align-items: center; }
+.face { flex: none; display: inline-flex; align-items: center; min-width: 0; }
+:where(.faces) b { width: 28px; height: 28px; flex: none; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700; border: 2px solid var(--field); background: var(--tone-0); color: var(--tone-0-ink); }
 .faces b.more { background: var(--border); color: var(--ink-soft); font-size: 11px; }
+/* Three densities, chosen by what fits on the line: names beside avatars, avatars side by side, avatars overlapping. */
+.d-names .faces { gap: 10px; }
+.d-names .face { gap: 5px; }
+.face-name { max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; color: var(--ink); }
+.d-names .face:last-child .face-name { padding-right: 4px; }
+.d-faces .faces { gap: 2px; }
+.d-stack .face + .face { margin-left: -8px; }
 .group-share { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .train-note { flex: none; font-size: 13px; color: var(--muted); white-space: nowrap; }
 .bill-controls > .train-note { flex: 1 1 140px; }
@@ -299,6 +306,9 @@ button.car:disabled { opacity: 1; cursor: default; }
 .bill-actions { flex: none; display: flex; align-items: center; gap: 8px; margin-left: auto; }
 .bill-actions:empty { display: none; }
 .bill-controls .mine-toggle { flex: none; }
+/* For guests: the creator split this line among everyone, so there is nothing to mark. */
+.everyone-chip { flex: none; display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 0 12px 0 10px; border-radius: 999px; background: var(--accent); color: var(--accent-ink); font-size: 13px; font-weight: 650; white-space: nowrap; }
+.everyone-chip svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
 .bill-tools { display: flex; justify-content: space-between; margin: 0 -10px -10px; }
 .bill-sum { margin: 10px 0 0; display: grid; gap: 4px; font-size: 14px; color: var(--ink-soft); }
 .bill-sum > div { display: flex; justify-content: space-between; gap: 12px; }
@@ -379,6 +389,15 @@ button.car:disabled { opacity: 1; cursor: default; }
 .summary-person-main { width: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 10px 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; }
 .summary-person-name { flex: 1; min-width: 0; display: grid; gap: 2px; }
 .summary-person-name b { font-size: 15px; }
+.summary-person-name { justify-items: start; }
+/* What the amount is made of: a small toggle under the name, the lines under the whole row. */
+.details-toggle { display: inline-flex; align-items: center; gap: 3px; padding: 0; border: 0; background: none; font-size: 13px; font-weight: 600; color: var(--brand); --hit: -8px -6px; }
+.details-caret { display: inline-block; font-size: 11px; transition: transform .18s; }
+.details-toggle[aria-expanded="true"] .details-caret { transform: rotate(180deg); }
+.person-details { margin: -6px 0 10px 44px; padding: 0; list-style: none; display: grid; gap: 6px; font-size: 14px; color: var(--muted); animation: fade .12s ease-out; }
+.person-details li { display: flex; justify-content: space-between; gap: 12px; }
+.person-details span { min-width: 0; overflow-wrap: anywhere; }
+.person-details b { flex: none; font-weight: 500; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
 .summary-person-total { display: flex; align-items: center; gap: 6px; }
 .summary-person-total b { font-size: 16px; font-variant-numeric: tabular-nums; }
 /* Two ticks, grey until set: the guest turns the first green, the creator's confirmation turns both green. */
