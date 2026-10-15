@@ -37,15 +37,17 @@
     {@const reviewable = app.isOwner && !payer && (person.due > 0 || person.mark === 'confirmed')}
     {@const first = marked(person) || person.mark === 'confirmed'}
     {@const both = person.mark === 'confirmed'}
-    {@const lines = detailItems(app.bill!, person)}
     {@const open = opened.has(person.id)}
+    <!-- Worked out only for an opened row: with 50 people and 100 dishes, all of them on every update was slow. -->
+    {@const lines = open ? detailItems(app.bill!, person) : []}
+    {@const hasDetails = person.subtotal > 0 || person.service > 0}
     {@const label = both ? 'Оплата подтверждена' : first ? 'Оплатил, ждёт подтверждения' : 'Не оплачено'}
     <div class="summary-person" class:is-me={app.selectedPerson === person.id}>
       <div class="summary-person-main">
         <span class="person-avatar tone-{app.tone(person.id)}">{app.avatar(person)}</span>
         <span class="summary-person-name">
           <b>{app.label(person)}</b>
-          {#if lines.length}<button type="button" class="details-toggle" aria-expanded={open} aria-controls={`details-${person.id}`} onclick={() => toggleDetails(person.id)}>Детали <span class="details-caret" aria-hidden="true">▾</span></button>{/if}
+          {#if hasDetails}<button type="button" class="details-toggle" aria-expanded={open} aria-controls={`details-${person.id}`} onclick={() => toggleDetails(person.id)}>Детали <span class="details-caret" aria-hidden="true">▾</span></button>{/if}
         </span>
         <span class="summary-person-total">
           <b>{formatUzs(person.due)}</b>

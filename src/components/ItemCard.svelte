@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { flushSync, tick } from 'svelte'
+  import { tick } from 'svelte'
+  import { cancelFit, requestFit, type Fitter } from '../lib/fit'
   import { formatAmount, isUnitAssigned, sharedAllInfo, type BillItem, type Participant } from '../lib/calculations'
   import { initial, portionCount } from '../lib/format'
   import { app } from '../lib/store.svelte'
@@ -18,16 +19,19 @@
 
   // Servings split by hand in older checks keep their amounts; nobody can tap them any more.
   const isCustom = (unit: number) => item.unitModes?.[String(unit)] === 'custom'
-  function consumers(unit: number) {
+  // Who has each serving, worked out once per change: the controls below ask it many times per serving,
+  // and on a big table (50 people, 10 servings) asking afresh each time made a line slow to draw.
+  const unitPeople = $derived(units.map(unit => {
     const key = String(unit), custom = isCustom(unit) ? item.unitCustomAmounts?.[key] : undefined
-    return everyone.filter(person => custom ? (custom[person.id] ?? 0) > 0 : item.unitSelections[key]?.includes(person.id))
-  }
+    const chosen = new Set(item.unitSelections[key] ?? [])
+    return everyone.filter(person => custom ? (custom[person.id] ?? 0) > 0 : chosen.has(person.id))
+  }))
+  const consumers = (unit: number) => unitPeople[unit] ?? []
   const has = (unit: number, id: string) => consumers(unit).some(person => person.id === id)
   const tappable = (unit: number) => !isCustom(unit)
 
-  // Each person's servings: a shared one counts as a part, so "Бек 4½" when one of five is split in two.
-  const counts = $derived(everyone.map(person => ({ person, count: units.reduce((sum, unit) => { const list = consumers(unit); return list.some(entry => entry.id === person.id) ? sum + 1 / list.length : sum }, 0) })).filter(entry => entry.count > 0))
-  const mine = $derived(counts.find(entry => entry.person.id === me)?.count ?? 0)
+  // Your servings: a shared one counts as a part, so 4½ when one of five is split in two.
+  const mine = $derived(me ? units.reduce((sum, unit) => { const list = consumers(unit); return list.some(entry => entry.id === me) ? sum + 1 / list.length : sum }, 0) : 0)
   const free = $derived(units.filter(unit => tappable(unit) && !consumers(unit).length))
   // A serving nobody has marked yet: the line gets a pulsing dot, like an unread chat.
   const open = $derived(units.some(unit => !isUnitAssigned(item, unit)))
@@ -59,14 +63,13 @@
     // Groups of different heights sit centred on a line, so "the same line" allows half a group of difference.
     return row.scrollWidth <= row.clientWidth + 1 && (!cars.length || cars.at(-1)!.offsetTop < cars[0].offsetTop + cars[0].offsetHeight / 2)
   }
-  function fit() {
-    if (!train || !train.isConnected) return
-    for (const level of densities) {
-      density = level
-      flushSync()
-      if (fits(train)) return
-    }
+  const fitter: Fitter = {
+    levels: densities.length,
+    set: level => density = densities[level],
+    fits: () => !train || !train.isConnected || fits(train),
   }
+  function fit() { if (train?.isConnected) requestFit(fitter) }
+  $effect(() => () => cancelFit(fitter))
   let trainWidth = 0
   function watchWidth(row: HTMLDivElement) {
     trainWidth = 0
