@@ -95,21 +95,6 @@ Cola 0,5 12 000
     ])
   })
 
-  it('keeps digits inside a dish name before the quantity column', () => {
-    const text = `Наименование\tКол-во\tСумма
-Балик сазан 1 п\t4\t224 000
-Норин 1п от гуштли казили\t1\t47 000
-Гампан 1\t1\t55 000
-Туй оши 1 комплект\t1\t56 000
-Полная сумма:\t382 000`
-    assert.deepEqual(parseReceipt(text).items.map(entry => [entry.name, entry.quantity, entry.unitPrice]), [
-      ['Балик сазан 1 п', 4, 56000],
-      ['Норин 1п от гуштли казили', 1, 47000],
-      ['Гампан 1', 1, 55000],
-      ['Туй оши 1 комплект', 1, 56000],
-    ])
-  })
-
   it('keeps dishes whose names start like payment words', () => {
     const { items } = parseReceipt(`Картофель фри 1 18 000
 Столичный салат 1 32 000

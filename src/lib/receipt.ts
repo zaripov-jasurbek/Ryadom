@@ -162,9 +162,8 @@ function parseLine(line: string): Parsed | null {
   if (!found.length) return null
   // Text after the price, as in "100135 Республика Узбекистан", means the number is not a price.
   if (letters(line.slice(found.at(-1)!.index).replace(currencyPattern, '')) >= 3) return null
+  const name = nameOrEmpty(line.slice(0, found[0].index), true)
   const values = found.map(entry => entry.value)
-  // The name runs up to the numbers read as quantity and price: "Норин 1п от гуштли казили 1 47 000" keeps its "1п от гуштли казили".
-  const nameUpTo = (count: number) => nameOrEmpty(line.slice(0, found.at(-Math.min(count, found.length))!.index), true)
   // A small fraction first, as in "Cola 0,5 12 000", is part of the name rather than a quantity.
   if (values.length >= 2 && !Number.isInteger(values[0]) && values[0] < 10) {
     const rest = parseLine(line.slice(found[1].index))
@@ -172,9 +171,8 @@ function parseLine(line: string): Parsed | null {
   }
   const result = (entry: ScannedItem | null, alt?: number): Parsed | null => entry && { ...entry, certain: false, ...(alt ? { alt } : {}) }
   const [a, b, c] = values.slice(-3)
-  if (values.length >= 3 && close(a * b, c)) return result(item(nameUpTo(3), a, b))
+  if (values.length >= 3 && close(a * b, c)) return result(item(name, a, b))
   if (values.length >= 2) {
-    const name = nameUpTo(2)
     const [previous, last] = values.slice(-2)
     if (isQuantity(previous)) {
       // "Плов 2 90 000" is most often a quantity and a line sum; the receipt's header or total settles it (see fitColumns).
@@ -184,7 +182,7 @@ function parseLine(line: string): Parsed | null {
     // "Плов 45 000 90 000": unit price and line total.
     if (isQuantity(last / previous)) return result(item(name, last / previous, previous))
   }
-  return result(item(nameUpTo(1), 1, values.at(-1)!))
+  return result(item(name, 1, values.at(-1)!))
 }
 
 function* combinations(size: number, count: number, from = 0): Generator<number[]> {
