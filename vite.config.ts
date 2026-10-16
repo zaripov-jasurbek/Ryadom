@@ -50,8 +50,23 @@ function tesseractAssets(): Plugin {
   }
 }
 
+/**
+ * Messengers need an absolute og:image URL; Vite only prefixes the base path. SITE_URL (with a trailing slash)
+ * overrides the address for a custom domain; otherwise a GitHub Pages build knows it from GITHUB_REPOSITORY.
+ */
+function sitePreview(): Plugin {
+  const site = process.env.SITE_URL?.replace(/\/?$/, '/') ?? (owner ? `https://${owner}.github.io${base}` : '')
+  return {
+    name: 'site-preview',
+    apply: 'build',
+    transformIndexHtml(html) {
+      return site ? html.replace(/(<meta property="og:image" content=")[^"]*?og-image\.png"/, `$1${site}og-image.png"`) : html
+    },
+  }
+}
+
 export default defineConfig({
-  plugins: [svelte(), tesseractAssets()],
+  plugins: [svelte(), tesseractAssets(), sitePreview()],
   base,
   define: {
     __APP_VERSION__: JSON.stringify(version),
