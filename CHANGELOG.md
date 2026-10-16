@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.8.3](https://github.com/zaripov-jasurbek/Ryadom/compare/v2.8.2...v2.8.3) (2026-10-16)
+
+
+### Исправления
+
+* **scan:** revert keeping digits inside dish names ([ce60f88](https://github.com/zaripov-jasurbek/Ryadom/commit/ce60f88bff146dd70d0a373bcb719dbf38ccefb6))
+
 ## [2.8.2](https://github.com/zaripov-jasurbek/Ryadom/compare/v2.8.1...v2.8.2) (2026-10-16)
 
 
