@@ -4,49 +4,25 @@ import { addRemoteItem, addRemoteItems, updateRemoteCheck, updateRemoteItem, sha
 import { checkPath, homePath, readOwnerToken, routeCheckId } from './routes'
 import { preloadSupabase } from './supabase'
 import { expiresAt } from './limits'
-import { markOf } from './snapshot'
 import { cleanName, defaultTitle, initial, randomName } from './format'
 import { shareOr } from './share'
 import { pickerHasCamera, pickPhoto } from './photo'
 import type { ItemRow } from './rows'
 import { RepeatIds } from './requests'
+import { billsKey, forgetDevice, guestToken, loadBills, parseBills, saveGuestToken, saveName, savePerson, savedName as readSavedName, savedPerson, updateBills } from './saved'
+import { UiState } from './ui.svelte'
 
 export type Mode = 'home' | 'create' | 'join' | 'check'
 /** A line of the check being made: what was typed or scanned, checked only when the check is created. */
 export type DraftRow = ItemRow
-export type ConfirmRequest = { title: string; body?: string; action: string; danger?: boolean; resolve: (answer: boolean) => void }
-const billsKey = 'billsplit:v1'
-const personKey = (billId: string) => `billsplit:person:${billId}`
-/** A guest's join token: this browser gets its participant back after losing its Supabase session. */
-const guestKey = (billId: string) => `billsplit:guest:${billId}`
-const nameKey = 'billsplit:name'
-const nameHintKey = 'billsplit:name-hint-seen'
+export type { ConfirmRequest } from './ui.svelte'
 /** join_check errors raised before it adds anyone. */
 const refusedJoin = /Name taken|Invalid participant name|Guest limit reached|Participant limit reached/
-
-/** A participant as checks saved before payments became checkmarks keep them: the server's status and amount. */
-type SavedParticipant = Participant | (Omit<Participant, 'mark' | 'markedFor'> & { status?: string; paid?: number })
-const savedParticipant = (person: SavedParticipant): Participant =>
-  'mark' in person ? person : { id: person.id, name: person.name, mark: markOf(person.status), markedFor: Number(person.paid ?? 0) }
-
-function parseBills(raw: string | null): Bill[] | null {
-  if (raw === null) return null
-  try {
-    const bills = JSON.parse(raw) as (Omit<Bill, 'participants'> & { participants: SavedParticipant[] })[]
-    return bills.map(bill => ({ ...bill, participants: bill.participants.map(savedParticipant) }))
-  } catch { return null }
-}
-
-function readStorage(key: string) { try { return localStorage.getItem(key) } catch { return null } }
-function writeStorage(key: string, value: string | null) {
-  try { if (value === null) localStorage.removeItem(key); else localStorage.setItem(key, value) }
-  catch (error) { console.warn('localStorage unavailable', error) }
-}
 
 export const totalFood = (bill: Bill) => bill.items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0)
 export const grandTotal = (bill: Bill) => totalFood(bill) + serviceFee(totalFood(bill), bill.servicePercent)
 
-class AppStore {
+class AppStore extends UiState {
   bills = $state<Bill[]>([])
   bill = $state<Bill | null>(null)
   mode = $state<Mode>('home')
@@ -64,33 +40,14 @@ class AppStore {
   pendingActions = $state<Record<string, true>>({})
   /** False while the device has no network: taps would fail, so the page says so up front. */
   online = $state(typeof navigator === 'undefined' || navigator.onLine)
-  toast = $state('')
   pendingUnits = $state<Record<string, true>>({})
-  // Overlays live here so Escape can close whichever one is open.
-  addItemOpen = $state(false)
-  scanOpen = $state(false)
-  /** A photo already chosen for the scanner, so it starts at the frame instead of asking for one. */
-  scanFile = $state<File | null>(null)
   /** The check being made on the create page, before it exists on the server. */
   draft = $state<DraftRow[]>([])
   /** What the scanned receipt says the dishes add up to, to compare with the table. */
   draftTotal = $state<number | null>(null)
   draftService = $state<number | null>(null)
-  qrOpen = $state(false)
-  editingItem = $state<BillItem | null>(null)
-  checkEditOpen = $state(false)
-  /** The sheet with everyone at the table, opened from the avatars under the check's name. */
-  peopleOpen = $state(false)
-  /** The creator's sheet for the card or phone guests transfer to. */
-  payDetailsOpen = $state(false)
-  /** The sheet where you change the name others see, opened from the button next to the card. */
-  nameOpen = $state(false)
-  /** The open confirmation sheet; it replaces window.confirm, which looks foreign on phones. */
-  confirmRequest = $state<ConfirmRequest | null>(null)
-  /** True once this browser has opened the name sheet: until then your name at the bottom pulses to show it can change. */
-  nameHintSeen = $state(readStorage(nameHintKey) === '1')
   /** The name typed last time, so the next check does not ask for it again. */
-  savedName = $state(readStorage(nameKey) ?? '')
+  savedName = $state(readSavedName())
 
   totals = $derived(this.bill ? calculateTotals(this.bill) : [])
   billTotal = $derived(this.bill ? grandTotal(this.bill) : 0)
@@ -115,7 +72,6 @@ class AppStore {
   private reclaimed = new Set<string>()
   /** The anonymous account the open check was connected with; a different one means the session was lost. */
   private sessionUser = ''
-  private toastTimer: ReturnType<typeof setTimeout> | undefined
 
   isPending = (key: string) => Boolean(this.pendingActions[key])
 
@@ -135,11 +91,11 @@ class AppStore {
   label = (person: { id: string; name: string }) => this.isMe(person.id) ? 'Я' : person.name
   avatar = (person: { id: string; name: string }) => this.isMe(person.id) ? 'Я' : initial(person.name)
   personName = (id: string) => this.bill?.participants[this.participantIndex.get(id) ?? -1]?.name ?? 'Участник'
-  personOf = (billId: string) => readStorage(personKey(billId))
+  personOf = (billId: string) => savedPerson(billId)
   publicLink = () => this.bill ? `${location.origin}${checkPath(this.bill.id)}` : ''
 
   init() {
-    this.bills = parseBills(readStorage(billsKey)) ?? []
+    this.bills = loadBills() ?? []
     // The server deletes checks a few days after they were made; the list forgets them too, along with
     // checks from the old on-device demo mode, which have no server copy.
     for (const saved of this.bills.filter(entry => !entry.dbId || expiresAt(entry.createdAt).getTime() <= Date.now())) this.forgetBill(saved.id)
@@ -165,37 +121,12 @@ class AppStore {
     }
   }
 
-  notify(message: string) {
-    clearTimeout(this.toastTimer)
-    this.toast = message
-    this.toastTimer = setTimeout(() => this.toast = '', 2500)
-  }
-
   private fail(error: unknown, fallback: string) {
     console.error(error)
     this.notify(errorMessage(error, fallback))
   }
 
-  /** Asks in an in-app sheet; resolves false when it is dismissed or replaced by another question. */
-  confirm(request: Omit<ConfirmRequest, 'resolve'>) {
-    this.answerConfirm(false)
-    return new Promise<boolean>(resolve => { this.confirmRequest = { ...request, resolve } })
-  }
-
-  answerConfirm(answer: boolean) {
-    const request = this.confirmRequest
-    this.confirmRequest = null
-    request?.resolve(answer)
-  }
-
-  closeOverlays() { this.answerConfirm(false); this.addItemOpen = false; this.scanOpen = false; this.scanFile = null; this.qrOpen = false; this.editingItem = null; this.checkEditOpen = false; this.peopleOpen = false; this.payDetailsOpen = false; this.nameOpen = false }
-
-  openNameSheet() {
-    this.nameOpen = true
-    if (!this.nameHintSeen) { this.nameHintSeen = true; writeStorage(nameHintKey, '1') }
-  }
-
-  private rememberName(name: string) { this.savedName = name; writeStorage(nameKey, name) }
+  private rememberName(name: string) { this.savedName = name; saveName(name) }
 
   // ---- navigation ----
 
@@ -216,7 +147,7 @@ class AppStore {
 
   private show(bill: Bill, owner: boolean) {
     this.bill = bill; this.isOwner = owner; this.mode = 'check'
-    this.selectedPerson = readStorage(personKey(bill.id))
+    this.selectedPerson = savedPerson(bill.id)
     void this.connect(bill)
   }
 
@@ -238,8 +169,7 @@ class AppStore {
 
   /** Changes the saved list as it is stored now, so checks saved by another tab are not overwritten. */
   private updateBills(change: (bills: Bill[]) => Bill[]) {
-    this.bills = change(parseBills(readStorage(billsKey)) ?? this.bills)
-    writeStorage(billsKey, JSON.stringify(this.bills))
+    this.bills = updateBills(this.bills, change)
   }
 
   private save() {
@@ -258,7 +188,7 @@ class AppStore {
   /** Removes a check from this device's list only; it stays available to everyone else by its link. */
   forgetBill(id: string) {
     this.updateBills(bills => bills.filter(entry => entry.id !== id))
-    writeStorage(personKey(id), null); writeStorage(guestKey(id), null)
+    forgetDevice(id)
   }
 
   // ---- realtime ----
@@ -290,7 +220,7 @@ class AppStore {
     result.ownerToken = this.bills.find(entry => entry.id === result.id)?.ownerToken || this.token
     this.bill = result; this.isOwner = result.isOwner
     if (this.selectedPerson !== result.me) {
-      this.selectedPerson = result.me; writeStorage(personKey(result.id), result.me)
+      this.selectedPerson = result.me; savePerson(result.id, result.me)
       this.remote?.setPresence(this.presence('Просматривает чек'))
     }
     this.save()
@@ -321,13 +251,13 @@ class AppStore {
    */
   private async reclaim(id: string) {
     const ownerToken = this.bills.find(entry => entry.id === id)?.ownerToken || this.token
-    const guestToken = readStorage(guestKey(id))
-    if (this.reclaimed.has(id) || (!ownerToken && !guestToken)) return false
+    const guest = guestToken(id)
+    if (this.reclaimed.has(id) || (!ownerToken && !guest)) return false
     if (!ownerToken && await ensureAnonymousSession().catch(() => '') === this.sessionUser) return false
     this.reclaimed.add(id)
     try {
       if (ownerToken) await claimRemoteCheckOwner(id, ownerToken)
-      else await joinRemoteCheck(id, this.savedName || 'Гость', guestToken!)
+      else await joinRemoteCheck(id, this.savedName || 'Гость', guest!)
     } catch { return false }
     // The realtime channel was refused for the unknown session, so subscribe again; connect() reloads the check.
     if (this.bill?.id === id) await this.connect(this.bill)
@@ -361,7 +291,7 @@ class AppStore {
     if (!bill) return failure
     this.requests.done('create'); this.creating = null
     this.bill = bill; this.isOwner = true; this.token = ownerToken; this.mode = 'check'
-    this.selectedPerson = bill.participants[0].id; writeStorage(personKey(bill.id), this.selectedPerson)
+    this.selectedPerson = bill.participants[0].id; savePerson(bill.id, this.selectedPerson)
     history.pushState({}, '', checkPath(bill.id))
     this.save()
     this.draft = []; this.draftTotal = null; this.draftService = null
@@ -374,9 +304,6 @@ class AppStore {
 
   private draftSeq = 0
   newDraftRow = (): DraftRow => ({ id: this.draftSeq++, name: '', quantity: 1, price: null })
-
-  /** Opens the scanner on a photo; on the create page its rows land in the draft. */
-  scanPhoto(file: File) { this.scanFile = file; this.scanOpen = true }
 
   /**
    * A photo for the check being made, from a tap: the system picker where it offers the camera too (iPhone, computers),
@@ -400,14 +327,14 @@ class AppStore {
    * A browser that was in this check before (the creator's secret or a guest's join token) goes straight back in;
    * anyone new first says who they are.
    */
-  needsName() { return Boolean(this.joinPublicId) && !this.token && !readStorage(guestKey(this.joinPublicId)) }
+  needsName() { return Boolean(this.joinPublicId) && !this.token && !guestToken(this.joinPublicId) }
 
   /**
    * A join that failed without the server refusing it (a lost answer, a dropped network) keeps its token, and the
    * server may already have made the guest. The next try then goes in by that token, so the join page must not
    * hold it back over a name or a place that may be this guest's own.
    */
-  hasJoinToken() { return Boolean(this.joinPublicId) && !this.token && Boolean(readStorage(guestKey(this.joinPublicId))) }
+  hasJoinToken() { return Boolean(this.joinPublicId) && !this.token && Boolean(guestToken(this.joinPublicId)) }
 
   /** The check's name, who is there and how many are expected, for the join page; null if it is gone. */
   previewCheck() { return previewRemoteCheck(this.joinPublicId) }
@@ -426,7 +353,7 @@ class AppStore {
       let sessionToken: string = crypto.randomUUID()
       if (this.token) await claimRemoteCheckOwner(this.joinPublicId, this.token)
       // Saved before the request: if the answer is lost on the way, the next try finds the guest it made.
-      else { sessionToken = readStorage(guestKey(this.joinPublicId)) ?? sessionToken; writeStorage(guestKey(this.joinPublicId), sessionToken) }
+      else { sessionToken = guestToken(this.joinPublicId) ?? sessionToken; saveGuestToken(this.joinPublicId, sessionToken) }
       // Also before the request: if the answer is lost, the retry joins silently by token, and under this name.
       if (typedName !== undefined) this.rememberName(name)
       await joinRemoteCheck(this.joinPublicId, name, sessionToken)
@@ -438,7 +365,7 @@ class AppStore {
     } catch (error) {
       console.error(error)
       // The server made nobody: the token goes, so the next try asks for a name again instead of joining silently.
-      if (!this.token && refusedJoin.test(errorText(error))) writeStorage(guestKey(this.joinPublicId), null)
+      if (!this.token && refusedJoin.test(errorText(error))) saveGuestToken(this.joinPublicId, null)
       return errorMessage(error, 'Не удалось открыть чек')
     } finally { const { join: _, ...rest } = this.pendingActions; this.pendingActions = rest }
   }
@@ -562,7 +489,7 @@ class AppStore {
 
   async removeParticipant(person: Participant) {
     const removed = await this.mutate(`person:${person.id}`, 'Не удалось удалить участника', dbId => removeRemoteParticipant(dbId, person.id))
-    if (removed && this.selectedPerson === person.id && this.bill) { this.selectedPerson = null; writeStorage(personKey(this.bill.id), null) }
+    if (removed && this.selectedPerson === person.id && this.bill) { this.selectedPerson = null; savePerson(this.bill.id, null) }
   }
 
   async removeBill() {
