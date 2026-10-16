@@ -36,6 +36,7 @@ npm run dev
 - Клиент работает с базой только через RPC: прав на чтение и запись таблиц у `anon` и `authenticated` нет. В Realtime-канал чека участники пишут только presence; broadcast шлёт сама база.
 - Копирование сводки, сохранение изображения, печать в PDF и удаление закрытого чека.
 - GitHub Pages workflow с SPA fallback `404.html`.
+- Превью ссылки в мессенджерах: OG-теги в `index.html` и картинка `public/og-image.png` (1200×630). Мессенджерам нужен абсолютный адрес картинки, его при сборке подставляет плагин `sitePreview` в `vite.config.ts` из `GITHUB_REPOSITORY`; для своего домена задайте `SITE_URL` (например, `https://example.com/`).
 
 ## Проверки
 
