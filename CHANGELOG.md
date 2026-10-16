@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.8.2](https://github.com/zaripov-jasurbek/Ryadom/compare/v2.8.1...v2.8.2) (2026-10-16)
+
+
+### Исправления
+
+* **scan:** keep digits inside dish names before the quantity column ([0dd8e47](https://github.com/zaripov-jasurbek/Ryadom/commit/0dd8e47bd8520628a97cdc3465feb056c4f0d656))
+
 ## [2.8.1](https://github.com/zaripov-jasurbek/Ryadom/compare/v2.8.0...v2.8.1) (2026-10-16)
 
 
