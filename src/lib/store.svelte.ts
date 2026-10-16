@@ -131,13 +131,14 @@ class AppStore extends UiState {
   // ---- navigation ----
 
   private restoreRoute() {
-    const id = routeCheckId(location.pathname)
+    const id = routeCheckId(location.pathname, undefined, location.search)
     this.closeOverlays()
     if (!id) { this.disconnect(); this.bill = null; this.mode = 'home'; return }
     const { token } = readOwnerToken(location.search, location.hash)
     this.token = token
-    // An owner link from an earlier version: keep the secret in memory, not in the address bar where it gets copied.
-    if (token) history.replaceState(history.state, '', checkPath(id))
+    // An owner link from an earlier version keeps its secret in memory, not in the address bar where it gets copied;
+    // an old /check/<id> address becomes the ?c= form, so a link copied from the address bar gets a messenger preview.
+    if (token || location.pathname + location.search !== checkPath(id)) history.replaceState(history.state, '', checkPath(id))
     const found = this.bills.find(entry => entry.id === id)
     if (found) {
       if (!this.token) this.token = found.ownerToken

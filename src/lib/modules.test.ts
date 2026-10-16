@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { billStanding, calculateTotals, personItems, type Bill, type BillItem, type PaymentMark } from './calculations.ts'
-import { readOwnerToken, routeCheckId } from './routes.ts'
+import { basePath, checkPath, readOwnerToken, routeCheckId } from './routes.ts'
 import { errorMessage } from './errors.ts'
 import { detailLines, paymentLine, safeFileName } from './export.ts'
 import { nameProblem, paymentCopyValue, portionCount } from './format.ts'
@@ -26,6 +26,20 @@ describe('routes', () => {
     assert.equal(routeCheckId('/check/abc123', ''), 'abc123')
     assert.equal(routeCheckId('/', ''), null)
     assert.equal(routeCheckId('/check/', ''), null)
+  })
+  it('opens a check from ?c= on the home page and builds that link', () => {
+    assert.equal(routeCheckId('/bill_splitter/', '/bill_splitter', '?c=9ef53be1c59e8256fd'), '9ef53be1c59e8256fd')
+    assert.equal(routeCheckId('/bill_splitter', '/bill_splitter', '?c=abc'), 'abc')
+    assert.equal(routeCheckId('/bill_splitter/index.html', '/bill_splitter', '?v=2&c=abc'), 'abc')
+    assert.equal(routeCheckId('/', '', '?c=abc'), 'abc')
+    // Only on the home page, and only a plain id.
+    assert.equal(routeCheckId('/bill_splitter/other', '/bill_splitter', '?c=abc'), null)
+    assert.equal(routeCheckId('/bill_splitter/', '/bill_splitter', '?c='), null)
+    assert.equal(routeCheckId('/bill_splitter/', '/bill_splitter', '?c=a/b'), null)
+    assert.equal(routeCheckId('/bill_splitter/', '/bill_splitter', '?v=2'), null)
+    // An old /check/<id> link still opens its check.
+    assert.equal(routeCheckId('/bill_splitter/check/abc123', '/bill_splitter', '?c=other'), 'abc123')
+    assert.equal(checkPath('9ef53be1c59e8256fd'), `${basePath}/?c=9ef53be1c59e8256fd`)
   })
   it('reads the owner token from the fragment and from older ?p= links', () => {
     assert.deepEqual(readOwnerToken('', '#p=abc'), { token: 'abc', legacy: false })
