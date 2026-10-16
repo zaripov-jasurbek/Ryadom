@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.8.1](https://github.com/zaripov-jasurbek/Ryadom/compare/v2.8.0...v2.8.1) (2026-10-16)
+
+
+### Исправления
+
+* превью у ссылок на чек — адрес ?c= вместо /check/ ([#46](https://github.com/zaripov-jasurbek/Ryadom/issues/46)) ([6b0e48d](https://github.com/zaripov-jasurbek/Ryadom/commit/6b0e48d5e3ba95d5d992d39ae82a923156e0cbfd))
+
 ## [2.8.0](https://github.com/zaripov-jasurbek/Ryadom/compare/v2.7.0...v2.8.0) (2026-10-16)
 
 
