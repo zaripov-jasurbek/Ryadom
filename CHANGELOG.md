@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.8.0](https://github.com/zaripov-jasurbek/Ryadom/compare/v2.7.0...v2.8.0) (2026-10-16)
+
+
+### Новое
+
+* превью ссылки в Telegram и других мессенджерах ([#44](https://github.com/zaripov-jasurbek/Ryadom/issues/44)) ([3145b7a](https://github.com/zaripov-jasurbek/Ryadom/commit/3145b7a5a87965834a8b2861daa498e1d1079d89))
+
+
+### Исправления
+
+* **db:** id повторного запроса привязан к чеку ([#42](https://github.com/zaripov-jasurbek/Ryadom/issues/42)) ([c41aa20](https://github.com/zaripov-jasurbek/Ryadom/commit/c41aa205418dbbdf006e14dfb8a81e6196442679))
+
 ## [2.7.0](https://github.com/zaripov-jasurbek/Ryadom/compare/v2.6.0...v2.7.0) (2026-10-15)
 
 
