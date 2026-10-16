@@ -607,6 +607,31 @@ describe('repeated requests', () => {
     await assert.rejects(db.rpc(s.guest, 'add_item', { p_check_id: s.check.id, p_name: 'Чай', p_quantity: 1, p_unit_price: 5_000, p_request_id: requestId }), /Owner access required/)
   })
 
+  it('does not answer a request id with items from another check', async () => {
+    const s = await setup(db)
+    const second = await db.rpc<Created>(s.owner, 'create_check', { p_title: 'Обед', p_service_percent: 0, p_owner_name: 'Jasur', p_owner_token: token() })
+    const requestId = crypto.randomUUID()
+    const item = { p_name: 'Чай', p_quantity: 1, p_unit_price: 5_000, p_request_id: requestId }
+    await db.rpc(s.owner, 'add_item', { ...item, p_check_id: s.check.id })
+    await assert.rejects(db.rpc(s.owner, 'add_item', { ...item, p_check_id: second.id }), /Invalid request id/)
+    const receiptId = crypto.randomUUID()
+    const receipt = { p_items: [{ name: 'Сок', quantity: 1, unit_price: 15_000 }], p_request_id: receiptId }
+    await db.rpc(s.owner, 'add_items', { ...receipt, p_check_id: s.check.id })
+    await assert.rejects(db.rpc(s.owner, 'add_items', { ...receipt, p_check_id: second.id }), /Invalid request id/)
+    assert.equal(await count('select count(*) as n from public.items where check_id = $1', second.id), 0)
+  })
+
+  it('still replays an id remembered before ids were tied to a check', async () => {
+    const s = await setup(db)
+    const requestId = crypto.randomUUID()
+    const first = await db.rpc<string>(s.owner, 'add_item', { p_check_id: s.check.id, p_name: 'Чай', p_quantity: 1, p_unit_price: 5_000, p_request_id: requestId })
+    // The row as 202610150002 wrote it: the bare call name.
+    await db.query(`update public.request_results set fn = 'add_item' where request_id = $1`, [requestId])
+    const again = await db.rpc<string>(s.owner, 'add_item', { p_check_id: s.check.id, p_name: 'Чай', p_quantity: 1, p_unit_price: 5_000, p_request_id: requestId })
+    assert.equal(again, first)
+    await assert.rejects(db.rpc(s.owner, 'add_items', { p_check_id: s.check.id, p_items: [{ name: 'Сок', quantity: 1, unit_price: 1 }], p_request_id: requestId }), /Invalid request id/)
+  })
+
   it('forgets request ids after a day on the schedule', async () => {
     const s = await setup(db)
     await db.rpc(s.owner, 'add_item', { p_check_id: s.check.id, p_name: 'Чай', p_quantity: 1, p_unit_price: 5_000, p_request_id: crypto.randomUUID() })
