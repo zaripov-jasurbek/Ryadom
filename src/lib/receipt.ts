@@ -241,6 +241,8 @@ const unitPriceHeader = /(?<!\p{L})(?:цена|narxi?)(?!\p{L})/iu, lineSumHeade
 export function parseReceipt(text: string, known?: Pick<ScanResult, 'total' | 'servicePercent'>): ScanResult {
   const items: Parsed[] = []
   let total: number | null = null, subtotal: number | null = null, ended = false, unitPrices = false
+  // A table with a pieces column prints each dish on one line: a line in title case there starts a new dish (an all-caps one may still wrap a name).
+  let table = false
   // A total line without its sum: "TO'LOV UCHUN:" with "136 520,00" printed on the line below.
   let totalBelow = false
   // Service and discount printed after the last total line are not part of it: "Итого 143 000, обслуживание 14 300".
@@ -277,7 +279,7 @@ export function parseReceipt(text: string, known?: Pick<ScanResult, 'total' | 's
     if (skipPattern.test(line)) {
       settle()
       const value = amounts(line).filter(entry => entry.value >= scanLimits.minPrice).at(-1)?.value
-      if (headerPattern.test(line) && value === undefined) unitPrices = unitPriceHeader.test(line) && !lineSumHeader.test(line)
+      if (headerPattern.test(line) && value === undefined) { unitPrices = unitPriceHeader.test(line) && !lineSumHeader.test(line); table = true }
       else if (totalPattern.test(line)) {
         if (value !== undefined) { total = value; serviceInTotal = discountInTotal = true } else totalBelow = true
       } else if (servicePattern.test(line)) {
@@ -318,7 +320,13 @@ export function parseReceipt(text: string, known?: Pick<ScanResult, 'total' | 's
     }
     // A size on its own line, as "0,5 l" under "Coca-Cola", belongs to the name.
     const name = nameOrEmpty(line) || (sizeLine.test(line) ? line : '')
-    if (name && !amounts(line).some(entry => entry.value >= scanLimits.minPrice)) names.push({ text: name, numbered: fixed !== line })
+    // A name with its own pieces column, as "Кола 1,5 л ⇥ 2 ⇥ 48 №", is a dish whose price OCR lost: never part of another dish's name.
+    const ownRow = line.split('\t').slice(1).some(cell => /^\d{1,2}$/.test(cell.trim()))
+    if (name && !ownRow && !amounts(line).some(entry => entry.value >= scanLimits.minPrice)) {
+      // "Кола 1.5 л" whose numbers OCR lost is a dish of its own, neither the rest of the name above nor of the one below.
+      if (table && /^\p{Lu}\p{Ll}/u.test(name)) settle()
+      names.push({ text: name, numbered: fixed !== line })
+    }
     else settle()
   }
   settle()

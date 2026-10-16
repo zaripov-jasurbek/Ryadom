@@ -110,6 +110,18 @@ Cola 0,5 12 000
     ])
   })
 
+  it('never glues a row whose price OCR lost onto the dish above', () => {
+    const text = `Наименование\tКол-во\tСумма
+Чай Зеленый\t3\t15 000
+Чай черный с лимоном\t2\t28 00
+Кола 1,5 л\t2\t48 №
+Чай зеленый с лимоном\t1\t10 000
+Кола 1.5 л
+Чай черный с лимоном
+\t2\t20 000`
+    assert.deepEqual(parseReceipt(text).items.map(entry => entry.name), ['Чай Зеленый', 'Чай зеленый с лимоном', 'Чай черный с лимоном'])
+  })
+
   it('keeps dishes whose names start like payment words', () => {
     const { items } = parseReceipt(`Картофель фри 1 18 000
 Столичный салат 1 32 000
