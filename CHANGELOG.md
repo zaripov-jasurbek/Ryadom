@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.9.0](https://github.com/zaripov-jasurbek/Ryadom/compare/v2.8.3...v2.9.0) (2026-10-23)
+
+
+### Новое
+
+* статус оплаты кнопкой вместо двух галочек ([#50](https://github.com/zaripov-jasurbek/Ryadom/issues/50)) ([47076b8](https://github.com/zaripov-jasurbek/Ryadom/commit/47076b88f627dd9279998f41eb1afe4c5949cb04))
+
 ## [2.8.3](https://github.com/zaripov-jasurbek/Ryadom/compare/v2.8.2...v2.8.3) (2026-10-16)
 
 
