@@ -5,9 +5,9 @@ import { shareOr } from './share.ts'
 export const paymentLine = (person: ParticipantTotal, ownerId?: string) =>
   person.id === ownerId ? 'платил по счёту'
     : person.overpaid ? `оплачено ${formatUzs(person.due + person.overpaid)} · переплатил ${formatUzs(person.overpaid)}`
-    : person.mark === 'confirmed' ? 'оплачено ✓✓'
-    : person.mark === 'marked' ? 'отметил оплату ✓'
-    : 'не оплачено'
+    : person.mark === 'confirmed' ? 'рассчитался ✓'
+    : person.mark === 'marked' ? 'оплатил'
+    : 'не оплатил'
 
 /** What each person's amount is made of: their dishes, shares and service, each with its amount. */
 export function detailItems(bill: Bill, person: ParticipantTotal) {

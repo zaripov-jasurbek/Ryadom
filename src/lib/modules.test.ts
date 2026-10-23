@@ -159,9 +159,9 @@ describe('export', () => {
     const bill = withItems(item('tea', 'Чай', 2, 10_000, { '0': ['0'], '1': ['1'] }))
     const [jasur, aziz] = calculateTotals(bill)
     assert.equal(paymentLine(jasur, '0'), 'платил по счёту')
-    assert.equal(paymentLine(aziz, '0'), 'не оплачено')
-    assert.equal(paymentLine({ ...aziz, mark: 'marked' }, '0'), 'отметил оплату ✓')
-    assert.equal(paymentLine({ ...aziz, mark: 'confirmed' }, '0'), 'оплачено ✓✓')
+    assert.equal(paymentLine(aziz, '0'), 'не оплатил')
+    assert.equal(paymentLine({ ...aziz, mark: 'marked' }, '0'), 'оплатил')
+    assert.equal(paymentLine({ ...aziz, mark: 'confirmed' }, '0'), 'рассчитался ✓')
   })
   it('reads the server\'s payment statuses as checkmarks', () => {
     assert.deepEqual(['unpaid', 'partially_paid', 'proof_submitted', 'paid', undefined].map(markOf), ['none', 'none', 'marked', 'confirmed', 'none'])

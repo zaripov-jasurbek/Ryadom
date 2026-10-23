@@ -69,8 +69,8 @@ p { margin: 0; }
 /* Placeholders are examples in the muted grey, which is still readable on a field. */
 :is(input, textarea)::placeholder { color: var(--muted); opacity: 1; }
 /* Small controls keep their drawn size; an invisible margin around them makes a finger-sized (44px) target. */
-.icon-button, .portion-stepper button, .mine-toggle, .face-stack, button.pay-marks, .ghost-button, .chip, .add-more, .back-link, .modal-close, .details-toggle { position: relative; }
-:is(.icon-button, .portion-stepper button, .mine-toggle, .face-stack, button.pay-marks, .ghost-button, .chip, .add-more, .back-link, .modal-close, .details-toggle)::after { content: ''; position: absolute; inset: var(--hit, 0); }
+.icon-button, .portion-stepper button, .mine-toggle, .face-stack, button.pay-status, .ghost-button, .chip, .add-more, .back-link, .modal-close, .details-toggle { position: relative; }
+:is(.icon-button, .portion-stepper button, .mine-toggle, .face-stack, button.pay-status, .ghost-button, .chip, .add-more, .back-link, .modal-close, .details-toggle)::after { content: ''; position: absolute; inset: var(--hit, 0); }
 .icon { width: 1.2em; height: 1.2em; flex: none; }
 .muted { color: var(--muted); font-size: 13px; }
 .eyebrow { font-size: 12px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
@@ -400,14 +400,15 @@ button.car:disabled { opacity: 1; cursor: default; }
 .person-details b { flex: none; font-weight: 500; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
 .summary-person-total { display: flex; align-items: center; gap: 6px; }
 .summary-person-total b { font-size: 16px; font-variant-numeric: tabular-nums; }
-/* Two ticks, grey until set: the guest turns the first green, the creator's confirmation turns both green. */
-.pay-marks { display: inline-flex; align-items: center; min-width: 28px; min-height: 28px; padding: 0 2px; border: 0; background: none; font: inherit; font-size: 15px; font-weight: 800; color: var(--muted); opacity: .75; }
-.pay-marks span + span { margin-left: -.32em; }
-.pay-marks.first span:first-child, .pay-marks.both span { color: var(--ok); }
-.pay-marks.first, .pay-marks.both { opacity: 1; }
-button.pay-marks { cursor: pointer; border-radius: var(--radius-sm); --hit: -8px; }
-button.pay-marks:active { box-shadow: var(--inset-sm); }
-button.pay-marks:disabled { cursor: default; }
+/* The payment status under a name: a pill, a button when the viewer can change it. Outlined = an action to take, green = paid. */
+.summary-person-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin-top: 2px; }
+.pay-status { display: inline-flex; align-items: center; min-height: 26px; padding: 0 10px; border: 0; border-radius: 999px; font: inherit; font-size: 12px; font-weight: 650; white-space: nowrap; background: var(--field); color: var(--muted); }
+.pay-status.is-marked { background: var(--accent); color: var(--accent-ink); }
+.pay-status.is-confirmed { background: var(--ok-bg); color: var(--ok); }
+.pay-status.is-action { background: none; color: var(--brand); box-shadow: inset 0 0 0 1.5px currentColor; }
+button.pay-status { cursor: pointer; --hit: -8px -4px; }
+button.pay-status:active:not(:disabled) { transform: translateY(1px); }
+button.pay-status:disabled { opacity: .6; cursor: default; }
 /* The card number stays a tap away while a guest still owes, wherever they scrolled. */
 /* Floating at the bottom: your name, and next to it the card button. */
 .dock { position: fixed; z-index: 7; left: 50%; bottom: calc(14px + env(safe-area-inset-bottom)); transform: translateX(-50%); width: max-content; max-width: calc(100% - 32px); display: flex; gap: 8px; pointer-events: none; }

@@ -470,7 +470,7 @@ class AppStore extends UiState {
     await this.refresh()
   }
 
-  /** Your own ✓ "I paid"; the creator then puts ✓✓. */
+  /** Your own «Я оплатил»; the creator then confirms with «Рассчитался». */
   markPaid(paid: boolean) {
     return this.mutate(`pay:${this.selectedPerson}`, 'Не удалось отметить оплату', dbId => markRemotePaid(dbId, paid), paid ? 'Отмечено: оплатил' : 'Отметка снята')
   }
