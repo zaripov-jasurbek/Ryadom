@@ -1,4 +1,4 @@
-/** Payments are checkmarks: none → marked (the guest's ✓ "I paid") → confirmed (the creator's ✓✓). */
+/** Payments are marks: none → marked (the guest says «Я оплатил») → confirmed (the creator marks «Рассчитался»). */
 export type PaymentMark = 'none' | 'marked' | 'confirmed'
 export type ShareMode = 'equal' | 'by_quantity' | 'custom'
 export type Participant = {
